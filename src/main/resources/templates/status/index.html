@@ -1,0 +1,245 @@
+<!-- src/main/resources/templates/status/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layouts/base}">
+<head>
+    <title>Статус обработки</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <h2 class="mb-4">Статус обработки</h2>
+
+    <!-- Текущий статус обработки -->
+    <div class="row mb-4" th:if="${statusId != null}">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Текущая обработка</h5>
+                </div>
+                <div class="card-body">
+                    <div id="currentStatus">
+                        <div class="skeleton-loading">
+                            <div class="animated-background"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- История обработки -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">История обработки</h5>
+                    <button class="btn btn-primary btn-sm" onclick="refreshHistory()">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Файл</th>
+                                <th>Статус</th>
+                                <th>Прогресс</th>
+                                <th>Начало</th>
+                                <th>Завершение</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center">Загрузка данных...</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <nav aria-label="История обработки">
+                        <ul class="pagination justify-content-center" id="pagination">
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<th:block layout:fragment="scripts">
+    <script th:inline="javascript">
+        const statusId = /*[[${statusId}]]*/ null;
+        const clientId = /*[[${session.clientId}]]*/ null;
+
+        $(document).ready(function() {
+            if (statusId) {
+                startStatusPolling();
+            }
+            loadHistory(0);
+        });
+
+        function startStatusPolling() {
+            updateStatus();
+            // Опрашиваем статус каждые 2 секунды
+            const intervalId = setInterval(() => {
+                updateStatus().then(status => {
+                    if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+                        clearInterval(intervalId);
+                    }
+                });
+            }, 2000);
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch(`/api/v1/files/status/${statusId}`);
+                const status = await response.json();
+                updateStatusUI(status);
+                return status;
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+        }
+
+        function updateStatusUI(status) {
+            let statusHtml = `
+                    <div class="status-info">
+                        <h6>Файл: ${status.fileName}</h6>
+                        <div class="progress mb-3">
+                            <div class="progress-bar progress-bar-striped ${status.status === 'PROCESSING' ? 'progress-bar-animated' : ''}"
+                                 role="progressbar"
+                                 style="width: ${calculateProgress(status)}%">
+                                ${calculateProgress(status)}%
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>Статус: <strong>${translateStatus(status.status)}</strong></span>
+                            <span>Обработано: ${status.processedRecords || 0} из ${status.totalRecords || 0}</span>
+                        </div>
+                        ${status.errorMessage ? `<div class="alert alert-danger mt-3">${status.errorMessage}</div>` : ''}
+                    </div>
+                `;
+            $('#currentStatus').html(statusHtml);
+        }
+
+        function calculateProgress(status) {
+            if (!status.totalRecords) return 0;
+            return Math.round((status.processedRecords || 0) / status.totalRecords * 100);
+        }
+
+        function translateStatus(status) {
+            const translations = {
+                'PENDING': 'Ожидает',
+                'PROCESSING': 'Обрабатывается',
+                'COMPLETED': 'Завершено',
+                'FAILED': 'Ошибка',
+                'CANCELLED': 'Отменено'
+            };
+            return translations[status] || status;
+        }
+
+        async function loadHistory(page) {
+            try {
+                const response = await fetch(`/api/v1/processing-status/client/${clientId}?page=${page}&size=10`);
+                const data = await response.json();
+                updateHistoryTable(data.content);
+                updatePagination(data);
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        function updateHistoryTable(items) {
+            const tbody = $('#historyTableBody');
+            tbody.empty();
+
+            items.forEach(item => {
+                tbody.append(`
+                        <tr>
+                            <td>${item.id}</td>
+                            <td>${item.fileName}</td>
+                            <td>${translateStatus(item.status)}</td>
+                            <td>
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar"
+                                         style="width: ${calculateProgress(item)}%">
+                                        ${calculateProgress(item)}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>${formatDate(item.createdAt)}</td>
+                            <td>${item.completedAt ? formatDate(item.completedAt) : '-'}</td>
+                            <td>
+                                ${item.status === 'PROCESSING' || item.status === 'PENDING'
+                    ? `<button class="btn btn-sm btn-danger" onclick="cancelProcessing(${item.id})">
+                                       Отменить
+                                     </button>`
+                    : '-'}
+                            </td>
+                        </tr>
+                    `);
+            });
+        }
+
+        function updatePagination(data) {
+            const pagination = $('#pagination');
+            pagination.empty();
+
+            if (data.totalPages <= 1) return;
+
+            // Предыдущая страница
+            pagination.append(`
+                    <li class="page-item ${data.first ? 'disabled' : ''}">
+                        <a class="page-link" href="#" onclick="loadHistory(${data.number - 1})">
+                            Предыдущая
+                        </a>
+                    </li>
+                `);
+
+            // Номера страниц
+            for (let i = 0; i < data.totalPages; i++) {
+                pagination.append(`
+                        <li class="page-item ${data.number === i ? 'active' : ''}">
+                            <a class="page-link" href="#" onclick="loadHistory(${i})">${i + 1}</a>
+                        </li>
+                    `);
+            }
+
+            // Следующая страница
+            pagination.append(`
+                    <li class="page-item ${data.last ? 'disabled' : ''}">
+                        <a class="page-link" href="#" onclick="loadHistory(${data.number + 1})">
+                            Следующая
+                        </a>
+                    </li>
+                `);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+        }
+
+        async function cancelProcessing(id) {
+            if (!confirm('Вы уверены, что хотите отменить обработку?')) return;
+
+            try {
+                await fetch(`/api/v1/files/cancel/${id}`, {
+                    method: 'POST'
+                });
+                refreshHistory();
+            } catch (error) {
+                console.error('Error cancelling processing:', error);
+                alert('Ошибка при отмене обработки');
+            }
+        }
+
+        function refreshHistory() {
+            loadHistory(0);
+        }
+    </script>
+</th:block>
+</body>
+</html>

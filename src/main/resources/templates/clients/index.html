@@ -1,0 +1,231 @@
+<!-- src/main/resources/templates/clients/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layouts/base}">
+<head>
+    <title>Управление клиентами</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col">
+                <h2>Управление клиентами</h2>
+            </div>
+            <div class="col text-end">
+                <button class="btn btn-primary" onclick="showCreateModal()">
+                    <i class="fas fa-plus"></i> Добавить клиента
+                </button>
+            </div>
+        </div>
+
+        <!-- Таблица клиентов -->
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Код</th>
+                            <th>Наименование</th>
+                            <th>Описание</th>
+                            <th>Статус</th>
+                            <th>Создан</th>
+                            <th>Действия</th>
+                        </tr>
+                        </thead>
+                        <tbody id="clientsTableBody">
+                        <tr>
+                            <td colspan="7" class="text-center">Загрузка данных...</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно создания/редактирования -->
+    <div class="modal fade" id="clientModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Новый клиент</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="clientForm">
+                        <input type="hidden" id="clientId">
+                        <div class="mb-3">
+                            <label for="clientCode" class="form-label required">Код</label>
+                            <input type="text" class="form-control" id="clientCode" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="clientName" class="form-label required">Наименование</label>
+                            <input type="text" class="form-control" id="clientName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="clientDescription" class="form-label">Описание</label>
+                            <textarea class="form-control" id="clientDescription" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="clientActive" checked>
+                                <label class="form-check-label" for="clientActive">Активен</label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" onclick="saveClient()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript для работы с клиентами -->
+<th:block layout:fragment="scripts">
+    <script>
+        let clientModal;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            clientModal = new bootstrap.Modal(document.getElementById('clientModal'));
+            loadClients();
+        });
+
+        async function loadClients() {
+            try {
+                const response = await fetch('/api/v1/clients');
+                const clients = await response.json();
+                updateClientsTable(clients);
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                showError('Ошибка при загрузке списка клиентов');
+            }
+        }
+
+        function updateClientsTable(clients) {
+            const tbody = document.getElementById('clientsTableBody');
+            tbody.innerHTML = '';
+
+            clients.forEach(client => {
+                tbody.innerHTML += `
+                        <tr>
+                            <td>${client.id}</td>
+                            <td>${client.code}</td>
+                            <td>${client.name}</td>
+                            <td>${client.description || '-'}</td>
+                            <td>
+                                <span class="badge ${client.active ? 'bg-success' : 'bg-danger'}">
+                                    ${client.active ? 'Активен' : 'Неактивен'}
+                                </span>
+                            </td>
+                            <td>${formatDate(client.createdAt)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="editClient(${client.id})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deactivateClient(${client.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+            });
+        }
+
+        function showCreateModal() {
+            document.getElementById('clientId').value = '';
+            document.getElementById('clientForm').reset();
+            document.getElementById('modalTitle').textContent = 'Новый клиент';
+            clientModal.show();
+        }
+
+        async function editClient(id) {
+            try {
+                const response = await fetch(`/api/v1/clients/${id}`);
+                const client = await response.json();
+
+                document.getElementById('clientId').value = client.id;
+                document.getElementById('clientCode').value = client.code;
+                document.getElementById('clientName').value = client.name;
+                document.getElementById('clientDescription').value = client.description || '';
+                document.getElementById('clientActive').checked = client.active;
+                document.getElementById('modalTitle').textContent = 'Редактирование клиента';
+
+                clientModal.show();
+            } catch (error) {
+                console.error('Error loading client:', error);
+                showError('Ошибка при загрузке данных клиента');
+            }
+        }
+
+        async function saveClient() {
+            const id = document.getElementById('clientId').value;
+            const client = {
+                code: document.getElementById('clientCode').value,
+                name: document.getElementById('clientName').value,
+                description: document.getElementById('clientDescription').value,
+                active: document.getElementById('clientActive').checked
+            };
+
+            try {
+                const url = id ? `/api/v1/clients/${id}` : '/api/v1/clients';
+                const method = id ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(client)
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ошибка при сохранении клиента');
+                }
+
+                clientModal.hide();
+                loadClients();
+            } catch (error) {
+                console.error('Error saving client:', error);
+                showError('Ошибка при сохранении клиента');
+            }
+        }
+
+        async function deactivateClient(id) {
+            if (!confirm('Вы уверены, что хотите деактивировать клиента?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/clients/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ошибка при деактивации клиента');
+                }
+
+                loadClients();
+            } catch (error) {
+                console.error('Error deactivating client:', error);
+                showError('Ошибка при деактивации клиента');
+            }
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+        }
+
+        function showError(message) {
+            alert(message);
+        }
+    </script>
+</th:block>
+</body>
+</html>

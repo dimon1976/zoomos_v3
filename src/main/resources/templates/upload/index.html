@@ -1,0 +1,257 @@
+<!-- src/main/resources/templates/upload/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layouts/base}">
+<head>
+    <title>Загрузка файлов</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Загрузка файлов</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" class="needs-validation" novalidate>
+                            <!-- ID Клиента -->
+                            <div class="mb-4">
+                                <label for="clientId" class="form-label required">ID Клиента</label>
+                                <input type="number"
+                                       class="form-control"
+                                       id="clientId"
+                                       name="clientId"
+                                       required>
+                                <div class="invalid-feedback">
+                                    Пожалуйста, введите ID клиента
+                                </div>
+                            </div>
+
+                            <!-- Область загрузки файла -->
+                            <div class="mb-4">
+                                <div class="upload-area" id="dropZone">
+                                    <div class="upload-area-inner">
+                                        <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+                                        <p class="mb-2">Перетащите файл сюда или нажмите для выбора</p>
+                                        <p class="text-muted small">Поддерживаемые форматы: XLSX, XLS, CSV</p>
+                                        <input type="file"
+                                               class="d-none"
+                                               id="fileInput"
+                                               name="file"
+                                               accept=".xlsx,.xls,.csv"
+                                               required>
+                                    </div>
+                                </div>
+                                <div class="invalid-feedback">
+                                    Пожалуйста, выберите файл
+                                </div>
+                            </div>
+
+                            <!-- Информация о выбранном файле -->
+                            <div id="fileInfo" class="alert alert-info d-none">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-file me-2"></i>
+                                        <span id="fileName"></span>
+                                    </div>
+                                    <button type="button"
+                                            class="btn-close"
+                                            id="removeFile"
+                                            aria-label="Удалить файл">
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Опции обработки -->
+                            <div class="mb-4">
+                                <div class="form-check">
+                                    <input type="checkbox"
+                                           class="form-check-input"
+                                           id="asyncProcessing"
+                                           name="async"
+                                           checked>
+                                    <label class="form-check-label" for="asyncProcessing">
+                                        Асинхронная обработка
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        Рекомендуется для больших файлов
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- Кнопки -->
+                            <div class="d-grid gap-2">
+                                <button type="submit"
+                                        class="btn btn-primary"
+                                        id="uploadButton"
+                                        disabled>
+                                    <i class="fas fa-upload me-2"></i>
+                                    Загрузить файл
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Спиннер загрузки -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <p class="text-center mb-0">Загрузка файла...</p>
+        </div>
+    </div>
+</div>
+
+<th:block layout:fragment="styles">
+    <style>
+        .required:after {
+            content: " *";
+            color: red;
+        }
+
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #0d6efd;
+            background: #e9ecef;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1050;
+        }
+
+        .loading-content {
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</th:block>
+
+<th:block layout:fragment="scripts">
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('uploadForm');
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const fileName = document.getElementById('fileName');
+            const uploadButton = document.getElementById('uploadButton');
+            const removeFileBtn = document.getElementById('removeFile');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+
+            // Drag and drop handlers
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileSelect(files[0]);
+                }
+            });
+
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelect(e.target.files[0]);
+                }
+            });
+
+            function handleFileSelect(file) {
+                const validExtensions = ['.xlsx', '.xls', '.csv'];
+                const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+                if (!validExtensions.includes(ext)) {
+                    alert('Неподдерживаемый формат файла. Поддерживаются: ' + validExtensions.join(', '));
+                    return;
+                }
+
+                fileName.textContent = file.name;
+                fileInfo.classList.remove('d-none');
+                uploadButton.disabled = false;
+
+                // Create new FileList object
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+            }
+
+            removeFileBtn.addEventListener('click', () => {
+                fileInput.value = '';
+                fileInfo.classList.add('d-none');
+                uploadButton.disabled = true;
+            });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                if (!form.checkValidity()) {
+                    e.stopPropagation();
+                    form.classList.add('was-validated');
+                    return;
+                }
+
+                const formData = new FormData(form);
+                loadingOverlay.style.display = 'flex';
+
+                try {
+                    const response = await fetch('/api/v1/files/upload/async', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Ошибка при загрузке файла');
+                    }
+
+                    const result = await response.json();
+                    window.location.href = '/status?id=' + result;
+                } catch (error) {
+                    alert('Ошибка при загрузке файла: ' + error.message);
+                } finally {
+                    loadingOverlay.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</th:block>
+</body>
+</html>

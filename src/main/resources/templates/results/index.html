@@ -1,0 +1,318 @@
+<!-- src/main/resources/templates/results/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layouts/base}">
+<head>
+    <title>Результаты обработки</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <h2 class="mb-4">Результаты обработки</h2>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Фильтры</h5>
+        </div>
+        <div class="card-body">
+            <form id="filterForm" class="row g-3">
+                <div class="col-md-3">
+                    <label for="productId" class="form-label">ID Продукта</label>
+                    <input type="text" class="form-control" id="productId" name="productId">
+                </div>
+                <div class="col-md-3">
+                    <label for="brand" class="form-label">Бренд</label>
+                    <input type="text" class="form-control" id="brand" name="brand">
+                </div>
+                <div class="col-md-3">
+                    <label for="region" class="form-label">Регион</label>
+                    <input type="text" class="form-control" id="region" name="region">
+                </div>
+                <div class="col-md-3">
+                    <label for="priceRange" class="form-label">Диапазон цен</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="minPrice" name="minPrice" placeholder="От">
+                        <input type="number" class="form-control" id="maxPrice" name="maxPrice" placeholder="До">
+                    </div>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Применить фильтры</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetFilters()">Сбросить</button>
+                    <button type="button" class="btn btn-success float-end" onclick="exportData()">
+                        <i class="fas fa-file-export"></i> Экспорт
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Таблица результатов -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">Данные</h5>
+            <div class="btn-group">
+                <button class="btn btn-outline-secondary btn-sm" onclick="refreshData()">
+                    <i class="fas fa-sync-alt"></i> Обновить
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                    <tr>
+                        <th>ID Продукта</th>
+                        <th>Модель</th>
+                        <th>Бренд</th>
+                        <th>Базовая цена</th>
+                        <th>Регион</th>
+                        <th>Рег. цена</th>
+                        <th>На складе</th>
+                        <th>Конкурент</th>
+                        <th>Цена конк.</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody id="resultsTableBody">
+                    <tr>
+                        <td colspan="10" class="text-center">Загрузка данных...</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <nav aria-label="Навигация по результатам">
+                <ul class="pagination justify-content-center" id="pagination">
+                </ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Модальное окно деталей -->
+    <div class="modal fade" id="detailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Детали продукта</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="productDetails"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<th:block layout:fragment="scripts">
+    <script th:inline="javascript">
+        const clientId = /*[[${session.clientId}]]*/ null;
+        let currentPage = 0;
+
+        $(document).ready(function() {
+            loadData(currentPage);
+            setupFilterForm();
+        });
+
+        function setupFilterForm() {
+            $('#filterForm').on('submit', function(e) {
+                e.preventDefault();
+                currentPage = 0;
+                loadData(currentPage);
+            });
+        }
+
+        async function loadData(page) {
+            try {
+                const filters = getFilters();
+                const response = await fetch(`/api/v1/products/search?page=${page}&size=10${filters}`);
+                const data = await response.json();
+                updateTable(data.content);
+                updatePagination(data);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Ошибка при загрузке данных');
+            }
+        }
+
+        function getFilters() {
+            const formData = new FormData($('#filterForm')[0]);
+            const params = new URLSearchParams();
+
+            formData.forEach((value, key) => {
+                if (value) params.append(key, value);
+            });
+
+            return params.toString() ? '&' + params.toString() : '';
+        }
+
+        function updateTable(items) {
+            const tbody = $('#resultsTableBody');
+            tbody.empty();
+
+            items.forEach(item => {
+                tbody.append(`
+                        <tr>
+                            <td>${item.productId}</td>
+                            <td>${item.model}</td>
+                            <td>${item.brand}</td>
+                            <td>${formatPrice(item.basePrice)}</td>
+                            <td>${item.regionData[0]?.region || '-'}</td>
+                            <td>${formatPrice(item.regionData[0]?.regionalPrice)}</td>
+                            <td>${item.regionData[0]?.stockAmount || 0}</td>
+                            <td>${item.competitorData[0]?.competitorName || '-'}</td>
+                            <td>${formatPrice(item.competitorData[0]?.competitorPrice)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="showDetails('${item.productId}')">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+            });
+        }
+
+        function updatePagination(data) {
+            const pagination = $('#pagination');
+            pagination.empty();
+
+            if (data.totalPages <= 1) return;
+
+            pagination.append(`
+                    <li class="page-item ${data.first ? 'disabled' : ''}">
+                        <a class="page-link" href="#" onclick="loadData(${data.number - 1})">
+                            Предыдущая
+                        </a>
+                    </li>
+                `);
+
+            for (let i = 0; i < data.totalPages; i++) {
+                pagination.append(`
+                        <li class="page-item ${data.number === i ? 'active' : ''}">
+                            <a class="page-link" href="#" onclick="loadData(${i})">${i + 1}</a>
+                        </li>
+                    `);
+            }
+
+            pagination.append(`
+                    <li class="page-item ${data.last ? 'disabled' : ''}">
+                        <a class="page-link" href="#" onclick="loadData(${data.number + 1})">
+                            Следующая
+                        </a>
+                    </li>
+                `);
+        }
+
+        async function showDetails(productId) {
+            try {
+                const response = await fetch(`/api/v1/products/${productId}`);
+                const product = await response.json();
+
+                const detailsHtml = `
+                        <div class="product-details">
+                            <h6>Основная информация</h6>
+                            <dl class="row">
+                                <dt class="col-sm-3">ID Продукта</dt>
+                                <dd class="col-sm-9">${product.productId}</dd>
+                                <dt class="col-sm-3">Модель</dt>
+                                <dd class="col-sm-9">${product.model}</dd>
+                                <dt class="col-sm-3">Бренд</dt>
+                                <dd class="col-sm-9">${product.brand}</dd>
+                                <dt class="col-sm-3">Базовая цена</dt>
+                                <dd class="col-sm-9">${formatPrice(product.basePrice)}</dd>
+                            </dl>
+
+                            <h6 class="mt-4">Региональные данные</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Регион</th>
+                                            <th>Цена</th>
+                                            <th>Количество</th>
+                                            <th>Склад</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${product.regionData.map(rd => `
+                                            <tr>
+                                                <td>${rd.region}</td>
+                                                <td>${formatPrice(rd.regionalPrice)}</td>
+                                                <td>${rd.stockAmount}</td>
+                                                <td>${rd.warehouse || '-'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <h6 class="mt-4">Данные конкурентов</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Конкурент</th>
+                                            <th>Цена</th>
+                                            <th>Промо-цена</th>
+                                            <th>URL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${product.competitorData.map(cd => `
+                                            <tr>
+                                                <td>${cd.competitorName}</td>
+                                                <td>${formatPrice(cd.competitorPrice)}</td>
+                                                <td>${formatPrice(cd.competitorPromoPrice)}</td>
+                                                <td>${cd.competitorUrl ? `<a href="${cd.competitorUrl}" target="_blank">Ссылка</a>` : '-'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+
+                $('#productDetails').html(detailsHtml);
+                const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+                modal.show();
+            } catch (error) {
+                console.error('Error loading product details:', error);
+                showError('Ошибка при загрузке деталей продукта');
+            }
+        }
+
+        function formatPrice(price) {
+            if (!price) return '-';
+            return new Intl.NumberFormat('ru-RU', {
+                style: 'currency',
+                currency: 'RUB'
+            }).format(price);
+        }
+
+        function resetFilters() {
+            $('#filterForm')[0].reset();
+            currentPage = 0;
+            loadData(currentPage);
+        }
+
+        function refreshData() {
+            loadData(currentPage);
+        }
+
+        async function exportData() {
+            try {
+                const filters = getFilters();
+                window.location.href = `/api/v1/export?format=xlsx${filters}`;
+            } catch (error) {
+                console.error('Error exporting data:', error);
+                showError('Ошибка при экспорте данных');
+            }
+        }
+
+        function showError(message) {
+            alert(message);
+        }
+    </script>
+</th:block>
+</body>
+</html>

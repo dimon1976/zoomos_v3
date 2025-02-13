@@ -1,0 +1,556 @@
+<!-- src/main/resources/templates/mapping/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layouts/base}">
+<head>
+    <title>Настройка маппинга</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="container">
+        <!-- Заголовок страницы -->
+        <div class="row mb-4">
+            <div class="col">
+                <h2>Настройка маппинга</h2>
+            </div>
+            <div class="col text-end">
+                <button class="btn btn-primary" onclick="showCreateModal()">
+                    <i class="fas fa-plus"></i> Новая конфигурация
+                </button>
+            </div>
+        </div>
+
+        <!-- Выбор клиента -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="clientSelect" class="form-label">Клиент</label>
+                        <select class="form-select" id="clientSelect" onchange="loadMappings()">
+                            <option value="">Выберите клиента...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Список конфигураций -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Конфигурации маппинга</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                        <tr>
+                            <th>Название</th>
+                            <th>Тип файла</th>
+                            <th>По умолчанию</th>
+                            <th>Статус</th>
+                            <th>Создан</th>
+                            <th>Действия</th>
+                        </tr>
+                        </thead>
+                        <tbody id="mappingsTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center">Выберите клиента</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно создания/редактирования -->
+    <div class="modal fade" id="mappingModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Новая конфигурация маппинга</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="mappingForm">
+                        <input type="hidden" id="mappingId">
+
+                        <!-- Основные настройки -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mappingName" class="form-label required">Название</label>
+                                    <input type="text" class="form-control" id="mappingName" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="fileType" class="form-label required">Тип файла</label>
+                                    <select class="form-select" id="fileType" required>
+                                        <option value="XLSX">Excel (XLSX)</option>
+                                        <option value="XLS">Excel 97-2003 (XLS)</option>
+                                        <option value="CSV">CSV</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Описание -->
+                        <div class="mb-4">
+                            <label for="mappingDescription" class="form-label">Описание</label>
+                            <textarea class="form-control" id="mappingDescription" rows="2"></textarea>
+                        </div>
+
+                        <!-- Вкладки для разных типов полей -->
+                        <ul class="nav nav-tabs mb-3" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" data-bs-toggle="tab" href="#productTab">
+                                    Поля продукта
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-bs-toggle="tab" href="#regionTab">
+                                    Региональные данные
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-bs-toggle="tab" href="#competitorTab">
+                                    Данные конкурентов
+                                </a>
+                            </li>
+                        </ul>
+
+                        <!-- Содержимое вкладок -->
+                        <div class="tab-content">
+                            <!-- Поля продукта -->
+                            <div class="tab-pane fade show active" id="productTab">
+                                <div class="field-mappings" id="productMappings">
+                                    <!-- Маппинг полей продукта -->
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mt-2"
+                                        onclick="addFieldMapping('product')">
+                                    <i class="fas fa-plus"></i> Добавить поле
+                                </button>
+                            </div>
+
+                            <!-- Региональные данные -->
+                            <div class="tab-pane fade" id="regionTab">
+                                <div class="field-mappings" id="regionMappings">
+                                    <!-- Маппинг региональных полей -->
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mt-2"
+                                        onclick="addFieldMapping('region')">
+                                    <i class="fas fa-plus"></i> Добавить поле
+                                </button>
+                            </div>
+
+                            <!-- Данные конкурентов -->
+                            <div class="tab-pane fade" id="competitorTab">
+                                <div class="field-mappings" id="competitorMappings">
+                                    <!-- Маппинг полей конкурентов -->
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mt-2"
+                                        onclick="addFieldMapping('competitor')">
+                                    <i class="fas fa-plus"></i> Добавить поле
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Дополнительные настройки -->
+                        <div class="mt-4">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="isDefault">
+                                <label class="form-check-label" for="isDefault">
+                                    Использовать по умолчанию
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="isActive" checked>
+                                <label class="form-check-label" for="isActive">
+                                    Активна
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" onclick="saveMapping()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Стили для страницы маппинга -->
+<th:block layout:fragment="styles">
+    <style>
+        .field-mapping-row {
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .required:after {
+            content: " *";
+            color: red;
+        }
+
+        .field-mappings {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</th:block>
+
+<!-- Скрипты для страницы маппинга -->
+<th:block layout:fragment="scripts">
+    <script th:inline="javascript">
+        let mappingModal;
+        const availableFields = {
+            product: ['productId', 'model', 'brand', 'basePrice'],
+            region: ['region', 'regionalPrice', 'stockAmount', 'warehouse'],
+            competitor: ['competitorName', 'competitorUrl', 'competitorPrice', 'competitorPromoPrice']
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
+            loadClients();
+        });
+
+        async function loadClients() {
+            try {
+                const response = await fetch('/api/v1/clients/active');
+                const clients = await response.json();
+                updateClientSelect(clients);
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                showError('Ошибка при загрузке списка клиентов');
+            }
+        }
+
+        function updateClientSelect(clients) {
+            const select = document.getElementById('clientSelect');
+            select.innerHTML = '<option value="">Выберите клиента...</option>';
+
+            clients.forEach(client => {
+                select.innerHTML += `
+                        <option value="${client.id}">${client.name}</option>
+                    `;
+            });
+        }
+
+        async function loadMappings() {
+            const clientId = document.getElementById('clientSelect').value;
+            if (!clientId) return;
+
+            try {
+                const response = await fetch(`/api/v1/mappings/client/${clientId}`);
+                const mappings = await response.json();
+                updateMappingsTable(mappings);
+            } catch (error) {
+                console.error('Error loading mappings:', error);
+                showError('Ошибка при загрузке конфигураций маппинга');
+            }
+        }
+
+        function updateMappingsTable(mappings) {
+            const tbody = document.getElementById('mappingsTableBody');
+            tbody.innerHTML = '';
+
+            if (mappings.length === 0) {
+                tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="text-center">Нет настроенных конфигураций</td>
+                        </tr>
+                    `;
+                return;
+            }
+
+            mappings.forEach(mapping => {
+                tbody.innerHTML += `
+                        <tr>
+                            <td>${mapping.name}</td>
+                            <td>${translateFileType(mapping.fileType)}</td>
+                            <td>
+                                <span class="badge ${mapping.default ? 'bg-success' : 'bg-secondary'}">
+                                    ${mapping.default ? 'Да' : 'Нет'}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge ${mapping.active ? 'bg-success' : 'bg-danger'}">
+                                    ${mapping.active ? 'Активна' : 'Неактивна'}
+                                </span>
+                            </td>
+                            <td>${formatDate(mapping.createdAt)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-info"
+                                        onclick="editMapping(${mapping.id})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger"
+                                        onclick="deactivateMapping(${mapping.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                ${!mapping.default ? `
+                                    <button class="btn btn-sm btn-success"
+                                            onclick="setDefaultMapping(${mapping.id})">
+                                        <i class="fas fa-star"></i>
+                                    </button>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `;
+            });
+        }
+
+        function showCreateModal() {
+            const clientId = document.getElementById('clientSelect').value;
+            if (!clientId) {
+                showError('Пожалуйста, выберите клиента');
+                return;
+            }
+
+            document.getElementById('mappingId').value = '';
+            document.getElementById('mappingForm').reset();
+            document.getElementById('modalTitle').textContent = 'Новая конфигурация маппинга';
+
+            // Очищаем все маппинги
+            document.getElementById('productMappings').innerHTML = '';
+            document.getElementById('regionMappings').innerHTML = '';
+            document.getElementById('competitorMappings').innerHTML = '';
+
+            // Добавляем по одному полю каждого типа
+            addFieldMapping('product');
+            addFieldMapping('region');
+            addFieldMapping('competitor');
+
+            mappingModal.show();
+        }
+
+        function addFieldMapping(type) {
+            const container = document.getElementById(`${type}Mappings`);
+            const index = container.children.length;
+
+            const row = document.createElement('div');
+            row.className = 'field-mapping-row';
+            row.innerHTML = `
+                    <div class="row">
+                        <div class="col-md-5">
+                            <label class="form-label">Поле файла</label>
+                            <input type="text" class="form-control"
+                                   name="${type}Mapping[${index}].sourceField" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Целевое поле</label>
+                            <select class="form-control"
+                                    name="${type}Mapping[${index}].targetField" required>
+                                <option value="">Выберите поле...</option>
+                                ${availableFields[type].map(field =>
+                `<option value="${field}">${field}</option>`
+            ).join('')}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="button" class="btn btn-danger d-block w-100"
+                                    onclick="removeFieldMapping(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-5">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input"
+                                       name="${type}Mapping[${index}].required" checked>
+                                <label class="form-check-label">Обязательное поле</label>
+                            </div>
+                        </div>
+                        <div class="col-md-7">
+                            <input type="text" class="form-control"
+                                   name="${type}Mapping[${index}].defaultValue"
+                                   placeholder="Значение по умолчанию">
+                        </div>
+                    </div>
+                `;
+            container.appendChild(row);
+        }
+
+        function removeFieldMapping(button) {
+            button.closest('.field-mapping-row').remove();
+        }
+
+        async function saveMapping() {
+            const form = document.getElementById('mappingForm');
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                return;
+            }
+
+            const mappingData = {
+                id: document.getElementById('mappingId').value || null,
+                clientId: document.getElementById('clientSelect').value,
+                name: document.getElementById('mappingName').value,
+                description: document.getElementById('mappingDescription').value,
+                fileType: document.getElementById('fileType').value,
+                isDefault: document.getElementById('isDefault').checked,
+                active: document.getElementById('isActive').checked,
+                productMapping: collectFieldMappings('product'),
+                regionMapping: collectFieldMappings('region'),
+                competitorMapping: collectFieldMappings('competitor')
+            };
+
+            try {
+                const method = mappingData.id ? 'PUT' : 'POST';
+                const url = method === 'PUT' ?
+                    `/api/v1/mappings/${mappingData.id}` : '/api/v1/mappings';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(mappingData)
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ошибка при сохранении конфигурации');
+                }
+
+                mappingModal.hide();
+                loadMappings();
+            } catch (error) {
+                console.error('Error saving mapping:', error);
+                showError('Ошибка при сохранении конфигурации');
+            }
+        }
+
+        function collectFieldMappings(type) {
+            const mappings = {};
+            const container = document.getElementById(`${type}Mappings`);
+
+            container.querySelectorAll('.field-mapping-row').forEach((row, index) => {
+                const sourceField = row.querySelector(`[name="${type}Mapping[${index}].sourceField"]`).value;
+                const targetField = row.querySelector(`[name="${type}Mapping[${index}].targetField"]`).value;
+                const required = row.querySelector(`[name="${type}Mapping[${index}].required"]`).checked;
+                const defaultValue = row.querySelector(`[name="${type}Mapping[${index}].defaultValue"]`).value;
+
+                mappings[sourceField] = {
+                    field: targetField,
+                    required: required,
+                    defaultValue: defaultValue || null
+                };
+            });
+
+            return mappings;
+        }
+
+        async function editMapping(id) {
+            try {
+                const response = await fetch(`/api/v1/mappings/${id}`);
+                const mapping = await response.json();
+
+                document.getElementById('mappingId').value = mapping.id;
+                document.getElementById('mappingName').value = mapping.name;
+                document.getElementById('mappingDescription').value = mapping.description;
+                document.getElementById('fileType').value = mapping.fileType;
+                document.getElementById('isDefault').checked = mapping.default;
+                document.getElementById('isActive').checked = mapping.active;
+
+                // Очищаем текущие маппинги
+                document.getElementById('productMappings').innerHTML = '';
+                document.getElementById('regionMappings').innerHTML = '';
+                document.getElementById('competitorMappings').innerHTML = '';
+
+                // Заполняем маппинги
+                fillFieldMappings('product', mapping.productMapping);
+                fillFieldMappings('region', mapping.regionMapping);
+                fillFieldMappings('competitor', mapping.competitorMapping);
+
+                document.getElementById('modalTitle').textContent = 'Редактирование конфигурации';
+                mappingModal.show();
+            } catch (error) {
+                console.error('Error loading mapping:', error);
+                showError('Ошибка при загрузке конфигурации');
+            }
+        }
+
+        function fillFieldMappings(type, mappings) {
+            if (!mappings) return;
+
+            Object.entries(mappings).forEach(([sourceField, config]) => {
+                const container = document.getElementById(`${type}Mappings`);
+                const index = container.children.length;
+
+                addFieldMapping(type);
+                const row = container.lastElementChild;
+
+                row.querySelector(`[name="${type}Mapping[${index}].sourceField"]`).value = sourceField;
+                row.querySelector(`[name="${type}Mapping[${index}].targetField"]`).value = config.field;
+                row.querySelector(`[name="${type}Mapping[${index}].required"]`).checked = config.required;
+                if (config.defaultValue) {
+                    row.querySelector(`[name="${type}Mapping[${index}].defaultValue"]`).value =
+                        config.defaultValue;
+                }
+            });
+        }
+
+        async function deactivateMapping(id) {
+            if (!confirm('Вы уверены, что хотите деактивировать эту конфигурацию?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/mappings/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ошибка при деактивации конфигурации');
+                }
+
+                loadMappings();
+            } catch (error) {
+                console.error('Error deactivating mapping:', error);
+                showError('Ошибка при деактивации конфигурации');
+            }
+        }
+
+        async function setDefaultMapping(id) {
+            try {
+                const response = await fetch(`/api/v1/mappings/${id}/default`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ошибка при установке конфигурации по умолчанию');
+                }
+
+                loadMappings();
+            } catch (error) {
+                console.error('Error setting default mapping:', error);
+                showError('Ошибка при установке конфигурации по умолчанию');
+            }
+        }
+
+        function translateFileType(type) {
+            const translations = {
+                'XLSX': 'Excel (XLSX)',
+                'XLS': 'Excel 97-2003 (XLS)',
+                'CSV': 'CSV'
+            };
+            return translations[type] || type;
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+        }
+
+        function showError(message) {
+            alert(message);
+        }
+    </script>
+</th:block>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!-- src/main/resources/templates/export/index.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layouts/base}">
+<head>
+    <title>Экспорт данных</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="container">
+        <!-- Заголовок -->
+        <div class="row mb-4">
+            <div class="col">
+                <h2>Экспорт данных</h2>
+            </div>
+        </div>
+
+        <!-- Основная форма -->
+        <div class="card">
+            <div class="card-body">
+                <form id="exportForm">
+                    <!-- Выбор клиента -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="clientSelect" class="form-label required">Клиент</label>
+                            <select class="form-select" id="clientSelect" required>
+                                <option value="">Выберите клиента...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="exportFormat" class="form-label required">Формат экспорта</label>
+                            <select class="form-select" id="exportFormat" required>
+                                <option value="XLSX">Excel (XLSX)</option>
+                                <option value="XLS">Excel 97-2003 (XLS)</option>
+                                <option value="CSV">CSV</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Фильтры -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Фильтры</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="productId" class="form-label">ID Продукта</label>
+                                    <input type="text" class="form-control" id="productId" name="productId">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="brand" class="form-label">Бренд</label>
+                                    <input type="text" class="form-control" id="brand" name="brand">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="region" class="form-label">Регион</label>
+                                    <input type="text" class="form-control" id="region" name="region">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Диапазон цен</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="minPrice"
+                                               name="minPrice" placeholder="От">
+                                        <input type="number" class="form-control" id="maxPrice"
+                                               name="maxPrice" placeholder="До">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Период создания</label>
+                                    <div class="input-group">
+                                        <input type="date" class="form-control" id="startDate"
+                                               name="startDate">
+                                        <input type="date" class="form-control" id="endDate"
+                                               name="endDate">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Настройки экспорта -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Настройки экспорта</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label d-block">Включить в экспорт</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="includeRegions" checked>
+                                            <label class="form-check-label" for="includeRegions">
+                                                Региональные данные
+                                            </label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="includeCompetitors" checked>
+                                            <label class="form-check-label" for="includeCompetitors">
+                                                Данные конкурентов
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Дополнительно</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="separateSheets">
+                                            <label class="form-check-label" for="separateSheets">
+                                                Разделить данные по листам (только для Excel)
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Кнопки -->
+                    <div class="d-flex justify-content-end">
+                        <button type="button" class="btn btn-secondary me-2" onclick="resetForm()">
+                            <i class="fas fa-undo"></i> Сбросить
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-file-export"></i> Экспортировать
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Стили -->
+<th:block layout:fragment="styles">
+    <style>
+        .required:after {
+            content: " *";
+            color: red;
+        }
+    </style>
+</th:block>
+
+<!-- Скрипты -->
+<th:block layout:fragment="scripts">
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadClients();
+            setupFormHandlers();
+        });
+
+        async function loadClients() {
+            try {
+                const response = await fetch('/api/v1/clients/active');
+                const clients = await response.json();
+                updateClientSelect(clients);
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                showError('Ошибка при загрузке списка клиентов');
+            }
+        }
+
+        function updateClientSelect(clients) {
+            const select = document.getElementById('clientSelect');
+            select.innerHTML = '<option value="">Выберите клиента...</option>';
+
+            clients.forEach(client => {
+                select.innerHTML += `
+                        <option value="${client.id}">${client.name}</option>
+                    `;
+            });
+        }
+
+        function setupFormHandlers() {
+            const form = document.getElementById('exportForm');
+            const formatSelect = document.getElementById('exportFormat');
+            const separateSheetsCheck = document.getElementById('separateSheets');
+
+            // Управление доступностью опции разделения по листам
+            formatSelect.addEventListener('change', function() {
+                const isExcel = this.value === 'XLSX' || this.value === 'XLS';
+                separateSheetsCheck.disabled = !isExcel;
+                if (!isExcel) {
+                    separateSheetsCheck.checked = false;
+                }
+            });
+
+            // Обработка отправки формы
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                if (!form.checkValidity()) {
+                    form.classList.add('was-validated');
+                    return;
+                }
+
+                const formData = new FormData(form);
+                const queryParams = new URLSearchParams();
+
+                // Добавляем все параметры
+                formData.forEach((value, key) => {
+                    if (value) queryParams.append(key, value);
+                });
+
+                // Добавляем дополнительные параметры
+                queryParams.append('format', formatSelect.value);
+                queryParams.append('includeRegions', document.getElementById('includeRegions').checked);
+                queryParams.append('includeCompetitors', document.getElementById('includeCompetitors').checked);
+                queryParams.append('separateSheets', document.getElementById('separateSheets').checked);
+
+                // Выполняем экспорт
+                window.location.href = `/api/v1/export?${queryParams.toString()}`;
+            });
+        }
+
+        function resetForm() {
+            const form = document.getElementById('exportForm');
+            form.reset();
+            form.classList.remove('was-validated');
+
+            // Сбрасываем чекбоксы к значениям по умолчанию
+            document.getElementById('includeRegions').checked = true;
+            document.getElementById('includeCompetitors').checked = true;
+            document.getElementById('separateSheets').checked = false;
+        }
+
+        function showError(message) {
+            alert(message);
+        }
+    </script>
+</th:block>
+</body>
+</html>

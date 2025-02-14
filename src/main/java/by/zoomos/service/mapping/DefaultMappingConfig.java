@@ -9,13 +9,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Конфигурация маппинга колонок файла на поля сущностей
+ * Конфигурация маппинга колонок файла на поля сущностей по умолчанию
  */
 @Component
 @ConfigurationProperties(prefix = "mapping")
 @Data
 @NoArgsConstructor
-public class MappingConfig {
+public class DefaultMappingConfig {
 
     /**
      * Маппинг для продуктов

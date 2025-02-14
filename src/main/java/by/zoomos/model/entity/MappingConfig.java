@@ -5,9 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Сущность для хранения настроек маппинга
@@ -36,13 +40,16 @@ public class MappingConfig {
     private FileType fileType;
 
     @Column(name = "product_mapping", columnDefinition = "jsonb")
-    private String productMapping;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, String> productMapping = new HashMap<>();
 
     @Column(name = "region_mapping", columnDefinition = "jsonb")
-    private String regionMapping;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, String> regionMapping = new HashMap<>();
 
     @Column(name = "competitor_mapping", columnDefinition = "jsonb")
-    private String competitorMapping;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, String> competitorMapping = new HashMap<>();
 
     private boolean active = true;
 

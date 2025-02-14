@@ -1,11 +1,18 @@
 package by.zoomos.service.mapping;
 
 import by.zoomos.exception.MappingException;
+import by.zoomos.model.entity.MappingConfig;
+import by.zoomos.repository.MappingConfigRepository;
+import by.zoomos.repository.ClientRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -18,63 +25,67 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MappingService {
 
-    private final MappingConfig mappingConfig;
+    private final DefaultMappingConfig defaultConfig;
+    private final MappingConfigRepository mappingConfigRepository;
+    private final ClientRepository clientRepository;
+    private final ObjectMapper objectMapper;
 
     /**
      * Получает индексы колонок для маппинга продукта
-     *
-     * @param headers заголовки файла
-     * @return карта индексов колонок
      */
-    public Map<String, Integer> getProductColumnIndexes(String[] headers) {
-        log.debug("Получение индексов колонок для продукта");
-        return getColumnIndexes(headers, mappingConfig.getProduct());
+    public Map<String, Integer> getProductColumnIndexes(String[] headers, Long clientId) {
+        Map<String, String> mapping = getEffectiveMapping(clientId).getProduct();
+        return getColumnIndexes(headers, mapping);
     }
 
     /**
      * Получает индексы колонок для маппинга региональных данных
-     *
-     * @param headers заголовки файла
-     * @return карта индексов колонок
      */
-    public Map<String, Integer> getRegionColumnIndexes(String[] headers) {
-        log.debug("Получение индексов колонок для региональных данных");
-        return getColumnIndexes(headers, mappingConfig.getRegion());
+    public Map<String, Integer> getRegionColumnIndexes(String[] headers, Long clientId) {
+        Map<String, String> mapping = getEffectiveMapping(clientId).getRegion();
+        return getColumnIndexes(headers, mapping);
     }
 
     /**
      * Получает индексы колонок для маппинга данных конкурентов
-     *
-     * @param headers заголовки файла
-     * @return карта индексов колонок
      */
-    public Map<String, Integer> getCompetitorColumnIndexes(String[] headers) {
-        log.debug("Получение индексов колонок для данных конкурентов");
-        return getColumnIndexes(headers, mappingConfig.getCompetitor());
+    public Map<String, Integer> getCompetitorColumnIndexes(String[] headers, Long clientId) {
+        Map<String, String> mapping = getEffectiveMapping(clientId).getCompetitor();
+        return getColumnIndexes(headers, mapping);
     }
 
     /**
      * Проверяет наличие обязательных колонок
-     *
-     * @param headers заголовки файла
-     * @throws MappingException если отсутствуют обязательные колонки
      */
-    public void validateRequiredColumns(String[] headers) {
-        log.debug("Проверка обязательных колонок");
-        if (!mappingConfig.getValidation().isValidateRequired()) {
+    public void validateRequiredColumns(String[] headers, Long clientId) {
+        DefaultMappingConfig effective = getEffectiveMapping(clientId);
+        if (!effective.getValidation().isValidateRequired()) {
             return;
         }
 
         Set<String> headerSet = Set.of(headers);
-
-        Set<String> missingColumns = mappingConfig.getProduct().values().stream()
+        Set<String> missingColumns = effective.getProduct().values().stream()
                 .filter(column -> !headerSet.contains(column))
                 .collect(Collectors.toSet());
 
         if (!missingColumns.isEmpty()) {
-            throw new MappingException("Отсутствуют обязательные колонки: " +
-                    String.join(", ", missingColumns));
+            throw new MappingException("Отсутствуют обязательные колонки: " + String.join(", ", missingColumns));
         }
+    }
+
+
+    /**
+     * Получает список маппингов клиента
+     */
+    @Transactional(readOnly = true)
+    public List<MappingConfig> getClientMappings(Long clientId) {
+        return mappingConfigRepository.findByClientIdAndActiveTrue(clientId);
+    }
+
+    private DefaultMappingConfig getEffectiveMapping(Long clientId) {
+        // Здесь можно добавить логику для получения пользовательского маппинга
+        // и объединения его с дефолтным
+        return defaultConfig;
     }
 
     private Map<String, Integer> getColumnIndexes(String[] headers, Map<String, String> mapping) {
@@ -104,4 +115,12 @@ public class MappingService {
         }
         return normalized;
     }
+
+    private void validateClient(Long clientId) {
+        if (!clientRepository.existsById(clientId)) {
+            throw new IllegalArgumentException("Клиент не найден: " + clientId);
+        }
+    }
+
+
 }

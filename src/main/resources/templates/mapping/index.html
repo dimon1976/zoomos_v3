@@ -215,7 +215,7 @@
             competitor: ['competitorName', 'competitorUrl', 'competitorPrice', 'competitorPromoPrice']
         };
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             mappingModal = new bootstrap.Modal(document.getElementById('mappingModal'));
             loadClients();
         });
@@ -334,48 +334,40 @@
             const container = document.getElementById(`${type}Mappings`);
             const index = container.children.length;
 
+            // Определяем доступные поля в зависимости от типа
+            const availableFields = {
+                product: ['productId', 'model', 'brand', 'basePrice'],
+                region: ['region', 'regionalPrice', 'stockAmount', 'warehouse'],
+                competitor: ['competitorName', 'competitorUrl', 'competitorPrice', 'competitorPromoPrice']
+            };
+
             const row = document.createElement('div');
             row.className = 'field-mapping-row';
             row.innerHTML = `
-                    <div class="row">
-                        <div class="col-md-5">
-                            <label class="form-label">Поле файла</label>
-                            <input type="text" class="form-control"
-                                   name="${type}Mapping[${index}].sourceField" required>
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label">Целевое поле</label>
-                            <select class="form-control"
-                                    name="${type}Mapping[${index}].targetField" required>
-                                <option value="">Выберите поле...</option>
-                                ${availableFields[type].map(field =>
+        <div class="row mb-3">
+            <div class="col-md-5">
+                <label class="form-label">Поле файла</label>
+                <input type="text" class="form-control"
+                       name="${type}Mapping[${index}].sourceField" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Целевое поле</label>
+                <select class="form-control"
+                        name="${type}Mapping[${index}].targetField" required>
+                    <option value="">Выберите поле...</option>
+                    ${availableFields[type].map(field =>
                 `<option value="${field}">${field}</option>`
             ).join('')}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">&nbsp;</label>
-                            <button type="button" class="btn btn-danger d-block w-100"
-                                    onclick="removeFieldMapping(this)">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="row mt-2">
-                        <div class="col-md-5">
-                            <div class="form-check">
-                                <input type="checkbox" class="form-check-input"
-                                       name="${type}Mapping[${index}].required" checked>
-                                <label class="form-check-label">Обязательное поле</label>
-                            </div>
-                        </div>
-                        <div class="col-md-7">
-                            <input type="text" class="form-control"
-                                   name="${type}Mapping[${index}].defaultValue"
-                                   placeholder="Значение по умолчанию">
-                        </div>
-                    </div>
-                `;
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-danger mt-4"
+                        onclick="this.closest('.field-mapping-row').remove()">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
             container.appendChild(row);
         }
 
@@ -403,6 +395,8 @@
                 competitorMapping: collectFieldMappings('competitor')
             };
 
+            console.log('Отправляемые данные:', mappingData); // Добавим логирование данных
+
             try {
                 const method = mappingData.id ? 'PUT' : 'POST';
                 const url = method === 'PUT' ?
@@ -410,19 +404,23 @@
 
                 const response = await fetch(url, {
                     method: method,
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(mappingData)
                 });
 
                 if (!response.ok) {
-                    throw new Error('Ошибка при сохранении конфигурации');
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Ошибка при сохранении конфигурации');
                 }
+
+                const result = await response.json();
+                console.log('Ответ сервера:', result); // Добавим логирование ответа
 
                 mappingModal.hide();
                 loadMappings();
             } catch (error) {
                 console.error('Error saving mapping:', error);
-                showError('Ошибка при сохранении конфигурации');
+                showError('Ошибка при сохранении конфигурации: ' + error.message);
             }
         }
 
@@ -433,14 +431,8 @@
             container.querySelectorAll('.field-mapping-row').forEach((row, index) => {
                 const sourceField = row.querySelector(`[name="${type}Mapping[${index}].sourceField"]`).value;
                 const targetField = row.querySelector(`[name="${type}Mapping[${index}].targetField"]`).value;
-                const required = row.querySelector(`[name="${type}Mapping[${index}].required"]`).checked;
-                const defaultValue = row.querySelector(`[name="${type}Mapping[${index}].defaultValue"]`).value;
 
-                mappings[sourceField] = {
-                    field: targetField,
-                    required: required,
-                    defaultValue: defaultValue || null
-                };
+                mappings[sourceField] = targetField;
             });
 
             return mappings;
@@ -544,7 +536,16 @@
         }
 
         function formatDate(dateString) {
-            return new Date(dateString).toLocaleString();
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return '-';
+            return date.toLocaleString('ru-RU', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         }
 
         function showError(message) {

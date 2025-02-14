@@ -27,9 +27,16 @@ public class MappingConfigController {
      */
     @PostMapping
     public ResponseEntity<MappingConfigDTO> createMapping(@RequestBody MappingConfigDTO dto) {
-        log.info("Создание новой конфигурации маппинга");
-        MappingConfig config = mappingConfigService.createMapping(dto);
-        return ResponseEntity.ok(mappingConfigService.convertToDto(config));
+        log.info("Создание новой конфигурации маппинга: {}", dto); // Добавим подробное логирование
+        try {
+            MappingConfig config = mappingConfigService.createMapping(dto);
+            MappingConfigDTO result = mappingConfigService.convertToDto(config);
+            log.info("Успешно создана конфигурация маппинга: {}", result);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Ошибка при создании конфигурации маппинга", e);
+            throw e;
+        }
     }
 
     /**

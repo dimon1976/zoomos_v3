@@ -1,6 +1,6 @@
 package by.zoomos.controller;
 
-import by.zoomos.service.mapping.MappingConfig;
+import by.zoomos.service.mapping.DefaultMappingConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +17,7 @@ import java.util.Map;
 @Slf4j
 public class MappingController {
 
-    private final MappingConfig mappingConfig;
+    private final DefaultMappingConfig defaultMappingConfig;
 
     /**
      * Получает текущую конфигурацию маппинга
@@ -25,9 +25,9 @@ public class MappingController {
      * @return конфигурация маппинга
      */
     @GetMapping
-    public ResponseEntity<MappingConfig> getMappingConfig() {
+    public ResponseEntity<DefaultMappingConfig> getDefaultMappingConfig() {
         log.debug("Получение конфигурации маппинга");
-        return ResponseEntity.ok(mappingConfig);
+        return ResponseEntity.ok(defaultMappingConfig);
     }
 
     /**
@@ -40,7 +40,7 @@ public class MappingController {
     public ResponseEntity<Map<String, String>> updateProductMapping(
             @RequestBody Map<String, String> mapping) {
         log.info("Обновление маппинга продуктов: {}", mapping);
-        mappingConfig.setProduct(mapping);
+        defaultMappingConfig.setProduct(mapping);
         return ResponseEntity.ok(mapping);
     }
 
@@ -54,7 +54,7 @@ public class MappingController {
     public ResponseEntity<Map<String, String>> updateRegionMapping(
             @RequestBody Map<String, String> mapping) {
         log.info("Обновление маппинга региональных данных: {}", mapping);
-        mappingConfig.setRegion(mapping);
+        defaultMappingConfig.setRegion(mapping);
         return ResponseEntity.ok(mapping);
     }
 
@@ -68,7 +68,7 @@ public class MappingController {
     public ResponseEntity<Map<String, String>> updateCompetitorMapping(
             @RequestBody Map<String, String> mapping) {
         log.info("Обновление маппинга данных конкурентов: {}", mapping);
-        mappingConfig.setCompetitor(mapping);
+        defaultMappingConfig.setCompetitor(mapping);
         return ResponseEntity.ok(mapping);
     }
 
@@ -79,10 +79,10 @@ public class MappingController {
      * @return обновленные настройки
      */
     @PutMapping("/validation")
-    public ResponseEntity<MappingConfig.ValidationConfig> updateValidationConfig(
-            @RequestBody MappingConfig.ValidationConfig config) {
+    public ResponseEntity<DefaultMappingConfig.ValidationConfig> updateValidationConfig(
+            @RequestBody DefaultMappingConfig.ValidationConfig config) {
         log.info("Обновление настроек валидации: {}", config);
-        mappingConfig.setValidation(config);
+        defaultMappingConfig.setValidation(config);
         return ResponseEntity.ok(config);
     }
 }

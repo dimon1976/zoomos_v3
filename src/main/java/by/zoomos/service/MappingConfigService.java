@@ -4,12 +4,14 @@ import by.zoomos.model.entity.MappingConfig;
 import by.zoomos.model.dto.MappingConfigDTO;
 import by.zoomos.repository.MappingConfigRepository;
 import by.zoomos.repository.ClientRepository;
+import by.zoomos.service.mapping.DefaultMappingConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +26,38 @@ public class MappingConfigService {
     private final MappingConfigRepository mappingConfigRepository;
     private final ClientRepository clientRepository;
     private final ObjectMapper objectMapper;
+    private final DefaultMappingConfig defaultConfig;
+
+    /**
+     * Получает или создает конфигурацию маппинга для клиента
+     */
+    @Transactional
+    public MappingConfig getOrCreateMapping(Long clientId, MappingConfig.FileType fileType) {
+        return mappingConfigRepository.findByClientIdAndFileTypeAndActiveTrue(clientId, fileType)
+                .stream()
+                .filter(MappingConfig::isDefault)
+                .findFirst()
+                .orElseGet(() -> createDefaultMapping(clientId, fileType));
+    }
+
+    /**
+     * Создает конфигурацию маппинга по умолчанию
+     */
+    private MappingConfig createDefaultMapping(Long clientId, MappingConfig.FileType fileType) {
+        MappingConfig mapping = new MappingConfig();
+        mapping.setClientId(clientId);
+        mapping.setName("Default " + fileType + " Mapping");
+        mapping.setFileType(fileType);
+        mapping.setDefault(true);
+        mapping.setActive(true);
+
+        // Копируем настройки из дефолтной конфигурации
+        mapping.setProductMapping(new HashMap<>(defaultConfig.getProduct()));
+        mapping.setRegionMapping(new HashMap<>(defaultConfig.getRegion()));
+        mapping.setCompetitorMapping(new HashMap<>(defaultConfig.getCompetitor()));
+
+        return mappingConfigRepository.save(mapping);
+    }
 
     /**
      * Создает новую конфигурацию маппинга
@@ -33,14 +67,18 @@ public class MappingConfigService {
         log.info("Создание новой конфигурации маппинга для клиента: {}", dto.getClientId());
 
         validateClient(dto.getClientId());
-        MappingConfig config = new MappingConfig();
-        updateMappingFromDto(config, dto);
 
-        // Если это конфигурация по умолчанию, сбрасываем предыдущую
+        // Проверяем, нет ли уже активной конфигурации по умолчанию
         if (dto.isDefault()) {
-            mappingConfigRepository.clearDefaultForClient(dto.getClientId());
+            mappingConfigRepository.findByClientIdAndIsDefaultTrue(dto.getClientId())
+                    .ifPresent(existingDefault -> {
+                        existingDefault.setDefault(false);
+                        mappingConfigRepository.save(existingDefault);
+                    });
         }
 
+        MappingConfig config = new MappingConfig();
+        updateMappingFromDto(config, dto);
         return mappingConfigRepository.save(config);
     }
 
@@ -105,6 +143,11 @@ public class MappingConfigService {
         MappingConfig config = mappingConfigRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Конфигурация не найдена: " + id));
 
+        // Если это конфигурация по умолчанию, сначала снимаем этот флаг
+        if (config.isDefault()) {
+            config.setDefault(false);
+        }
+
         config.setActive(false);
         mappingConfigRepository.save(config);
     }
@@ -138,13 +181,10 @@ public class MappingConfigService {
         config.setDefault(dto.isDefault());
         config.setActive(dto.isActive());
 
-        try {
-            config.setProductMapping(objectMapper.writeValueAsString(dto.getProductMapping()));
-            config.setRegionMapping(objectMapper.writeValueAsString(dto.getRegionMapping()));
-            config.setCompetitorMapping(objectMapper.writeValueAsString(dto.getCompetitorMapping()));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Ошибка при сериализации маппинга", e);
-        }
+        // Простое копирование мап, так как типы совпадают
+        config.setProductMapping(dto.getProductMapping());
+        config.setRegionMapping(dto.getRegionMapping());
+        config.setCompetitorMapping(dto.getCompetitorMapping());
     }
 
     /**
@@ -160,14 +200,10 @@ public class MappingConfigService {
         dto.setDefault(config.isDefault());
         dto.setActive(config.isActive());
 
-        try {
-            dto.setProductMapping(objectMapper.readValue(config.getProductMapping(), Map.class));
-            dto.setRegionMapping(objectMapper.readValue(config.getRegionMapping(), Map.class));
-            dto.setCompetitorMapping(objectMapper.readValue(config.getCompetitorMapping(), Map.class));
-        } catch (Exception e) {
-            log.error("Ошибка при десериализации маппинга", e);
-            throw new IllegalStateException("Ошибка при чтении конфигурации маппинга", e);
-        }
+        // Простое копирование мап, так как типы совпадают
+        dto.setProductMapping(config.getProductMapping());
+        dto.setRegionMapping(config.getRegionMapping());
+        dto.setCompetitorMapping(config.getCompetitorMapping());
 
         return dto;
     }

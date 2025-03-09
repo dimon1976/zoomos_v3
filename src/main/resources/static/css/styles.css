@@ -1,0 +1,105 @@
+/* Основные стили приложения */
+
+/* Цвета статусов операций */
+.status-pending {
+    background-color: #ffc107;
+}
+.status-processing {
+    background-color: #17a2b8;
+    color: white;
+}
+.status-success {
+    background-color: #28a745;
+    color: white;
+}
+.status-error {
+    background-color: #dc3545;
+    color: white;
+}
+.status-unknown {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* Стили форм */
+.required-field::after {
+    content: "*";
+    color: red;
+    margin-left: 3px;
+}
+
+/* Анимации и эффекты */
+.card-hover {
+    transition: all 0.3s ease;
+}
+.card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Стили навигации */
+.nav-tabs .nav-link.active {
+    font-weight: 500;
+}
+
+/* Иконки в кнопках */
+.btn i {
+    margin-right: 0.25rem;
+}
+
+/* Отступы для основного контента */
+main.container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    min-height: calc(100vh - 160px); /* Минимальная высота контента */
+}
+
+/* Стили для таблиц */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* Стили для бейджей статусов */
+.badge {
+    padding: 0.4em 0.6em;
+    font-weight: 500;
+}
+
+/* Стили для заголовков карточек */
+.card-title a {
+    color: inherit;
+    text-decoration: none;
+}
+.card-title a:hover {
+    color: #007bff;
+}
+
+/* Стили для пагинации */
+.pagination .page-item.active .page-link {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+/* Стили для алертов */
+.alert {
+    border-radius: 0.25rem;
+}
+.alert-dismissible .btn-close {
+    padding: 0.75rem 1rem;
+}
+
+/* Адаптивные стили */
+@media (max-width: 768px) {
+    .page-actions {
+        margin-top: 1rem;
+    }
+
+    .d-flex.justify-content-between.align-items-center {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+
+    .d-flex.justify-content-between.align-items-center h1 {
+        margin-bottom: 1rem;
+    }
+}

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Обработка файлов'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Обработка файлов'}">Клиент - Обработка файлов</title>
+    <style>
+        .badge-operation {
+            font-size: 85%;
+        }
+        .status-pending {
+            background-color: #ffc107;
+        }
+        .status-processing {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .status-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-error {
+            background-color: #dc3545;
+            color: white;
+        }
+        .operation-card {
+            transition: transform 0.2s;
+        }
+        .operation-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .tab-content {
+            padding: 20px 0;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/edit(id=${client.id})}" class="btn btn-primary me-2">
+        <i class="fas fa-edit me-1"></i>Редактировать
+    </a>
+    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteClientModal">
+        <i class="fas fa-trash-alt me-1"></i>Удалить
+    </button>
+</div>
+
+<section>
+    <!-- Детали клиента -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-1"><strong>Email:</strong>
+                        <span th:text="${client.contactEmail != null && !client.contactEmail.isEmpty() ? client.contactEmail : 'Не указан'}">email@example.com</span>
+                    </p>
+                    <p class="mb-1"><strong>Телефон:</strong>
+                        <span th:text="${client.contactPhone != null && !client.contactPhone.isEmpty() ? client.contactPhone : 'Не указан'}">+1234567890</span>
+                    </p>
+                    <p class="mb-1"><strong>Файловые операции:</strong>
+                        <span th:text="${client.fileOperationsCount != null ? client.fileOperationsCount : 0}">0</span>
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Описание:</strong></p>
+                    <p th:text="${client.description != null && !client.description.isEmpty() ? client.description : 'Описание отсутствует'}">
+                        Описание клиента.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Вкладки с операциями -->
+    <ul class="nav nav-tabs" id="clientTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations"
+                    type="button" role="tab" aria-controls="operations" aria-selected="true">
+                <i class="fas fa-history me-1"></i>Операции
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import"
+                    type="button" role="tab" aria-controls="import" aria-selected="false">
+                <i class="fas fa-file-import me-1"></i>Импорт файлов
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="export-tab" data-bs-toggle="tab" data-bs-target="#export"
+                    type="button" role="tab" aria-controls="export" aria-selected="false">
+                <i class="fas fa-file-export me-1"></i>Экспорт данных
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="clientTabsContent">
+        <!-- Вкладка операций -->
+        <div class="tab-pane fade show active" id="operations" role="tabpanel" aria-labelledby="operations-tab">
+            <div class="alert alert-info" role="alert">
+                <i class="fas fa-info-circle me-2"></i>У этого клиента пока нет файловых операций
+            </div>
+            <!-- Здесь будет список операций -->
+        </div>
+
+        <!-- Вкладка импорта файлов -->
+        <div class="tab-pane fade" id="import" role="tabpanel" aria-labelledby="import-tab">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Импорт данных из файла</h5>
+                    <p class="card-text">Загрузите файл CSV или Excel для импорта данных.</p>
+
+                    <form action="#" method="post" enctype="multipart/form-data">
+                        <!-- Форма импорта файла будет здесь -->
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность импорта будет добавлена позже
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Вкладка экспорта данных -->
+        <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Экспорт данных в файл</h5>
+                    <p class="card-text">Выберите формат для экспорта данных клиента.</p>
+
+                    <form action="#" method="post">
+                        <!-- Форма экспорта будет здесь -->
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность экспорта будет добавлена позже
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div class="modal fade" id="deleteClientModal" tabindex="-1" aria-labelledby="deleteClientModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteClientModalLabel">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Вы уверены, что хотите удалить клиента <strong th:text="${client.name}">Имя клиента</strong>?</p>
+                    <p class="text-danger"><strong>Внимание:</strong> Это действие нельзя отменить. Все файлы и операции этого клиента будут удалены.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <form th:action="@{/clients/{id}/delete(id=${client.id})}" method="post">
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Активация вкладок Bootstrap
+        const triggerTabList = [].slice.call(document.querySelectorAll('#clientTabs button'));
+        triggerTabList.forEach(function(triggerEl) {
+            const tabTrigger = new bootstrap.Tab(triggerEl);
+            triggerEl.addEventListener('click', function(event) {
+                event.preventDefault();
+                tabTrigger.show();
+            });
+        });
+    });
+</script>
+</body>
+</html>

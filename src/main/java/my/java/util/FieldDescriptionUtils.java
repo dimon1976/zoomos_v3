@@ -8,15 +8,25 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Утилитный класс для работы с аннотацией FieldDescription
+ * Утилитный класс для работы с аннотацией FieldDescription.
+ * Предоставляет методы для получения описаний полей из аннотаций.
  */
 @Slf4j
-public class FieldDescriptionUtils {
+public final class FieldDescriptionUtils {
 
     private static final String ANNOTATION_NAME = "FieldDescription";
+    private static final String ANNOTATION_VALUE_METHOD = "value";
+    private static final String ANNOTATION_SKIP_MAPPING_METHOD = "skipMapping";
 
     /**
-     * Получает сопоставление полей сущности с их описаниями из аннотаций FieldDescription
+     * Приватный конструктор для предотвращения создания экземпляров утилитного класса.
+     */
+    private FieldDescriptionUtils() {
+        throw new AssertionError("Утилитный класс не должен быть инстанцирован");
+    }
+
+    /**
+     * Получает сопоставление полей сущности с их описаниями из аннотаций FieldDescription.
      *
      * @param entityClass класс сущности
      * @return Map, где ключ - имя поля, значение - описание из аннотации
@@ -32,16 +42,10 @@ public class FieldDescriptionUtils {
                 Annotation fieldDescAnnotation = findFieldDescriptionAnnotation(field);
 
                 if (fieldDescAnnotation != null) {
-                    // Получаем значение аннотации через рефлексию
-                    String value = getAnnotationValue(fieldDescAnnotation, "value");
-                    Boolean skipMapping = getAnnotationValue(fieldDescAnnotation, "skipMapping");
-
-                    if (skipMapping == null || !skipMapping) {
-                        result.put(field.getName(), value);
-                    }
+                    addFieldDescriptionToMap(result, field, fieldDescAnnotation);
                 }
             } catch (Exception e) {
-                log.error("Error getting field description for field {}: {}", field.getName(), e.getMessage());
+                log.error("Ошибка при получении описания поля {}: {}", field.getName(), e.getMessage());
             }
         }
 
@@ -49,7 +53,24 @@ public class FieldDescriptionUtils {
     }
 
     /**
-     * Находит аннотацию FieldDescription в любом пакете
+     * Добавляет описание поля в сопоставление, если поле не должно быть пропущено.
+     *
+     * @param resultMap сопоставление имен полей и их описаний
+     * @param field поле
+     * @param annotation аннотация FieldDescription
+     */
+    private static void addFieldDescriptionToMap(Map<String, String> resultMap, Field field,
+                                                 Annotation annotation) {
+        String value = getAnnotationValue(annotation, ANNOTATION_VALUE_METHOD);
+        Boolean skipMapping = getAnnotationValue(annotation, ANNOTATION_SKIP_MAPPING_METHOD);
+
+        if (skipMapping == null || !skipMapping) {
+            resultMap.put(field.getName(), value);
+        }
+    }
+
+    /**
+     * Находит аннотацию FieldDescription в любом пакете.
      *
      * @param field поле для поиска аннотации
      * @return найденная аннотация или null
@@ -64,7 +85,7 @@ public class FieldDescriptionUtils {
     }
 
     /**
-     * Получает значение атрибута аннотации через рефлексию
+     * Получает значение атрибута аннотации через рефлексию.
      *
      * @param annotation аннотация
      * @param attributeName имя атрибута
@@ -77,13 +98,13 @@ public class FieldDescriptionUtils {
             Method method = annotation.annotationType().getDeclaredMethod(attributeName);
             return (T) method.invoke(annotation);
         } catch (Exception e) {
-            log.debug("Could not get annotation attribute {}: {}", attributeName, e.getMessage());
+            log.debug("Не удалось получить атрибут аннотации {}: {}", attributeName, e.getMessage());
             return null;
         }
     }
 
     /**
-     * Получает сопоставление описаний полей и их имен в сущности
+     * Получает сопоставление описаний полей и их имен в сущности.
      *
      * @param entityClass класс сущности
      * @return Map, где ключ - описание из аннотации, значение - имя поля
@@ -94,7 +115,7 @@ public class FieldDescriptionUtils {
     }
 
     /**
-     * Получает все поля класса, включая поля его суперклассов
+     * Получает все поля класса, включая поля его суперклассов.
      *
      * @param clazz класс
      * @return список полей
@@ -102,15 +123,16 @@ public class FieldDescriptionUtils {
     public static List<Field> getAllFields(Class<?> clazz) {
         List<Field> fields = new ArrayList<>(Arrays.asList(clazz.getDeclaredFields()));
 
-        if (clazz.getSuperclass() != null) {
-            fields.addAll(getAllFields(clazz.getSuperclass()));
+        Class<?> superClass = clazz.getSuperclass();
+        if (superClass != null && !superClass.equals(Object.class)) {
+            fields.addAll(getAllFields(superClass));
         }
 
         return fields;
     }
 
     /**
-     * Проверяет, следует ли пропустить поле при сопоставлении
+     * Проверяет, следует ли пропустить поле при сопоставлении.
      *
      * @param field поле
      * @return true, если поле следует пропустить
@@ -123,11 +145,11 @@ public class FieldDescriptionUtils {
             Annotation fieldDescAnnotation = findFieldDescriptionAnnotation(field);
 
             if (fieldDescAnnotation != null) {
-                Boolean skipMapping = getAnnotationValue(fieldDescAnnotation, "skipMapping");
+                Boolean skipMapping = getAnnotationValue(fieldDescAnnotation, ANNOTATION_SKIP_MAPPING_METHOD);
                 return skipMapping != null && skipMapping;
             }
         } catch (Exception e) {
-            log.error("Error checking if field {} should be skipped: {}", field.getName(), e.getMessage());
+            log.error("Ошибка при проверке необходимости пропуска поля {}: {}", field.getName(), e.getMessage());
         }
 
         return false;

@@ -10,7 +10,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 /**
- * Фабрика для создания FileReader из Path
+ * Фабрика для создания соответствующих FileReader в зависимости от типа файла.
+ * Реализует паттерн Factory Method для выбора конкретной реализации.
  */
 @Component
 @Slf4j
@@ -19,6 +20,12 @@ public class FileReaderFactory {
     private final FileTypeDetector fileTypeDetector;
     private final PathResolver pathResolver;
 
+    /**
+     * Создает новую фабрику FileReader.
+     *
+     * @param fileTypeDetector детектор типа файла
+     * @param pathResolver утилитный класс для работы с путями
+     */
     @Autowired
     public FileReaderFactory(FileTypeDetector fileTypeDetector, PathResolver pathResolver) {
         this.fileTypeDetector = fileTypeDetector;
@@ -26,156 +33,88 @@ public class FileReaderFactory {
     }
 
     /**
-     * Создает FileReader для указанного пути к файлу
+     * Создает FileReader для указанного пути к файлу.
      *
      * @param filePath путь к файлу
-     * @return реализация FileReader
-     * @throws IOException если произошла ошибка при чтении
+     * @return реализация FileReader, соответствующая типу файла
+     * @throws IOException если произошла ошибка при создании ридера
      */
     public FileReader createReader(Path filePath) throws IOException {
         // Определяем тип файла
         FileType fileType = fileTypeDetector.detectFileType(filePath);
+        log.debug("Создание reader для файла типа: {} по пути: {}", fileType, filePath);
 
         // Создаем соответствующий reader
+        return createReaderByType(filePath, fileType);
+    }
+
+    /**
+     * Создает FileReader соответствующего типа.
+     *
+     * @param filePath путь к файлу
+     * @param fileType тип файла
+     * @return реализация FileReader
+     * @throws IOException если произошла ошибка при создании ридера
+     */
+    private FileReader createReaderByType(Path filePath, FileType fileType) throws IOException {
         switch (fileType) {
             case CSV:
-                return new CsvFileReaderAdapter(filePath);
+                return createCsvReader(filePath);
             case XLS:
             case XLSX:
-                return new ExcelFileReaderAdapter(filePath, fileType);
+                return createExcelReader(filePath, fileType);
             default:
                 throw new IOException("Неподдерживаемый тип файла: " + fileType);
         }
     }
 
     /**
-     * Адаптер для CsvFileReader с поддержкой Path
+     * Создает CSV-ридер для указанного пути.
+     *
+     * @param filePath путь к файлу
+     * @return CsvFileReader
+     * @throws IOException если произошла ошибка при создании ридера
      */
-    private class CsvFileReaderAdapter implements FileReader {
-
-        private final CsvFileReader delegate;
-
-        /**
-         * Создает адаптер для CsvFileReader
-         *
-         * @param filePath путь к файлу
-         * @throws IOException если произошла ошибка при чтении
-         */
-        public CsvFileReaderAdapter(Path filePath) throws IOException {
-            log.debug("Creating CsvFileReaderAdapter for path: {}", filePath);
-            this.delegate = new CsvFileReader(fileTypeDetector, pathResolver);
-            delegate.initializeFromPath(filePath);
-        }
-
-        @Override
-        public void initialize(org.springframework.web.multipart.MultipartFile file) throws IOException {
-            throw new UnsupportedOperationException("This adapter is already initialized from a path");
-        }
-
-        @Override
-        public java.util.List<String> getHeaders() throws IOException {
-            return delegate.getHeaders();
-        }
-
-        @Override
-        public java.util.Map<String, String> readNextRow() throws IOException {
-            return delegate.readNextRow();
-        }
-
-        @Override
-        public java.util.List<java.util.Map<String, String>> readChunk(int chunkSize) throws IOException {
-            return delegate.readChunk(chunkSize);
-        }
-
-        @Override
-        public java.util.List<java.util.Map<String, String>> readAll() throws IOException {
-            return delegate.readAll();
-        }
-
-        @Override
-        public void close() throws IOException {
-            delegate.close();
-        }
-
-        @Override
-        public long estimateRowCount() {
-            return delegate.estimateRowCount();
-        }
-
-        @Override
-        public long getCurrentPosition() {
-            return delegate.getCurrentPosition();
-        }
-
-        @Override
-        public boolean hasMoreRows() {
-            return delegate.hasMoreRows();
-        }
+    private FileReader createCsvReader(Path filePath) throws IOException {
+        CsvFileReader reader = new CsvFileReader(fileTypeDetector, pathResolver);
+        reader.initializeFromPath(filePath);
+        return reader;
     }
 
     /**
-     * Адаптер для ExcelFileReader с поддержкой Path
+     * Создает Excel-ридер для указанного пути.
+     *
+     * @param filePath путь к файлу
+     * @param fileType тип Excel-файла
+     * @return ExcelFileReader
+     * @throws IOException если произошла ошибка при создании ридера
      */
-    private class ExcelFileReaderAdapter implements FileReader {
+    private FileReader createExcelReader(Path filePath, FileType fileType) throws IOException {
+        ExcelFileReader reader = new ExcelFileReader(fileTypeDetector, pathResolver);
+        reader.initializeFromPath(filePath, fileType);
+        return reader;
+    }
 
-        private final ExcelFileReader delegate;
+    /**
+     * Адаптер для файловых ридеров с интерфейсом FileReader.
+     * Базовый класс с общей функциональностью для адаптеров ридеров.
+     */
+    private abstract static class FileReaderAdapter implements FileReader {
+
+        protected final Path filePath;
 
         /**
-         * Создает адаптер для ExcelFileReader
+         * Создает новый адаптер файлового ридера.
          *
          * @param filePath путь к файлу
-         * @param fileType тип Excel-файла
-         * @throws IOException если произошла ошибка при чтении
          */
-        public ExcelFileReaderAdapter(Path filePath, FileType fileType) throws IOException {
-            log.debug("Creating ExcelFileReaderAdapter for path: {}", filePath);
-            this.delegate = new ExcelFileReader(fileTypeDetector, pathResolver);
-            delegate.initializeFromPath(filePath, fileType);
+        protected FileReaderAdapter(Path filePath) {
+            this.filePath = filePath;
         }
 
         @Override
         public void initialize(org.springframework.web.multipart.MultipartFile file) throws IOException {
-            throw new UnsupportedOperationException("This adapter is already initialized from a path");
-        }
-
-        @Override
-        public java.util.List<String> getHeaders() throws IOException {
-            return delegate.getHeaders();
-        }
-
-        @Override
-        public java.util.Map<String, String> readNextRow() throws IOException {
-            return delegate.readNextRow();
-        }
-
-        @Override
-        public java.util.List<java.util.Map<String, String>> readChunk(int chunkSize) throws IOException {
-            return delegate.readChunk(chunkSize);
-        }
-
-        @Override
-        public java.util.List<java.util.Map<String, String>> readAll() throws IOException {
-            return delegate.readAll();
-        }
-
-        @Override
-        public void close() throws IOException {
-            delegate.close();
-        }
-
-        @Override
-        public long estimateRowCount() {
-            return delegate.estimateRowCount();
-        }
-
-        @Override
-        public long getCurrentPosition() {
-            return delegate.getCurrentPosition();
-        }
-
-        @Override
-        public boolean hasMoreRows() {
-            return delegate.hasMoreRows();
+            throw new UnsupportedOperationException("Этот адаптер уже инициализирован из пути к файлу");
         }
     }
 }

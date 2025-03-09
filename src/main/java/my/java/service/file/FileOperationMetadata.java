@@ -2,9 +2,7 @@ package my.java.service.file;
 
 import lombok.Builder;
 import lombok.Data;
-import my.java.model.FileOperation.OperationStatus;
 
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

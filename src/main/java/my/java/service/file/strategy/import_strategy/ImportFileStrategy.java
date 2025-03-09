@@ -187,7 +187,7 @@ public class ImportFileStrategy implements FileProcessingStrategy {
      * @param context контекст импорта
      */
     @Transactional
-    protected void saveEntities(ImportContext context) {
+    public void saveEntities(ImportContext context) {
         for (ImportableEntity entity : context.entities) {
             entityManager.persist(entity);
         }

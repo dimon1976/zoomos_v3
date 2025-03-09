@@ -32,27 +32,68 @@ public class FileTypeDetector {
 
     private static final Set<String> EXCEL_EXTENSIONS = new HashSet<>(Arrays.asList("xls", "xlsx"));
     private static final Set<String> CSV_EXTENSIONS = new HashSet<>(Arrays.asList("csv", "txt"));
+    private static final int CHARSET_DETECTION_BUFFER_SIZE = 8192; // 8KB
 
     private final PathResolver pathResolver;
 
     /**
-     * Определяет тип файла по его содержимому
+     * Перечисление типов файлов
+     */
+    public enum FileType {
+        CSV,
+        XLS,
+        XLSX
+    }
+
+    /**
+     * Определяет тип файла по его содержимому и расширению
      *
      * @param file файл для анализа
      * @return тип файла (FileType)
      * @throws FileOperationException если тип файла не поддерживается
      */
     public FileType detectFileType(MultipartFile file) throws FileOperationException {
-        String originalFilename = file.getOriginalFilename();
+        String originalFilename = getFilenameOrThrow(file);
+        String extension = extractFileExtension(originalFilename);
 
-        if (originalFilename == null || originalFilename.isEmpty()) {
+        return determineFileTypeByExtension(extension);
+    }
+
+    /**
+     * Получает имя файла или выбрасывает исключение, если оно отсутствует
+     *
+     * @param file файл для проверки
+     * @return имя файла
+     * @throws FileOperationException если имя файла не указано
+     */
+    private String getFilenameOrThrow(MultipartFile file) throws FileOperationException {
+        String filename = file.getOriginalFilename();
+        if (filename == null || filename.isEmpty()) {
             throw new FileOperationException("Имя файла не указано");
         }
+        return filename;
+    }
 
-        String extension = pathResolver.getFileExtension(originalFilename).toLowerCase();
+    /**
+     * Извлекает расширение из имени файла
+     *
+     * @param filename имя файла
+     * @return расширение в нижнем регистре
+     */
+    private String extractFileExtension(String filename) {
+        return pathResolver.getFileExtension(filename).toLowerCase();
+    }
 
+    /**
+     * Определяет тип файла на основе его расширения
+     *
+     * @param extension расширение файла
+     * @return тип файла
+     * @throws FileOperationException если тип файла не поддерживается
+     */
+    private FileType determineFileTypeByExtension(String extension) throws FileOperationException {
         if (EXCEL_EXTENSIONS.contains(extension)) {
-            return determineExcelType(file);
+            return FileType.XLSX; // По умолчанию предполагаем новый формат Excel
         } else if (CSV_EXTENSIONS.contains(extension)) {
             return FileType.CSV;
         } else {
@@ -69,7 +110,7 @@ public class FileTypeDetector {
      */
     public FileType detectFileType(Path filePath) throws FileOperationException {
         String fileName = filePath.getFileName().toString();
-        String extension = pathResolver.getFileExtension(fileName).toLowerCase();
+        String extension = extractFileExtension(fileName);
 
         if (EXCEL_EXTENSIONS.contains(extension)) {
             return determineExcelType(filePath);
@@ -89,26 +130,31 @@ public class FileTypeDetector {
     public Charset detectCharset(MultipartFile file) {
         try {
             byte[] bytes = file.getBytes();
-            UniversalDetector detector = new UniversalDetector(null);
+            String detectedCharset = detectEncodingFromBytes(bytes);
 
-            detector.handleData(bytes, 0, Math.min(bytes.length, 8192)); // Проверяем первые 8KB
-            detector.dataEnd();
-
-            String encoding = detector.getDetectedCharset();
-            detector.reset();
-
-            if (encoding != null) {
-                try {
-                    return Charset.forName(encoding);
-                } catch (Exception e) {
-                    log.warn("Detected charset '{}' is not supported, using UTF-8", encoding);
-                }
+            if (detectedCharset != null) {
+                return getCharsetOrDefault(detectedCharset);
             }
         } catch (Exception e) {
-            log.error("Error detecting charset: {}", e.getMessage());
+            log.error("Ошибка при определении кодировки: {}", e.getMessage());
         }
 
         return StandardCharsets.UTF_8; // По умолчанию используем UTF-8
+    }
+
+    /**
+     * Получает объект Charset по имени кодировки или возвращает UTF-8 по умолчанию
+     *
+     * @param encodingName имя кодировки
+     * @return объект Charset
+     */
+    private Charset getCharsetOrDefault(String encodingName) {
+        try {
+            return Charset.forName(encodingName);
+        } catch (Exception e) {
+            log.warn("Обнаруженная кодировка '{}' не поддерживается, используем UTF-8", encodingName);
+            return StandardCharsets.UTF_8;
+        }
     }
 
     /**
@@ -120,26 +166,33 @@ public class FileTypeDetector {
     public Charset detectCharset(Path filePath) {
         try {
             byte[] bytes = Files.readAllBytes(filePath);
-            UniversalDetector detector = new UniversalDetector(null);
+            String detectedCharset = detectEncodingFromBytes(bytes);
 
-            detector.handleData(bytes, 0, Math.min(bytes.length, 8192)); // Проверяем первые 8KB
-            detector.dataEnd();
-
-            String encoding = detector.getDetectedCharset();
-            detector.reset();
-
-            if (encoding != null) {
-                try {
-                    return Charset.forName(encoding);
-                } catch (Exception e) {
-                    log.warn("Detected charset '{}' is not supported, using UTF-8", encoding);
-                }
+            if (detectedCharset != null) {
+                return getCharsetOrDefault(detectedCharset);
             }
         } catch (Exception e) {
-            log.error("Error detecting charset: {}", e.getMessage());
+            log.error("Ошибка при определении кодировки: {}", e.getMessage());
         }
 
-        return StandardCharsets.UTF_8; // По умолчанию используем UTF-8
+        return StandardCharsets.UTF_8;
+    }
+
+    /**
+     * Обнаруживает кодировку из массива байтов
+     *
+     * @param bytes массив байтов
+     * @return имя обнаруженной кодировки или null
+     */
+    private String detectEncodingFromBytes(byte[] bytes) {
+        UniversalDetector detector = new UniversalDetector(null);
+        detector.handleData(bytes, 0, Math.min(bytes.length, CHARSET_DETECTION_BUFFER_SIZE));
+        detector.dataEnd();
+
+        String encoding = detector.getDetectedCharset();
+        detector.reset();
+
+        return encoding;
     }
 
     /**
@@ -151,13 +204,9 @@ public class FileTypeDetector {
      */
     private FileType determineExcelType(MultipartFile file) throws FileOperationException {
         try (InputStream is = new BufferedInputStream(file.getInputStream())) {
-            if (FileMagic.valueOf(is) == FileMagic.OLE2) {
-                return FileType.XLS;
-            } else {
-                return FileType.XLSX;
-            }
+            return determineExcelTypeFromStream(is);
         } catch (Exception e) {
-            log.error("Error determining Excel file type: {}", e.getMessage());
+            log.error("Ошибка при определении типа Excel-файла: {}", e.getMessage());
             throw new FileOperationException("Ошибка при определении типа Excel-файла: " + e.getMessage());
         }
     }
@@ -171,14 +220,25 @@ public class FileTypeDetector {
      */
     private FileType determineExcelType(Path filePath) throws FileOperationException {
         try (InputStream is = new BufferedInputStream(Files.newInputStream(filePath))) {
-            if (FileMagic.valueOf(is) == FileMagic.OLE2) {
-                return FileType.XLS;
-            } else {
-                return FileType.XLSX;
-            }
+            return determineExcelTypeFromStream(is);
         } catch (Exception e) {
-            log.error("Error determining Excel file type: {}", e.getMessage());
+            log.error("Ошибка при определении типа Excel-файла: {}", e.getMessage());
             throw new FileOperationException("Ошибка при определении типа Excel-файла: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Определяет тип Excel-файла из потока
+     *
+     * @param is поток данных
+     * @return тип файла (XLS или XLSX)
+     * @throws IOException если возникла ошибка чтения
+     */
+    private FileType determineExcelTypeFromStream(InputStream is) throws IOException {
+        if (FileMagic.valueOf(is) == FileMagic.OLE2) {
+            return FileType.XLS;
+        } else {
+            return FileType.XLSX;
         }
     }
 
@@ -192,15 +252,7 @@ public class FileTypeDetector {
      */
     public Workbook createWorkbook(MultipartFile file, FileType fileType) throws IOException {
         InputStream is = file.getInputStream();
-
-        switch (fileType) {
-            case XLS:
-                return new HSSFWorkbook(new POIFSFileSystem(is));
-            case XLSX:
-                return new XSSFWorkbook(is);
-            default:
-                throw new IOException("Неподдерживаемый тип файла для создания Workbook: " + fileType);
-        }
+        return createWorkbookFromStream(is, fileType);
     }
 
     /**
@@ -213,7 +265,18 @@ public class FileTypeDetector {
      */
     public Workbook createWorkbook(Path filePath, FileType fileType) throws IOException {
         InputStream is = Files.newInputStream(filePath);
+        return createWorkbookFromStream(is, fileType);
+    }
 
+    /**
+     * Создает объект Workbook из потока данных
+     *
+     * @param is поток данных
+     * @param fileType тип файла
+     * @return объект Workbook
+     * @throws IOException если произошла ошибка при создании Workbook
+     */
+    private Workbook createWorkbookFromStream(InputStream is, FileType fileType) throws IOException {
         switch (fileType) {
             case XLS:
                 return new HSSFWorkbook(new POIFSFileSystem(is));
@@ -222,14 +285,5 @@ public class FileTypeDetector {
             default:
                 throw new IOException("Неподдерживаемый тип файла для создания Workbook: " + fileType);
         }
-    }
-
-    /**
-     * Перечисление типов файлов
-     */
-    public enum FileType {
-        CSV,
-        XLS,
-        XLSX
     }
 }

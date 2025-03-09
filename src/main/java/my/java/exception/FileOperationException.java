@@ -3,7 +3,9 @@ package my.java.exception;
 import lombok.Getter;
 
 /**
- * Пользовательское исключение для файловых операций
+ * Пользовательское исключение для операций с файлами.
+ * Используется для обработки ошибок, связанных с загрузкой, чтением,
+ * обработкой и другими операциями над файлами.
  */
 @Getter
 public class FileOperationException extends RuntimeException {
@@ -12,7 +14,7 @@ public class FileOperationException extends RuntimeException {
     private final String operationId;
 
     /**
-     * Создает исключение с указанным сообщением
+     * Создает исключение с указанным сообщением.
      *
      * @param message сообщение об ошибке
      */
@@ -21,19 +23,19 @@ public class FileOperationException extends RuntimeException {
     }
 
     /**
-     * Создает исключение с указанным сообщением и причиной
+     * Создает исключение с указанным сообщением и причиной.
      *
      * @param message сообщение об ошибке
-     * @param cause   причина исключения
+     * @param cause причина исключения
      */
     public FileOperationException(String message, Throwable cause) {
         this(message, cause, null, null);
     }
 
     /**
-     * Создает исключение с указанным сообщением и URL для перенаправления
+     * Создает исключение с указанным сообщением и URL для перенаправления.
      *
-     * @param message     сообщение об ошибке
+     * @param message сообщение об ошибке
      * @param redirectUrl URL для перенаправления после обработки ошибки
      */
     public FileOperationException(String message, String redirectUrl) {
@@ -41,11 +43,11 @@ public class FileOperationException extends RuntimeException {
     }
 
     /**
-     * Создает исключение с указанным сообщением, идентификатором операции и URL для перенаправления
+     * Создает исключение с указанным сообщением, идентификатором операции и URL для перенаправления.
      *
-     * @param message     сообщение об ошибке
-     * @param operationId идентификатор операции
+     * @param message сообщение об ошибке
      * @param redirectUrl URL для перенаправления после обработки ошибки
+     * @param operationId идентификатор операции
      */
     public FileOperationException(String message, String redirectUrl, String operationId) {
         super(message);
@@ -54,10 +56,10 @@ public class FileOperationException extends RuntimeException {
     }
 
     /**
-     * Создает исключение с указанными параметрами
+     * Создает исключение с указанными параметрами.
      *
-     * @param message     сообщение об ошибке
-     * @param cause       причина исключения
+     * @param message сообщение об ошибке
+     * @param cause причина исключения
      * @param redirectUrl URL для перенаправления после обработки ошибки
      * @param operationId идентификатор операции
      */

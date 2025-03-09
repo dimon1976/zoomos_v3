@@ -26,11 +26,15 @@ import java.util.*;
 @Service
 public class CsvFileReader implements FileReader {
 
+    private static final int DEFAULT_CHUNK_SIZE = 100;
+    private static final char DEFAULT_SEPARATOR = ',';
+    private static final char DEFAULT_QUOTE_CHAR = '"';
+
     private CSVReader csvReader;
     private List<String> headers;
     private String[] nextLine;
     private Path tempFilePath;
-    private long rowCount;
+    private long totalRowCount;
     private long currentPosition;
     private FileTypeDetector fileTypeDetector;
     private PathResolver pathResolver;
@@ -54,20 +58,6 @@ public class CsvFileReader implements FileReader {
     }
 
     /**
-     * Конструктор для чтения CSV-файла из Path
-     *
-     * @param filePath путь к файлу
-     * @param fileTypeDetector детектор типа файла
-     * @param pathResolver утилита для работы с путями
-     * @throws IOException если произошла ошибка при чтении
-     */
-    public CsvFileReader(Path filePath, FileTypeDetector fileTypeDetector, PathResolver pathResolver) throws IOException {
-        this.fileTypeDetector = fileTypeDetector;
-        this.pathResolver = pathResolver;
-        initializeFromPath(filePath);
-    }
-
-    /**
      * Инициализирует чтение CSV-файла
      *
      * @param file CSV-файл для чтения
@@ -75,13 +65,11 @@ public class CsvFileReader implements FileReader {
      */
     @Override
     public void initialize(MultipartFile file) throws IOException {
-        if (fileTypeDetector == null || pathResolver == null) {
-            throw new IllegalStateException("FileTypeDetector and PathResolver must be set before initialization");
-        }
+        validateDependenciesPresent();
 
         // Определяем кодировку файла
         Charset charset = fileTypeDetector.detectCharset(file);
-        log.debug("Detected charset for CSV file: {}", charset.displayName());
+        log.debug("Определена кодировка для CSV файла: {}", charset.displayName());
 
         // Сохраняем файл временно для возможности нескольких проходов
         tempFilePath = pathResolver.saveToTempFile(file, "csv_");
@@ -96,18 +84,28 @@ public class CsvFileReader implements FileReader {
      * @throws IOException если произошла ошибка при чтении
      */
     public void initializeFromPath(Path filePath) throws IOException {
-        if (fileTypeDetector == null) {
-            throw new IllegalStateException("FileTypeDetector must be set before initialization");
-        }
+        validateDependenciesPresent();
 
         // Определяем кодировку файла
         Charset charset = fileTypeDetector.detectCharset(filePath);
-        log.debug("Detected charset for CSV file: {}", charset.displayName());
+        log.debug("Определена кодировка для CSV файла: {}", charset.displayName());
 
         // Сохраняем путь к файлу
         tempFilePath = filePath;
 
         initializeReader(filePath, charset);
+    }
+
+    /**
+     * Проверяет, что необходимые зависимости присутствуют
+     *
+     * @throws IllegalStateException если зависимости отсутствуют
+     */
+    private void validateDependenciesPresent() {
+        if (fileTypeDetector == null || pathResolver == null) {
+            throw new IllegalStateException(
+                    "FileTypeDetector и PathResolver должны быть установлены перед инициализацией");
+        }
     }
 
     /**
@@ -118,48 +116,100 @@ public class CsvFileReader implements FileReader {
      * @throws IOException если произошла ошибка при чтении
      */
     private void initializeReader(Path filePath, Charset charset) throws IOException {
+        char separatorChar = detectSeparator(filePath, charset);
+
         // Настраиваем CSV-парсер
-        com.opencsv.CSVParser csvParser = new CSVParserBuilder()
-                .withSeparator(detectSeparator(filePath, charset))
-                .withQuoteChar('"')
+        com.opencsv.CSVParser csvParser = createCsvParser(separatorChar);
+        csvReader = createCsvReader(filePath, charset, csvParser);
+
+        readHeadersFromCsv();
+        calculateTotalRows(filePath, charset);
+
+        // Сбрасываем текущую позицию
+        currentPosition = 0;
+    }
+
+    /**
+     * Создает парсер CSV с указанным разделителем
+     *
+     * @param separator символ-разделитель
+     * @return настроенный парсер CSV
+     */
+    private com.opencsv.CSVParser createCsvParser(char separator) {
+        return new CSVParserBuilder()
+                .withSeparator(separator)
+                .withQuoteChar(DEFAULT_QUOTE_CHAR)
                 .withIgnoreQuotations(false)
                 .build();
+    }
 
-        // Создаем CSV Reader
-        csvReader = new CSVReaderBuilder(new InputStreamReader(new FileInputStream(filePath.toFile()), charset))
+    /**
+     * Создает CSV ридер для указанного файла
+     *
+     * @param filePath путь к файлу
+     * @param charset кодировка файла
+     * @param csvParser парсер CSV
+     * @return настроенный CSV ридер
+     * @throws IOException если произошла ошибка при создании ридера
+     */
+    private CSVReader createCsvReader(Path filePath, Charset charset, com.opencsv.CSVParser csvParser)
+            throws IOException {
+        InputStreamReader reader = new InputStreamReader(new FileInputStream(filePath.toFile()), charset);
+        return new CSVReaderBuilder(reader)
                 .withCSVParser(csvParser)
                 .build();
+    }
 
-        // Читаем заголовки
+    /**
+     * Читает заголовки из CSV-файла
+     *
+     * @throws IOException если произошла ошибка при чтении
+     */
+    private void readHeadersFromCsv() throws IOException {
         try {
             String[] headerRow = csvReader.readNext();
             if (headerRow != null) {
-                // Обрабатываем заголовки: удаляем BOM-символ из первого заголовка, если он есть
-                if (headerRow.length > 0 && headerRow[0].startsWith("\uFEFF")) {
-                    headerRow[0] = headerRow[0].substring(1);
-                }
-
-                // Обрезаем пробелы в заголовках
-                for (int i = 0; i < headerRow.length; i++) {
-                    headerRow[i] = headerRow[i].trim();
-                }
-
-                this.headers = Arrays.asList(headerRow);
+                headers = processHeaderRow(headerRow);
             } else {
-                this.headers = Collections.emptyList();
+                headers = Collections.emptyList();
                 throw new IOException("CSV-файл не содержит строк");
             }
-
-            // Вычисляем примерное количество строк
-            this.rowCount = countLines(filePath, charset) - 1; // Вычитаем строку заголовка
-            log.debug("Estimated row count: {}", rowCount);
-
         } catch (CsvValidationException e) {
             throw new IOException("Ошибка при чтении заголовков CSV: " + e.getMessage(), e);
         }
+    }
 
-        // Сбрасываем текущую позицию
-        this.currentPosition = 0;
+    /**
+     * Обрабатывает строку заголовков
+     *
+     * @param headerRow массив заголовков
+     * @return список обработанных заголовков
+     */
+    private List<String> processHeaderRow(String[] headerRow) {
+        // Обрабатываем заголовки: удаляем BOM-символ из первого заголовка, если он есть
+        if (headerRow.length > 0 && headerRow[0].startsWith("\uFEFF")) {
+            headerRow[0] = headerRow[0].substring(1);
+        }
+
+        // Обрезаем пробелы в заголовках
+        for (int i = 0; i < headerRow.length; i++) {
+            headerRow[i] = headerRow[i].trim();
+        }
+
+        return Arrays.asList(headerRow);
+    }
+
+    /**
+     * Вычисляет общее количество строк в файле
+     *
+     * @param filePath путь к файлу
+     * @param charset кодировка файла
+     * @throws IOException если произошла ошибка при чтении
+     */
+    private void calculateTotalRows(Path filePath, Charset charset) throws IOException {
+        // Вычисляем примерное количество строк
+        totalRowCount = countLines(filePath, charset) - 1; // Вычитаем строку заголовка
+        log.debug("Оценочное количество строк: {}", totalRowCount);
     }
 
     /**
@@ -180,36 +230,69 @@ public class CsvFileReader implements FileReader {
      */
     @Override
     public Map<String, String> readNextRow() throws IOException {
-        if (csvReader == null) {
-            throw new IllegalStateException("Файл не инициализирован. Вызовите метод initialize() перед чтением.");
-        }
+        validateReaderInitialized();
 
         try {
-            String[] row = nextLine != null ? nextLine : csvReader.readNext();
-            nextLine = null;
+            String[] row = getNextDataRow();
 
             if (row == null) {
                 return null; // Достигнут конец файла
             }
 
             currentPosition++;
+            return convertRowToMap(row);
 
-            Map<String, String> rowData = new LinkedHashMap<>();
-            for (int i = 0; i < Math.min(headers.size(), row.length); i++) {
-                rowData.put(headers.get(i), row[i] != null ? row[i].trim() : "");
-            }
-
-            // Если колонок в строке меньше, чем заголовков, заполняем пустыми значениями
-            if (row.length < headers.size()) {
-                for (int i = row.length; i < headers.size(); i++) {
-                    rowData.put(headers.get(i), "");
-                }
-            }
-
-            return rowData;
         } catch (CsvValidationException e) {
             throw new IOException("Ошибка при чтении строки CSV: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Проверяет, что ридер инициализирован
+     *
+     * @throws IllegalStateException если ридер не инициализирован
+     */
+    private void validateReaderInitialized() {
+        if (csvReader == null) {
+            throw new IllegalStateException("Файл не инициализирован. Вызовите метод initialize() перед чтением.");
+        }
+    }
+
+    /**
+     * Получает следующую строку данных
+     *
+     * @return массив значений строки или null, если достигнут конец файла
+     * @throws IOException если произошла ошибка при чтении
+     * @throws CsvValidationException если произошла ошибка валидации CSV
+     */
+    private String[] getNextDataRow() throws IOException, CsvValidationException {
+        String[] row = nextLine != null ? nextLine : csvReader.readNext();
+        nextLine = null;
+        return row;
+    }
+
+    /**
+     * Преобразует массив значений строки в Map
+     *
+     * @param row массив значений строки
+     * @return Map, где ключи - заголовки, значения - данные
+     */
+    private Map<String, String> convertRowToMap(String[] row) {
+        Map<String, String> rowData = new LinkedHashMap<>();
+
+        // Заполняем данные по доступным колонкам
+        for (int i = 0; i < Math.min(headers.size(), row.length); i++) {
+            rowData.put(headers.get(i), row[i] != null ? row[i].trim() : "");
+        }
+
+        // Если колонок в строке меньше, чем заголовков, заполняем пустыми значениями
+        if (row.length < headers.size()) {
+            for (int i = row.length; i < headers.size(); i++) {
+                rowData.put(headers.get(i), "");
+            }
+        }
+
+        return rowData;
     }
 
     /**
@@ -271,7 +354,7 @@ public class CsvFileReader implements FileReader {
      */
     @Override
     public long estimateRowCount() {
-        return rowCount;
+        return totalRowCount;
     }
 
     /**
@@ -315,13 +398,11 @@ public class CsvFileReader implements FileReader {
             // Читаем первую строку
             String firstLine = reader.readLine();
             if (firstLine == null) {
-                return ','; // Если файл пуст, используем запятую по умолчанию
+                return DEFAULT_SEPARATOR; // Если файл пуст, используем запятую по умолчанию
             }
 
             // Удаляем BOM-символ, если он есть
-            if (firstLine.startsWith("\uFEFF")) {
-                firstLine = firstLine.substring(1);
-            }
+            firstLine = removeBomIfPresent(firstLine);
 
             // Подсчитываем количество разных разделителей
             int commaCount = countChar(firstLine, ',');
@@ -329,13 +410,38 @@ public class CsvFileReader implements FileReader {
             int tabCount = countChar(firstLine, '\t');
 
             // Выбираем разделитель с наибольшим количеством
-            if (semicolonCount > commaCount && semicolonCount > tabCount) {
-                return ';';
-            } else if (tabCount > commaCount && tabCount > semicolonCount) {
-                return '\t';
-            } else {
-                return ','; // Запятая по умолчанию
-            }
+            return determineSeparatorByCount(commaCount, semicolonCount, tabCount);
+        }
+    }
+
+    /**
+     * Удаляет BOM-символ из строки, если он присутствует
+     *
+     * @param line строка для обработки
+     * @return строка без BOM-символа
+     */
+    private String removeBomIfPresent(String line) {
+        if (line.startsWith("\uFEFF")) {
+            return line.substring(1);
+        }
+        return line;
+    }
+
+    /**
+     * Определяет разделитель по количеству вхождений
+     *
+     * @param commaCount количество запятых
+     * @param semicolonCount количество точек с запятой
+     * @param tabCount количество табуляций
+     * @return символ-разделитель
+     */
+    private char determineSeparatorByCount(int commaCount, int semicolonCount, int tabCount) {
+        if (semicolonCount > commaCount && semicolonCount > tabCount) {
+            return ';';
+        } else if (tabCount > commaCount && tabCount > semicolonCount) {
+            return '\t';
+        } else {
+            return DEFAULT_SEPARATOR; // Запятая по умолчанию
         }
     }
 

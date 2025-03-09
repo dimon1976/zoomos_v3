@@ -34,17 +34,15 @@ public class FileOperationController {
     private final FileProcessingService fileProcessingService;
     private final AsyncFileProcessingService asyncFileProcessingService;
 
-    // Кеш эмиттеров для отправки SSE-событий
+    // Кеш эмиттеров для отправки SSE-событий (ключ - operationId, значение - Map<emitterId, emitter>)
     private final Map<Long, Map<String, SseEmitter>> operationEmitters = new ConcurrentHashMap<>();
 
     /**
      * Отображение страницы загрузки файла
      */
     @GetMapping("/upload")
-    public String showUploadForm(@RequestParam Long clientId,
-                                 Model model,
-                                 HttpServletRequest request) {
-        log.debug("GET request to show upload form for client ID: {}", clientId);
+    public String showUploadForm(@RequestParam Long clientId, Model model, HttpServletRequest request) {
+        log.debug("GET запрос на отображение формы загрузки для клиента ID: {}", clientId);
 
         model.addAttribute("clientId", clientId);
         model.addAttribute("currentUri", request.getRequestURI());
@@ -56,27 +54,22 @@ public class FileOperationController {
      * Обработка загрузки файла
      */
     @PostMapping("/upload")
-    public String uploadFile(@RequestParam("file") MultipartFile file,
-                             @RequestParam("clientId") Long clientId,
-                             @RequestParam(value = "operationType", defaultValue = "IMPORT") String operationType,
-                             @RequestParam(value = "entityType", required = false) String entityType,
-                             RedirectAttributes redirectAttributes) {
+    public String uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("clientId") Long clientId,
+            @RequestParam(value = "operationType", defaultValue = "IMPORT") String operationType,
+            @RequestParam(value = "entityType", required = false) String entityType,
+            RedirectAttributes redirectAttributes) {
 
-        log.debug("POST request to upload file: {}, client ID: {}, operation type: {}, entity type: {}",
+        log.debug("POST запрос на загрузку файла: {}, ID клиента: {}, тип операции: {}, тип сущности: {}",
                 file.getOriginalFilename(), clientId, operationType, entityType);
 
         try {
             // Инициализируем операцию обработки файла
-            OperationType opType = OperationType.valueOf(operationType);
-            Long operationId = fileProcessingService.initializeFileOperation(file, clientId, opType);
+            Long operationId = initializeFileOperation(file, clientId, operationType);
 
             // Сохраняем тип сущности в метаданных
-            if (entityType != null && !entityType.isEmpty()) {
-                FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
-                if (metadata != null) {
-                    metadata.addParam("entityType", entityType);
-                }
-            }
+            saveEntityTypeToMetadata(operationId, entityType);
 
             // Перенаправляем на страницу деталей операции
             redirectAttributes.addFlashAttribute("successMessage",
@@ -84,15 +77,52 @@ public class FileOperationController {
 
             return "redirect:/files/operations/" + operationId;
         } catch (FileOperationException e) {
-            log.error("Error uploading file: {}", e.getMessage(), e);
-            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
-            return "redirect:/clients/" + clientId;
+            return handleFileOperationException(e, clientId, redirectAttributes);
         } catch (Exception e) {
-            log.error("Unexpected error uploading file: {}", e.getMessage(), e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Произошла ошибка при загрузке файла: " + e.getMessage());
-            return "redirect:/clients/" + clientId;
+            return handleUnexpectedException(e, clientId, redirectAttributes);
         }
+    }
+
+    /**
+     * Инициализирует операцию обработки файла
+     */
+    private Long initializeFileOperation(MultipartFile file, Long clientId, String operationType)
+            throws FileOperationException {
+        OperationType opType = OperationType.valueOf(operationType);
+        return fileProcessingService.initializeFileOperation(file, clientId, opType);
+    }
+
+    /**
+     * Сохраняет тип сущности в метаданных операции
+     */
+    private void saveEntityTypeToMetadata(Long operationId, String entityType) {
+        if (entityType != null && !entityType.isEmpty()) {
+            FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
+            if (metadata != null) {
+                metadata.addParam("entityType", entityType);
+            }
+        }
+    }
+
+    /**
+     * Обрабатывает исключение FileOperationException
+     */
+    private String handleFileOperationException(FileOperationException e, Long clientId,
+                                                RedirectAttributes redirectAttributes) {
+        log.error("Ошибка при загрузке файла: {}", e.getMessage(), e);
+        redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+        return "redirect:/clients/" + clientId;
+    }
+
+    /**
+     * Обрабатывает непредвиденное исключение
+     */
+    private String handleUnexpectedException(Exception e, Long clientId,
+                                             RedirectAttributes redirectAttributes) {
+        log.error("Непредвиденная ошибка при загрузке файла: {}", e.getMessage(), e);
+        redirectAttributes.addFlashAttribute("errorMessage",
+                "Произошла ошибка при загрузке файла: " + e.getMessage());
+        return "redirect:/clients/" + clientId;
     }
 
     /**
@@ -100,7 +130,7 @@ public class FileOperationController {
      */
     @GetMapping("/operations/{id}")
     public String getOperationDetails(@PathVariable Long id, Model model) {
-        log.debug("GET request to get operation details for ID: {}", id);
+        log.debug("GET запрос на получение деталей операции для ID: {}", id);
 
         try {
             // Получаем статус операции
@@ -110,7 +140,7 @@ public class FileOperationController {
 
             return "files/operation-details";
         } catch (Exception e) {
-            log.error("Error getting operation details: {}", e.getMessage(), e);
+            log.error("Ошибка при получении деталей операции: {}", e.getMessage(), e);
             model.addAttribute("errorMessage", "Ошибка при получении деталей операции: " + e.getMessage());
             return "error/general";
         }
@@ -121,24 +151,36 @@ public class FileOperationController {
      */
     @PostMapping("/operations/{id}/cancel")
     public String cancelOperation(@PathVariable Long id, RedirectAttributes redirectAttributes) {
-        log.debug("POST request to cancel operation ID: {}", id);
+        log.debug("POST запрос на отмену операции ID: {}", id);
 
         try {
             boolean canceled = fileProcessingService.cancelOperation(id);
-
-            if (canceled) {
-                redirectAttributes.addFlashAttribute("successMessage", "Операция успешно отменена");
-            } else {
-                redirectAttributes.addFlashAttribute("errorMessage", "Не удалось отменить операцию");
-            }
-
+            setCancelOperationResultMessage(canceled, redirectAttributes);
             return "redirect:/files/operations/" + id;
         } catch (Exception e) {
-            log.error("Error canceling operation: {}", e.getMessage(), e);
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка при отмене операции: " + e.getMessage());
-            return "redirect:/files/operations/" + id;
+            return handleCancelOperationException(e, id, redirectAttributes);
         }
+    }
+
+    /**
+     * Устанавливает сообщение о результате отмены операции
+     */
+    private void setCancelOperationResultMessage(boolean canceled, RedirectAttributes redirectAttributes) {
+        if (canceled) {
+            redirectAttributes.addFlashAttribute("successMessage", "Операция успешно отменена");
+        } else {
+            redirectAttributes.addFlashAttribute("errorMessage", "Не удалось отменить операцию");
+        }
+    }
+
+    /**
+     * Обрабатывает исключение при отмене операции
+     */
+    private String handleCancelOperationException(Exception e, Long id, RedirectAttributes redirectAttributes) {
+        log.error("Ошибка при отмене операции: {}", e.getMessage(), e);
+        redirectAttributes.addFlashAttribute("errorMessage",
+                "Ошибка при отмене операции: " + e.getMessage());
+        return "redirect:/files/operations/" + id;
     }
 
     /**
@@ -147,13 +189,13 @@ public class FileOperationController {
     @GetMapping("/operations/{id}/status")
     @ResponseBody
     public ResponseEntity<FileOperationStatus> getOperationStatus(@PathVariable Long id) {
-        log.debug("AJAX request to get operation status for ID: {}", id);
+        log.debug("AJAX запрос на получение статуса операции для ID: {}", id);
 
         try {
             FileOperationStatus status = fileProcessingService.getOperationStatus(id);
             return ResponseEntity.ok(status);
         } catch (Exception e) {
-            log.error("Error getting operation status: {}", e.getMessage(), e);
+            log.error("Ошибка при получении статуса операции: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }
@@ -163,44 +205,72 @@ public class FileOperationController {
      */
     @GetMapping(value = "/operations/{id}/progress", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter trackProgress(@PathVariable Long id) {
-        log.debug("SSE request to track progress for operation ID: {}", id);
+        log.debug("SSE запрос на отслеживание прогресса для операции ID: {}", id);
 
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+        SseEmitter emitter = createLongLivedEmitter();
+        String emitterId = generateUniqueEmitterId();
 
-        // Генерируем уникальный ID для эмиттера
-        String emitterId = "emitter_" + System.currentTimeMillis();
+        registerEmitter(id, emitterId, emitter);
+        sendInitialStatus(id, emitter);
+        configureEmitterCallbacks(id, emitterId, emitter);
 
-        // Регистрируем эмиттер
-        operationEmitters.computeIfAbsent(id, k -> new ConcurrentHashMap<>())
+        return emitter;
+    }
+
+    /**
+     * Создает эмиттер с длительным сроком жизни
+     */
+    private SseEmitter createLongLivedEmitter() {
+        return new SseEmitter(Long.MAX_VALUE);
+    }
+
+    /**
+     * Генерирует уникальный идентификатор для эмиттера
+     */
+    private String generateUniqueEmitterId() {
+        return "emitter_" + System.currentTimeMillis();
+    }
+
+    /**
+     * Регистрирует эмиттер в кеше
+     */
+    private void registerEmitter(Long operationId, String emitterId, SseEmitter emitter) {
+        operationEmitters.computeIfAbsent(operationId, k -> new ConcurrentHashMap<>())
                 .put(emitterId, emitter);
+    }
 
-        // Отправляем начальное событие
+    /**
+     * Отправляет начальный статус операции через эмиттер
+     */
+    private void sendInitialStatus(Long operationId, SseEmitter emitter) {
         try {
-            FileOperationStatus status = fileProcessingService.getOperationStatus(id);
+            FileOperationStatus status = fileProcessingService.getOperationStatus(operationId);
             emitter.send(SseEmitter.event()
                     .name("status")
                     .data(status));
         } catch (Exception e) {
-            log.error("Error sending initial SSE event: {}", e.getMessage());
+            log.error("Ошибка отправки начального SSE события: {}", e.getMessage());
         }
+    }
 
-        // Настраиваем обработчики завершения и таймаута
+    /**
+     * Настраивает обработчики событий для эмиттера
+     */
+    private void configureEmitterCallbacks(Long operationId, String emitterId, SseEmitter emitter) {
         emitter.onCompletion(() -> {
-            log.debug("SSE emitter completed for operation ID: {}", id);
-            removeEmitter(id, emitterId);
+            log.debug("SSE эмиттер завершен для операции ID: {}", operationId);
+            removeEmitter(operationId, emitterId);
         });
 
         emitter.onTimeout(() -> {
-            log.debug("SSE emitter timed out for operation ID: {}", id);
-            removeEmitter(id, emitterId);
+            log.debug("SSE эмиттер тайм-аут для операции ID: {}", operationId);
+            removeEmitter(operationId, emitterId);
         });
 
         emitter.onError((e) -> {
-            log.error("SSE emitter error for operation ID: {}: {}", id, e.getMessage());
-            removeEmitter(id, emitterId);
+            log.error("SSE эмиттер ошибка для операции ID: {}: {}", operationId, e.getMessage());
+            removeEmitter(operationId, emitterId);
         });
-
-        return emitter;
     }
 
     /**
@@ -208,9 +278,10 @@ public class FileOperationController {
      */
     @PostMapping("/operations/{id}/process")
     @ResponseBody
-    public ResponseEntity<FileOperationStatus> startProcessing(@PathVariable Long id,
-                                                               @RequestParam(value = "entityType", required = false) String entityType) {
-        log.debug("POST request to start processing for operation ID: {}, entity type: {}", id, entityType);
+    public ResponseEntity<FileOperationStatus> startProcessing(
+            @PathVariable Long id,
+            @RequestParam(value = "entityType", required = false) String entityType) {
+        log.debug("POST запрос на начало обработки для операции ID: {}, тип сущности: {}", id, entityType);
 
         try {
             // Определяем класс сущности на основе типа
@@ -221,16 +292,13 @@ public class FileOperationController {
 
             return ResponseEntity.ok(status);
         } catch (Exception e) {
-            log.error("Error starting processing: {}", e.getMessage(), e);
+            log.error("Ошибка при запуске обработки: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }
 
     /**
      * Отправляет обновление статуса всем подписчикам операции
-     *
-     * @param operationId идентификатор операции
-     * @param status статус операции
      */
     public void sendStatusUpdate(Long operationId, FileOperationStatus status) {
         Map<String, SseEmitter> emitters = operationEmitters.getOrDefault(operationId, Collections.emptyMap());
@@ -246,23 +314,34 @@ public class FileOperationController {
                         .data(status));
 
                 // Если операция завершена, закрываем эмиттер
-                if (status.getStatus().toString().equals("COMPLETED") ||
-                        status.getStatus().toString().equals("FAILED")) {
+                if (isOperationCompleted(status)) {
                     emitter.complete();
                 }
             } catch (Exception e) {
-                log.error("Error sending SSE update to emitter {}: {}", id, e.getMessage());
-                emitter.completeWithError(e);
-                removeEmitter(operationId, id);
+                handleEmitterSendError(operationId, id, emitter, e);
             }
         });
     }
 
     /**
+     * Проверяет, завершена ли операция
+     */
+    private boolean isOperationCompleted(FileOperationStatus status) {
+        return status.getStatus().toString().equals("COMPLETED") ||
+                status.getStatus().toString().equals("FAILED");
+    }
+
+    /**
+     * Обрабатывает ошибку отправки через эмиттер
+     */
+    private void handleEmitterSendError(Long operationId, String emitterId, SseEmitter emitter, Exception e) {
+        log.error("Ошибка отправки SSE обновления эмиттеру {}: {}", emitterId, e.getMessage());
+        emitter.completeWithError(e);
+        removeEmitter(operationId, emitterId);
+    }
+
+    /**
      * Удаляет эмиттер из кеша
-     *
-     * @param operationId идентификатор операции
-     * @param emitterId идентификатор эмиттера
      */
     private void removeEmitter(Long operationId, String emitterId) {
         Map<String, SseEmitter> emitters = operationEmitters.get(operationId);
@@ -277,24 +356,20 @@ public class FileOperationController {
 
     /**
      * Определяет класс сущности на основе типа
-     *
-     * @param entityType тип сущности
-     * @return класс сущности
-     * @throws ClassNotFoundException если класс не найден
      */
     private Class<?> determineEntityClass(String entityType) throws ClassNotFoundException {
         if (entityType == null || entityType.isEmpty()) {
             // По умолчанию используем Product
-            return Class.forName("by.zoomos_v2.model.entity.Product");
+            return Class.forName("my.java.model.entity.Product");
         }
 
         switch (entityType.toLowerCase()) {
             case "product":
-                return Class.forName("by.zoomos_v2.model.entity.Product");
+                return Class.forName("my.java.model.entity.Product");
             case "competitor":
-                return Class.forName("by.zoomos_v2.model.entity.CompetitorData");
+                return Class.forName("my.java.model.entity.CompetitorData");
             case "region":
-                return Class.forName("by.zoomos_v2.model.entity.RegionData");
+                return Class.forName("my.java.model.entity.RegionData");
             default:
                 throw new IllegalArgumentException("Неподдерживаемый тип сущности: " + entityType);
         }

@@ -10,7 +10,8 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 /**
- * Сервис для сопоставления полей и применения трансформаторов
+ * Сервис для сопоставления полей и применения трансформаторов.
+ * Обеспечивает преобразование данных из файлов в объекты сущностей.
  */
 @Service
 @Slf4j
@@ -20,58 +21,100 @@ public class FieldMappingService {
     private final ValueTransformerFactory transformerFactory;
 
     /**
-     * Создает сопоставление между заголовками файла и полями сущности
+     * Создает сопоставление между заголовками файла и полями сущности.
      *
      * @param entityClass класс сущности
      * @param headers заголовки файла
      * @return map, где ключ - заголовок файла, значение - поле сущности
      */
     public Map<String, Field> createFieldMapping(Class<?> entityClass, List<String> headers) {
-        // Получаем сопоставление полей сущности с их описаниями из аннотаций
         Map<String, String> fieldDescriptions = FieldDescriptionUtils.getFieldDescriptions(entityClass);
-
-        // Получаем сопоставление описаний полей и их имен
         Map<String, String> descriptionToField = FieldDescriptionUtils.getDescriptionToFieldMap(entityClass);
+        Map<String, Field> allFields = getAllFieldsMap(entityClass);
 
-        // Создаем результирующее сопоставление
-        Map<String, Field> result = new HashMap<>();
+        return mapHeadersToFields(headers, descriptionToField, allFields);
+    }
 
-        // Получаем все поля класса
+    /**
+     * Создает Map всех полей класса.
+     *
+     * @param entityClass класс сущности
+     * @return Map, где ключ - имя поля, значение - поле
+     */
+    private Map<String, Field> getAllFieldsMap(Class<?> entityClass) {
         Map<String, Field> allFields = new HashMap<>();
         for (Field field : FieldDescriptionUtils.getAllFields(entityClass)) {
+            field.setAccessible(true);
             allFields.put(field.getName(), field);
         }
+        return allFields;
+    }
 
-        // Сопоставляем заголовки с полями
+    /**
+     * Сопоставляет заголовки файла с полями сущности.
+     *
+     * @param headers заголовки файла
+     * @param descriptionToField сопоставление описаний полей и их имен
+     * @param allFields Map всех полей класса
+     * @return Map сопоставлений заголовков и полей
+     */
+    private Map<String, Field> mapHeadersToFields(List<String> headers,
+                                                  Map<String, String> descriptionToField,
+                                                  Map<String, Field> allFields) {
+        Map<String, Field> result = new HashMap<>();
+
         for (String header : headers) {
             String trimmedHeader = header.trim();
 
             // Проверяем точное соответствие с описанием поля
             if (descriptionToField.containsKey(trimmedHeader)) {
-                String fieldName = descriptionToField.get(trimmedHeader);
-                if (allFields.containsKey(fieldName)) {
-                    result.put(trimmedHeader, allFields.get(fieldName));
-                    continue;
-                }
+                addFieldToMapping(result, trimmedHeader, descriptionToField.get(trimmedHeader), allFields);
+                continue;
             }
 
             // Проверяем без учета регистра
-            for (Map.Entry<String, String> entry : descriptionToField.entrySet()) {
-                if (entry.getKey().equalsIgnoreCase(trimmedHeader)) {
-                    String fieldName = entry.getValue();
-                    if (allFields.containsKey(fieldName)) {
-                        result.put(trimmedHeader, allFields.get(fieldName));
-                        break;
-                    }
-                }
-            }
+            findFieldIgnoringCase(result, trimmedHeader, descriptionToField, allFields);
         }
 
         return result;
     }
 
     /**
-     * Создает новый экземпляр сущности и заполняет его данными из строки файла
+     * Добавляет поле в сопоставление, если оно существует.
+     *
+     * @param mapping сопоставление заголовков и полей
+     * @param header заголовок
+     * @param fieldName имя поля
+     * @param allFields Map всех полей класса
+     */
+    private void addFieldToMapping(Map<String, Field> mapping, String header,
+                                   String fieldName, Map<String, Field> allFields) {
+        if (allFields.containsKey(fieldName)) {
+            mapping.put(header, allFields.get(fieldName));
+        }
+    }
+
+    /**
+     * Находит поле, игнорируя регистр.
+     *
+     * @param mapping сопоставление заголовков и полей
+     * @param header заголовок
+     * @param descriptionToField сопоставление описаний полей и их имен
+     * @param allFields Map всех полей класса
+     */
+    private void findFieldIgnoringCase(Map<String, Field> mapping, String header,
+                                       Map<String, String> descriptionToField,
+                                       Map<String, Field> allFields) {
+        for (Map.Entry<String, String> entry : descriptionToField.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(header)) {
+                addFieldToMapping(mapping, header, entry.getValue(), allFields);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Создает новый экземпляр сущности и заполняет его данными из строки файла.
      *
      * @param entityClass класс сущности
      * @param rowData данные строки файла
@@ -80,40 +123,62 @@ public class FieldMappingService {
      */
     public <T> T createEntity(Class<T> entityClass, Map<String, String> rowData, Map<String, Field> fieldMapping) {
         try {
-            // Создаем новый экземпляр сущности
-            T entity = entityClass.getDeclaredConstructor().newInstance();
-
-            // Заполняем поля данными
-            for (Map.Entry<String, Field> entry : fieldMapping.entrySet()) {
-                String header = entry.getKey();
-                Field field = entry.getValue();
-
-                // Пропускаем поля, помеченные как skipMapping
-                if (FieldDescriptionUtils.shouldSkipField(field)) {
-                    continue;
-                }
-
-                // Получаем значение из данных строки
-                String stringValue = rowData.get(header);
-
-                // Если значение не найдено, пропускаем поле
-                if (stringValue == null) {
-                    continue;
-                }
-
-                // Пробуем установить значение
-                setFieldValue(entity, field, stringValue);
-            }
-
+            T entity = instantiateEntity(entityClass);
+            populateEntityFields(entity, rowData, fieldMapping);
             return entity;
         } catch (Exception e) {
-            log.error("Error creating entity: {}", e.getMessage(), e);
+            log.error("Ошибка создания сущности: {}", e.getMessage(), e);
             return null;
         }
     }
 
     /**
-     * Устанавливает значение поля сущности
+     * Создает экземпляр сущности.
+     *
+     * @param entityClass класс сущности
+     * @return новый экземпляр сущности
+     * @throws Exception если не удалось создать экземпляр
+     */
+    private <T> T instantiateEntity(Class<T> entityClass) throws Exception {
+        return entityClass.getDeclaredConstructor().newInstance();
+    }
+
+    /**
+     * Заполняет поля сущности данными из строки файла.
+     *
+     * @param entity экземпляр сущности
+     * @param rowData данные строки файла
+     * @param fieldMapping сопоставление полей
+     */
+    private void populateEntityFields(Object entity, Map<String, String> rowData,
+                                      Map<String, Field> fieldMapping) {
+        for (Map.Entry<String, Field> entry : fieldMapping.entrySet()) {
+            String header = entry.getKey();
+            Field field = entry.getValue();
+
+            if (shouldSkipField(field)) {
+                continue;
+            }
+
+            String stringValue = rowData.get(header);
+            if (stringValue != null) {
+                setFieldValue(entity, field, stringValue);
+            }
+        }
+    }
+
+    /**
+     * Проверяет, нужно ли пропустить поле при заполнении.
+     *
+     * @param field поле для проверки
+     * @return true, если поле нужно пропустить
+     */
+    private boolean shouldSkipField(Field field) {
+        return FieldDescriptionUtils.shouldSkipField(field);
+    }
+
+    /**
+     * Устанавливает значение поля сущности.
      *
      * @param entity экземпляр сущности
      * @param field поле
@@ -122,45 +187,51 @@ public class FieldMappingService {
     private void setFieldValue(Object entity, Field field, String stringValue) {
         try {
             field.setAccessible(true);
-
-            // Получаем тип поля
             Class<?> fieldType = field.getType();
-
-            // Преобразуем строковое значение в нужный тип
             Object typedValue = transformerFactory.transform(stringValue, fieldType, null);
 
-            // Устанавливаем значение поля
             if (typedValue != null) {
                 field.set(entity, typedValue);
             }
         } catch (Exception e) {
-            log.warn("Could not set field value: {} = '{}', error: {}", field.getName(), stringValue, e.getMessage());
+            log.warn("Не удалось установить значение поля: {} = '{}', ошибка: {}",
+                    field.getName(), stringValue, e.getMessage());
         }
     }
 
     /**
-     * Проверяет, соответствуют ли все обязательные поля сущности заголовкам файла
+     * Проверяет, соответствуют ли все обязательные поля сущности заголовкам файла.
      *
      * @param entityClass класс сущности
      * @param headers заголовки файла
-     * @return список отсутствующих обязательных полей или пустой список, если все обязательные поля присутствуют
+     * @return список отсутствующих обязательных полей или пустой список
      */
     public List<String> validateRequiredFields(Class<?> entityClass, List<String> headers) {
-        // Получаем сопоставление полей сущности с их описаниями из аннотаций
         Map<String, String> fieldDescriptions = FieldDescriptionUtils.getFieldDescriptions(entityClass);
+        Set<String> requiredFields = findRequiredFields(entityClass, fieldDescriptions);
 
-        // Получаем сопоставление описаний полей и их имен
-        Map<String, String> descriptionToField = FieldDescriptionUtils.getDescriptionToFieldMap(entityClass);
+        // Создаем сопоставление заголовков с полями
+        Map<String, Field> fieldMapping = createFieldMapping(entityClass, headers);
 
-        // Получаем все обязательные поля
+        return findMissingRequiredFields(requiredFields, fieldMapping, fieldDescriptions);
+    }
+
+    /**
+     * Находит обязательные поля сущности.
+     *
+     * @param entityClass класс сущности
+     * @param fieldDescriptions описания полей
+     * @return множество имен обязательных полей
+     */
+    private Set<String> findRequiredFields(Class<?> entityClass, Map<String, String> fieldDescriptions) {
         Set<String> requiredFields = new HashSet<>();
+
         for (Field field : FieldDescriptionUtils.getAllFields(entityClass)) {
-            // Пропускаем поля, помеченные как skipMapping
-            if (FieldDescriptionUtils.shouldSkipField(field)) {
+            if (shouldSkipField(field)) {
                 continue;
             }
 
-            // Проверяем обязательность поля (может быть определена по-разному)
+            // Проверяем обязательность поля
             // TODO: Добавить проверку обязательности поля по аннотациям JPA или других фреймворков
             String fieldName = field.getName();
             if (fieldDescriptions.containsKey(fieldName)) {
@@ -168,19 +239,24 @@ public class FieldMappingService {
             }
         }
 
-        // Создаем сопоставление заголовков с полями
-        Map<String, Field> fieldMapping = createFieldMapping(entityClass, headers);
+        return requiredFields;
+    }
 
-        // Проверяем, что все обязательные поля сопоставлены
+    /**
+     * Находит отсутствующие обязательные поля.
+     *
+     * @param requiredFields множество имен обязательных полей
+     * @param fieldMapping сопоставление заголовков и полей
+     * @param fieldDescriptions описания полей
+     * @return список описаний отсутствующих обязательных полей
+     */
+    private List<String> findMissingRequiredFields(Set<String> requiredFields,
+                                                   Map<String, Field> fieldMapping,
+                                                   Map<String, String> fieldDescriptions) {
         List<String> missingFields = new ArrayList<>();
+
         for (String requiredField : requiredFields) {
-            boolean found = false;
-            for (Field mappedField : fieldMapping.values()) {
-                if (mappedField.getName().equals(requiredField)) {
-                    found = true;
-                    break;
-                }
-            }
+            boolean found = isFieldMapped(requiredField, fieldMapping);
 
             if (!found) {
                 // Добавляем описание поля в список отсутствующих
@@ -189,5 +265,21 @@ public class FieldMappingService {
         }
 
         return missingFields;
+    }
+
+    /**
+     * Проверяет, сопоставлено ли поле с заголовком.
+     *
+     * @param fieldName имя поля
+     * @param fieldMapping сопоставление заголовков и полей
+     * @return true, если поле сопоставлено
+     */
+    private boolean isFieldMapped(String fieldName, Map<String, Field> fieldMapping) {
+        for (Field mappedField : fieldMapping.values()) {
+            if (mappedField.getName().equals(fieldName)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

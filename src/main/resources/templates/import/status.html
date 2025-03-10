@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Статус импорта - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Статус импорта файла',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Статус импорта - Обработка файлов</title>
+    <style>
+        .status-container {
+            margin-bottom: 2rem;
+        }
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+        .status-pending {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .status-processing {
+            background-color: #17a2b8;
+            color: white;
+            animation: pulse 2s infinite;
+        }
+        .status-completed {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-failed {
+            background-color: #dc3545;
+            color: white;
+        }
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.75;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+        .progress {
+            height: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .progress-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: width 0.3s ease;
+        }
+        .operation-details {
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .operation-details .row {
+            margin-bottom: 0.5rem;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .log-container {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: "Courier New", monospace;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+        .log-entry {
+            margin-bottom: 0.25rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        .log-time {
+            color: #6c757d;
+            margin-right: 0.5rem;
+        }
+        .log-info {
+            color: #0d6efd;
+        }
+        .log-warning {
+            color: #ffc107;
+        }
+        .log-error {
+            color: #dc3545;
+        }
+        .log-success {
+            color: #198754;
+        }
+        .result-summary {
+            background-color: #e9ecef;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .summary-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .summary-icon {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .icon-error {
+            background-color: #dc3545;
+            color: white;
+        }
+        .icon-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .icon-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .timer {
+            font-weight: bold;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-primary me-2">
+        <i class="fas fa-user me-1"></i>Профиль клиента
+    </a>
+    <a th:href="@{/import/{clientId}(clientId=${client.id})}" class="btn btn-outline-secondary">
+        <i class="fas fa-file-import me-1"></i>Новый импорт
+    </a>
+</div>
+
+<section>
+    <!-- Статус операции -->
+    <div class="status-container text-center">
+        <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PENDING}"
+             class="status-badge status-pending">
+            <i class="fas fa-hourglass-start me-2"></i>Ожидание
+        </div>
+        <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}"
+             class="status-badge status-processing">
+            <i class="fas fa-sync-alt fa-spin me-2"></i>Обработка
+        </div>
+        <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}"
+             class="status-badge status-completed">
+            <i class="fas fa-check-circle me-2"></i>Завершено
+        </div>
+        <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}"
+             class="status-badge status-failed">
+            <i class="fas fa-exclamation-circle me-2"></i>Ошибка
+        </div>
+
+        <!-- Прогресс -->
+        <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING ||
+                       operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
+            <div class="progress">
+                <div class="progress-bar" role="progressbar"
+                     th:style="'width: ' + ${operation.processingProgress != null ? operation.processingProgress : 0} + '%'"
+                     th:text="${operation.processingProgress != null ? operation.processingProgress : 0} + '%'">
+                    0%
+                </div>
+            </div>
+            <p class="text-muted" id="timeRemaining">
+                <span th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}">
+                    Расчет оставшегося времени...
+                </span>
+                <span th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
+                    Импорт завершен
+                </span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Детали операции -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-info-circle me-2"></i>Информация об операции
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="operation-details">
+                <div class="row">
+                    <div class="col-md-3 detail-label">ID операции:</div>
+                    <div class="col-md-9" th:text="${operation.id}">12345</div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 detail-label">Файл:</div>
+                    <div class="col-md-9" th:text="${operation.fileName}">example.csv</div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 detail-label">Тип файла:</div>
+                    <div class="col-md-9" th:text="${operation.fileType}">CSV</div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 detail-label">Начало операции:</div>
+                    <div class="col-md-9" th:text="${#temporals.format(operation.startedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                        01.01.2025 12:00:00
+                    </div>
+                </div>
+                <div class="row" th:if="${operation.completedAt != null}">
+                    <div class="col-md-3 detail-label">Завершение:</div>
+                    <div class="col-md-9" th:text="${#temporals.format(operation.completedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                        01.01.2025 12:05:00
+                    </div>
+                </div>
+                <div class="row" th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING ||
+                                          operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
+                    <div class="col-md-3 detail-label">Обработано:</div>
+                    <div class="col-md-9">
+                        <span th:text="${operation.processedRecords != null ? operation.processedRecords : 0}">0</span> /
+                        <span th:text="${operation.totalRecords != null ? operation.totalRecords : 0}">0</span> записей
+                    </div>
+                </div>
+                <div class="row" th:if="${operation.recordCount != null}">
+                    <div class="col-md-3 detail-label">Импортировано:</div>
+                    <div class="col-md-9" th:text="${operation.recordCount}">0</div>
+                </div>
+                <div class="row" th:if="${operation.errorMessage != null}">
+                    <div class="col-md-3 detail-label">Ошибка:</div>
+                    <div class="col-md-9 text-danger" th:text="${operation.errorMessage}">
+                        Сообщение об ошибке
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 detail-label">Длительность:</div>
+                    <div class="col-md-9" id="duration">
+                        <span th:if="${operation.completedAt != null}" th:text="${operation.getDuration()}">
+                            5 мин 30 сек
+                        </span>
+                        <span th:unless="${operation.completedAt != null}" class="timer">
+                            Расчет...
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Для завершенных/неудачных операций -->
+            <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED ||
+                           operation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}"
+                 class="result-summary">
+                <h5>Результаты импорта</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="summary-item">
+                            <div class="summary-icon icon-success">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div>
+                                <strong>Успешно импортировано:</strong>
+                                <div class="text-success" th:text="${operation.recordCount != null ? operation.recordCount : 0}">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="summary-item">
+                            <div class="summary-icon icon-error">
+                                <i class="fas fa-times"></i>
+                            </div>
+                            <div>
+                                <strong>Ошибок при импорте:</strong>
+                                <div class="text-danger" th:text="${operation.totalRecords != null && operation.recordCount != null ? operation.totalRecords - operation.recordCount : 0}">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий для завершенных операций -->
+                <div class="mt-4">
+                    <a href="#" class="btn btn-success me-2">
+                        <i class="fas fa-file-download me-1"></i>Скачать отчет
+                    </a>
+                    <a th:href="@{/import/{clientId}(clientId=${client.id})}" class="btn btn-primary">
+                        <i class="fas fa-file-import me-1"></i>Новый импорт
+                    </a>
+                </div>
+            </div>
+
+            <!-- Для незавершенных операций -->
+            <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}"
+                 class="text-center mt-4">
+                <button id="cancelImportBtn" class="btn btn-danger">
+                    <i class="fas fa-stop-circle me-1"></i>Отменить импорт
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Журнал операции -->
+    <div class="card">
+        <div class="card-header bg-info text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-list-alt me-2"></i>Журнал операции
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="log-container" id="operationLog">
+                <!-- Журнал будет заполнен через JavaScript -->
+                <div class="log-entry">
+                    <span class="log-time" th:text="${#temporals.format(operation.startedAt, 'HH:mm:ss')}">12:00:00</span>
+                    <span class="log-info">Операция импорта запущена</span>
+                </div>
+                <!-- Динамические записи журнала будут добавлены здесь -->
+                <div class="log-entry" th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
+                    <span class="log-time" th:text="${#temporals.format(operation.completedAt, 'HH:mm:ss')}">12:05:00</span>
+                    <span class="log-success">Операция импорта успешно завершена</span>
+                </div>
+                <div class="log-entry" th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}">
+                    <span class="log-time" th:text="${#temporals.format(operation.completedAt, 'HH:mm:ss')}">12:05:00</span>
+                    <span class="log-error">Операция импорта завершилась с ошибкой: <span th:text="${operation.errorMessage}">Ошибка</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const operationId = [[${operation.id}]];
+        const operationStatus = [[${operation.status.name()}]];
+
+        let startTime = new Date([[${operation.startedAt}]]);
+        let endTime = null;
+
+        if ([[${operation.completedAt != null}]]) {
+            endTime = new Date([[${operation.completedAt}]]);
+        }
+
+        // Обновляем таймер
+        updateTimer();
+
+        // Если операция в процессе, запускаем обновление статуса
+        if (operationStatus === 'PROCESSING' || operationStatus === 'PENDING') {
+            // Запускаем обновление статуса каждые 2 секунды
+            const statusInterval = setInterval(function() {
+                updateOperationStatus();
+            }, 2000);
+
+            // Обновляем таймер каждую секунду
+            const timerInterval = setInterval(function() {
+                updateTimer();
+            }, 1000);
+        }
+
+        // Кнопка отмены импорта
+        const cancelImportBtn = document.getElementById('cancelImportBtn');
+        if (cancelImportBtn) {
+            cancelImportBtn.addEventListener('click', function() {
+                if (confirm('Вы уверены, что хотите отменить импорт? Это действие нельзя отменить.')) {
+                    cancelImport();
+                }
+            });
+        }
+
+        /**
+         * Обновляет статус операции
+         */
+        function updateOperationStatus() {
+            fetch(`/import/api/status/${operationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Обновляем статус
+                    if (data.status !== operationStatus) {
+                        // Статус изменился, перезагружаем страницу
+                        window.location.reload();
+                        return;
+                    }
+
+                    // Обновляем прогресс
+                    const progressBar = document.querySelector('.progress-bar');
+                    if (progressBar && data.processingProgress !== null) {
+                        progressBar.style.width = `${data.processingProgress}%`;
+                        progressBar.textContent = `${data.processingProgress}%`;
+                    }
+
+                    // Обновляем обработанные записи
+                    const processedRecords = document.querySelector('.operation-details .row:nth-child(6) .col-md-9');
+                    if (processedRecords && data.processedRecords !== null) {
+                        processedRecords.innerHTML = `${data.processedRecords} / ${data.totalRecords} записей`;
+                    }
+
+                    // Обновляем оставшееся время
+                    const timeRemaining = document.getElementById('timeRemaining');
+                    if (timeRemaining && data.processingProgress > 0) {
+                        const elapsedMs = new Date() - startTime;
+                        const totalMs = (elapsedMs / data.processingProgress) * 100;
+                        const remainingMs = totalMs - elapsedMs;
+
+                        if (remainingMs > 0) {
+                            const remainingMinutes = Math.floor(remainingMs / 60000);
+                            const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+                            timeRemaining.textContent = `Осталось примерно ${remainingMinutes} мин ${remainingSeconds} сек`;
+                        } else {
+                            timeRemaining.textContent = 'Завершение...';
+                        }
+                    }
+
+                    // Добавляем запись в журнал
+                    if (data.processedRecords > 0) {
+                        const logContainer = document.getElementById('operationLog');
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+
+                        const now = new Date();
+                        const timeStr = now.toTimeString().split(' ')[0];
+
+                        logEntry.innerHTML = `
+                            <span class="log-time">${timeStr}</span>
+                            <span class="log-info">Обработано ${data.processedRecords} из ${data.totalRecords} записей (${data.processingProgress}%)</span>
+                        `;
+
+                        logContainer.appendChild(logEntry);
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating operation status:', error);
+                });
+        }
+
+        /**
+         * Отменяет импорт
+         */
+        function cancelImport() {
+            fetch(`/import/api/cancel/${operationId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Операция успешно отменена, перезагружаем страницу
+                        window.location.reload();
+                    } else {
+                        alert(`Не удалось отменить импорт: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error cancelling import:', error);
+                    alert('Произошла ошибка при отмене импорта');
+                });
+        }
+
+        /**
+         * Обновляет таймер длительности операции
+         */
+        function updateTimer() {
+            const durationElement = document.getElementById('duration');
+            if (!durationElement) return;
+
+            let duration;
+            if (endTime) {
+                // Операция завершена, используем фиксированную длительность
+                duration = endTime - startTime;
+            } else {
+                // Операция в процессе, вычисляем текущую длительность
+                duration = new Date() - startTime;
+            }
+
+            // Форматируем длительность
+            const hours = Math.floor(duration / 3600000);
+            const minutes = Math.floor((duration % 3600000) / 60000);
+            const seconds = Math.floor((duration % 60000) / 1000);
+
+            let durationText = '';
+            if (hours > 0) {
+                durationText += `${hours} ч `;
+            }
+            durationText += `${minutes} мин ${seconds} сек`;
+
+            durationElement.textContent = durationText;
+        }
+    });
+</script>
+</body>
+</html>

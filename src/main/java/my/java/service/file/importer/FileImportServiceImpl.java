@@ -11,11 +11,14 @@ import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
 import my.java.repository.FileOperationRepository;
+import my.java.service.competitor.CompetitorDataService;
 import my.java.service.file.mapping.FieldMappingService;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
 import my.java.service.file.strategy.FileProcessingStrategy;
 import my.java.service.file.transformer.ValueTransformerFactory;
+import my.java.service.product.ProductService;
+import my.java.service.region.RegionDataService;
 import my.java.util.PathResolver;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -44,6 +47,9 @@ public class FileImportServiceImpl implements FileImportService {
     private final FileProcessorFactory fileProcessorFactory;
     private final FieldMappingService fieldMappingService;
     private final ValueTransformerFactory transformerFactory;
+    private final ProductService productService;
+    private final RegionDataService regionDataService;
+    private final CompetitorDataService competitorDataService;
 
     // Пул потоков для асинхронной обработки файлов
     @Qualifier("fileProcessingExecutor")
@@ -336,8 +342,8 @@ public class FileImportServiceImpl implements FileImportService {
     /**
      * Создает запись об операции импорта файла.
      *
-     * @param client клиент
-     * @param file загруженный файл
+     * @param client   клиент
+     * @param file     загруженный файл
      * @param filePath путь к сохраненному файлу
      * @return созданная операция
      */
@@ -358,7 +364,7 @@ public class FileImportServiceImpl implements FileImportService {
     /**
      * Ищет существующую операцию или создает новую.
      *
-     * @param client клиент
+     * @param client   клиент
      * @param filePath путь к файлу
      * @return операция
      */
@@ -448,7 +454,7 @@ public class FileImportServiceImpl implements FileImportService {
     /**
      * Сохраняет сущности в БД.
      *
-     * @param entities список сущностей
+     * @param entities   список сущностей
      * @param entityType тип сущности
      * @return количество сохраненных сущностей
      */
@@ -460,29 +466,33 @@ public class FileImportServiceImpl implements FileImportService {
 
         int savedCount = 0;
 
-        // В зависимости от типа сущности, используем соответствующий репозиторий
+        // В зависимости от типа сущности, используем соответствующий сервис
         switch (entityType.toLowerCase()) {
             case "product":
-                // Здесь должен быть код для сохранения продуктов
-                // ProductRepository productRepository = ...
-                // for (ImportableEntity entity : entities) {
-                //     Product product = (Product) entity;
-                //     productRepository.save(product);
-                //     savedCount++;
-                // }
-                log.info("Сохранение продуктов не реализовано");
+                List<Product> products = entities.stream()
+                        .filter(e -> e instanceof Product)
+                        .map(e -> (Product) e)
+                        .toList();
+                savedCount = productService.saveProducts(products);
+                log.info("Сохранено {} продуктов", savedCount);
                 break;
 
             case "regiondata":
-                // Здесь должен быть код для сохранения данных регионов
-                // RegionDataRepository regionDataRepository = ...
-                log.info("Сохранение данных регионов не реализовано");
+                List<RegionData> regionDataList = entities.stream()
+                        .filter(e -> e instanceof RegionData)
+                        .map(e -> (RegionData) e)
+                        .toList();
+                savedCount = regionDataService.saveRegionDataList(regionDataList);
+                log.info("Сохранено {} данных регионов", savedCount);
                 break;
 
             case "competitordata":
-                // Здесь должен быть код для сохранения данных конкурентов
-                // CompetitorDataRepository competitorDataRepository = ...
-                log.info("Сохранение данных конкурентов не реализовано");
+                List<CompetitorData> competitorDataList = entities.stream()
+                        .filter(e -> e instanceof CompetitorData)
+                        .map(e -> (CompetitorData) e)
+                        .toList();
+                savedCount = competitorDataService.saveCompetitorDataList(competitorDataList);
+                log.info("Сохранено {} данных конкурентов", savedCount);
                 break;
 
             default:

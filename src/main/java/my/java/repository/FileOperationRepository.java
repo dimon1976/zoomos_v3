@@ -25,6 +25,9 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
     // Найти операции по статусу
     List<FileOperation> findByStatus(OperationStatus status);
 
+    // Найти операции для клиента по статусу
+    List<FileOperation> findByClientIdAndStatus(Long clientId, OperationStatus status);
+
     // Найти операции по типу
     List<FileOperation> findByOperationType(OperationType operationType);
 

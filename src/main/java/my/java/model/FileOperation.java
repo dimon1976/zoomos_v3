@@ -56,6 +56,37 @@ public class FileOperation {
     @Column(name = "created_by")
     private String createdBy;
 
+    // Добавленные поля
+    @Column(name = "source_file_path")
+    private String sourceFilePath;
+
+    @Column(name = "result_file_path")
+    private String resultFilePath;
+
+    @Column(name = "file_size")
+    private Long fileSize;
+
+    @Column(name = "total_records")
+    private Integer totalRecords;
+
+    @Column(name = "processed_records")
+    private Integer processedRecords;
+
+    @Column(name = "processing_progress")
+    private Integer processingProgress;
+
+    @Column(name = "field_mapping_id")
+    private Long fieldMappingId;
+
+    @Column(name = "strategy_id")
+    private Long strategyId;
+
+    @Column(name = "processing_params", columnDefinition = "TEXT")
+    private String processingParams;
+
+    @Column(name = "file_hash")
+    private String fileHash;
+
     // Enum для типа операции
     public enum OperationType {
         IMPORT, EXPORT, PROCESS
@@ -71,6 +102,9 @@ public class FileOperation {
         this.status = OperationStatus.COMPLETED;
         this.recordCount = recordCount;
         this.completedAt = ZonedDateTime.now();
+
+        // Устанавливаем прогресс в 100%
+        this.processingProgress = 100;
     }
 
     // Метод для установки ошибки операции
@@ -83,5 +117,34 @@ public class FileOperation {
     // Метод для изменения статуса на "в процессе"
     public void markAsProcessing() {
         this.status = OperationStatus.PROCESSING;
+    }
+
+    // Метод для получения строкового представления длительности операции
+    public String getDuration() {
+        if (startedAt == null) {
+            return "Н/Д";
+        }
+
+        if (completedAt == null) {
+            if (status == OperationStatus.PROCESSING || status == OperationStatus.PENDING) {
+                return "В процессе";
+            }
+            return "Не завершено";
+        }
+
+        long durationSeconds = completedAt.toEpochSecond() - startedAt.toEpochSecond();
+
+        // Форматирование длительности
+        if (durationSeconds < 60) {
+            return durationSeconds + " сек";
+        } else if (durationSeconds < 3600) {
+            long minutes = durationSeconds / 60;
+            long seconds = durationSeconds % 60;
+            return String.format("%d мин %d сек", minutes, seconds);
+        } else {
+            long hours = durationSeconds / 3600;
+            long minutes = (durationSeconds % 3600) / 60;
+            return String.format("%d ч %d мин", hours, minutes);
+        }
     }
 }

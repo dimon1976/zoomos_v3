@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.ClientDto;
+import my.java.dto.FileOperationDto;
 import my.java.model.FileOperation;
 import my.java.repository.FileOperationRepository;
 import my.java.service.client.ClientService;
@@ -106,7 +107,7 @@ public class ClientController {
                                 op2.getStartedAt().compareTo(op1.getStartedAt()));
 
                         FileOperation latestOperation = pendingOperations.get(0);
-                        model.addAttribute("activeImportOperation", latestOperation);
+                        model.addAttribute("activeImportOperation", mapToDto(latestOperation));
                     }
 
                     // Также можем добавить недавно завершенные операции
@@ -125,12 +126,15 @@ public class ClientController {
                                 op2.getStartedAt().compareTo(op1.getStartedAt()));
 
                         // Ограничиваем количество операций для отображения
-                        List<FileOperation> recentOps = recentOperations.stream()
+                        List<FileOperationDto> recentOps = recentOperations.stream()
                                 .limit(5)
+                                .map(this::mapToDto)
                                 .collect(Collectors.toList());
 
                         model.addAttribute("recentImportOperations", recentOps);
                     }
+
+                    // Добавляем активную вкладку в модель, если указана
                     if (tab != null) {
                         model.addAttribute("activeTab", tab);
                     }
@@ -144,6 +148,32 @@ public class ClientController {
                     return "redirect:/clients";
                 });
     }
+
+    // Метод преобразования FileOperation в FileOperationDto
+    private FileOperationDto mapToDto(FileOperation operation) {
+        if (operation == null) {
+            return null;
+        }
+
+        return FileOperationDto.builder()
+                .id(operation.getId())
+                .clientId(operation.getClient() != null ? operation.getClient().getId() : null)
+                .clientName(operation.getClient() != null ? operation.getClient().getName() : null)
+                .operationType(operation.getOperationType())
+                .fileName(operation.getFileName())
+                .fileType(operation.getFileType())
+                .recordCount(operation.getRecordCount())
+                .status(operation.getStatus())
+                .errorMessage(operation.getErrorMessage())
+                .startedAt(operation.getStartedAt())
+                .completedAt(operation.getCompletedAt())
+                .createdBy(operation.getCreatedBy())
+                .processingProgress(operation.getProcessingProgress())
+                .processedRecords(operation.getProcessedRecords())
+                .totalRecords(operation.getTotalRecords())
+                .build();
+    }
+
 
     /**
      * Отображение формы редактирования клиента

@@ -9,6 +9,7 @@ import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
 import my.java.service.file.importer.FileImportService;
 import my.java.service.file.mapping.FieldMappingService;
+import my.java.util.PathResolver;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -17,6 +18,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +39,7 @@ public class FileImportController {
     private final FileImportService fileImportService;
     private final ClientService clientService;
     private final FieldMappingService fieldMappingService;
+    private final PathResolver pathResolver;
 
     // Карта активных операций импорта для отслеживания
     private final Map<Long, CompletableFuture<FileOperationDto>> activeImports = Collections.synchronizedMap(new HashMap<>());
@@ -96,6 +101,10 @@ public class FileImportController {
         return clientService.getClientById(clientId)
                 .map(client -> {
                     try {
+                        // Сохраняем файл во временную директорию
+                        Path tempFilePath = pathResolver.saveToTempFile(file, "analyze");
+                        log.debug("Файл сохранен во временную директорию: {}", tempFilePath);
+
                         // Анализируем файл
                         Map<String, Object> analysis = fileImportService.analyzeFile(file);
 
@@ -104,6 +113,7 @@ public class FileImportController {
                         model.addAttribute("analysis", analysis);
                         model.addAttribute("fileName", file.getOriginalFilename());
                         model.addAttribute("fileSize", formatFileSize(file.getSize()));
+                        model.addAttribute("tempFilePath", tempFilePath.toString()); // Добавляем путь к временному файлу
 
                         // Получаем доступные маппинги полей
                         String entityType = "product"; // По умолчанию
@@ -134,18 +144,21 @@ public class FileImportController {
     @PostMapping("/{clientId}/import")
     public String importFile(
             @PathVariable Long clientId,
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "mappingId", required = false) Long mappingId,
+            @RequestParam(value = "tempFilePath", required = false) String tempFilePath,
+            @RequestParam(value = "fileName", required = false) String fileName,
+            @RequestParam(value = "mappingId", required = false) String mappingIdStr,
             @RequestParam(value = "strategyId", required = false) Long strategyId,
             @RequestParam(value = "entityType", required = false, defaultValue = "product") String entityType,
             @RequestParam Map<String, String> params,
             Model model,
             RedirectAttributes redirectAttributes) {
 
-        log.info("POST request to import file for client: {}, filename: {}", clientId, file.getOriginalFilename());
+        log.info("POST request to import file for client: {}, filename: {}, tempFilePath: {}",
+                clientId, fileName, tempFilePath);
 
-        if (file.isEmpty()) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите файл для загрузки");
+        // Проверяем наличие пути к временному файлу
+        if (tempFilePath == null || tempFilePath.isEmpty()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Отсутствует путь к файлу для импорта");
             return "redirect:/import/" + clientId;
         }
 
@@ -157,32 +170,67 @@ public class FileImportController {
                 });
 
         try {
+            // Проверяем существование временного файла
+            Path filePath = Paths.get(tempFilePath);
+            if (!Files.exists(filePath)) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Временный файл не найден. Возможно, сессия истекла.");
+                return "redirect:/import/" + clientId;
+            }
+
+            // Конвертируем mappingId из строки в Long, если это не "new"
+            Long mappingId = null;
+            if (mappingIdStr != null && !mappingIdStr.equals("new")) {
+                try {
+                    mappingId = Long.parseLong(mappingIdStr);
+                } catch (NumberFormatException e) {
+                    log.warn("Невозможно преобразовать mappingId к Long: {}", mappingIdStr);
+                }
+            }
+
             // Создаем карту параметров для импорта
             Map<String, String> importParams = new HashMap<>();
             importParams.put("entityType", entityType);
 
             // Добавляем дополнительные параметры
             for (Map.Entry<String, String> entry : params.entrySet()) {
-                if (!entry.getKey().equals("file") && !entry.getKey().equals("mappingId") &&
-                        !entry.getKey().equals("strategyId") && !entry.getKey().equals("entityType")) {
+                if (!entry.getKey().equals("tempFilePath") && !entry.getKey().equals("fileName") &&
+                        !entry.getKey().equals("mappingId") && !entry.getKey().equals("strategyId") &&
+                        !entry.getKey().equals("entityType")) {
                     importParams.put(entry.getKey(), entry.getValue());
                 }
             }
 
-            // Запускаем асинхронный импорт
-            CompletableFuture<FileOperationDto> future = fileImportService.importFileAsync(
-                    file, client, mappingId, strategyId, importParams);
+            // Если выбрано "новый маппинг" и указано имя маппинга, создаем и сохраняем его
+            if (mappingIdStr != null && mappingIdStr.equals("new")) {
+                String mappingName = params.get("mappingName");
+                String mappingDescription = params.get("mappingDescription");
+                boolean saveMapping = Boolean.parseBoolean(params.getOrDefault("saveMapping", "false"));
 
-            // Получаем промежуточный результат
-            FileOperationDto operation = future.getNow(null);
+                if (saveMapping && mappingName != null && !mappingName.trim().isEmpty()) {
+                    // Получаем все маппинги полей из запроса
+                    Map<String, String> fieldMapping = extractFieldMappingFromParams(params);
+
+                    // Создаем новый маппинг
+                    mappingId = fieldMappingService.createMapping(
+                            mappingName,
+                            mappingDescription,
+                            clientId,
+                            entityType,
+                            fieldMapping
+                    );
+
+                    log.info("Создан новый маппинг полей: {}, ID: {}", mappingName, mappingId);
+                }
+            }
+
+            // Импортируем файл напрямую, используя его путь
+            FileOperationDto operation = fileImportService.processUploadedFile(
+                    filePath, client, mappingId, strategyId, importParams);
 
             if (operation != null) {
-                // Сохраняем задачу в карте активных импортов
-                activeImports.put(operation.getId(), future);
-
                 // Добавляем сообщение об успешном начале импорта
                 redirectAttributes.addFlashAttribute("successMessage",
-                        "Импорт файла '" + file.getOriginalFilename() + "' успешно запущен");
+                        "Импорт файла '" + fileName + "' успешно запущен");
 
                 // Перенаправляем на страницу клиента, раздел импорта
                 return "redirect:/clients/" + clientId + "?tab=import";
@@ -197,6 +245,7 @@ public class FileImportController {
             return "redirect:/import/" + clientId;
         }
     }
+
 
     /**
      * Страница отслеживания статуса импорта.
@@ -237,10 +286,10 @@ public class FileImportController {
             Map<String, Object> response = new HashMap<>();
             response.put("id", operation.getId());
             response.put("status", operation.getStatus().toString());
-//            response.put("processingProgress", operation.getProcessingProgress());
-//            response.put("processedRecords", operation.getProcessedRecords());
-//            response.put("totalRecords", operation.getTotalRecords());
-            response.put("recordCount", operation.getRecordCount());
+            response.put("processingProgress", operation.getProcessingProgress() != null ? operation.getProcessingProgress() : 0);
+            response.put("processedRecords", operation.getProcessedRecords() != null ? operation.getProcessedRecords() : 0);
+            response.put("totalRecords", operation.getTotalRecords() != null ? operation.getTotalRecords() : 0);
+            response.put("recordCount", operation.getRecordCount() != null ? operation.getRecordCount() : 0);
             response.put("errorMessage", operation.getErrorMessage());
             response.put("startedAt", operation.getStartedAt());
             response.put("completedAt", operation.getCompletedAt());
@@ -248,17 +297,25 @@ public class FileImportController {
 
             // Расчет оставшегося времени (если операция в процессе)
             if (operation.getStatus() == FileOperation.OperationStatus.PROCESSING &&
-//                    operation.getProcessingProgress() != null &&
-//                    operation.getProcessingProgress() > 0 &&
-                    operation.getStartedAt() != null) {
+                    operation.getProcessingProgress() != null &&
+                    operation.getProcessingProgress() > 0 &&
+                    operation.getStartedAt() != null &&
+                    operation.getProcessedRecords() != null &&
+                    operation.getProcessedRecords() > 0 &&
+                    operation.getTotalRecords() != null &&
+                    operation.getTotalRecords() > 0) {
 
-                long elapsedTime = System.currentTimeMillis() - operation.getStartedAt().toInstant().toEpochMilli();
-//                double recordsPerMs = operation.getProcessedRecords() / (double) elapsedTime;
-//                long remainingRecords = operation.getTotalRecords() - operation.getProcessedRecords();
-//                long estimatedTimeRemaining = (long) (remainingRecords / recordsPerMs);
-                long estimatedTimeRemaining = 0L;
+                try {
+                    long elapsedTime = System.currentTimeMillis() - operation.getStartedAt().toInstant().toEpochMilli();
+                    double recordsPerMs = operation.getProcessedRecords() / (double) elapsedTime;
+                    long remainingRecords = operation.getTotalRecords() - operation.getProcessedRecords();
+                    long estimatedTimeRemaining = (long) (remainingRecords / recordsPerMs);
 
-                response.put("estimatedTimeRemaining", estimatedTimeRemaining);
+                    response.put("estimatedTimeRemaining", estimatedTimeRemaining);
+                } catch (Exception e) {
+                    log.warn("Ошибка при расчете оставшегося времени: {}", e.getMessage());
+                    // Не добавляем оценку времени в случае ошибки
+                }
             }
 
             return ResponseEntity.ok(response);
@@ -354,5 +411,29 @@ public class FileImportController {
         } else {
             return String.format("%.2f GB", (double) size / GB);
         }
+    }
+
+    /**
+     * Извлекает маппинг полей из параметров запроса.
+     * Параметры с префиксом "mapping[" содержат маппинг поля.
+     */
+    private Map<String, String> extractFieldMappingFromParams(Map<String, String> params) {
+        Map<String, String> fieldMapping = new HashMap<>();
+
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("mapping[") && key.endsWith("]")) {
+                // Извлекаем имя исходного поля из ключа (между "mapping[" и "]")
+                String sourceField = key.substring(8, key.length() - 1);
+                String targetField = entry.getValue();
+
+                // Добавляем в маппинг только если целевое поле не пустое
+                if (targetField != null && !targetField.trim().isEmpty()) {
+                    fieldMapping.put(sourceField, targetField);
+                }
+            }
+        }
+
+        return fieldMapping;
     }
 }

@@ -31,7 +31,7 @@ public interface FileImportService {
     CompletableFuture<FileOperationDto> importFileAsync(
             MultipartFile file,
             Client client,
-            Long mappingId,
+            Long mappingId, // Может быть null
             Long strategyId,
             Map<String, String> params);
 

@@ -98,11 +98,52 @@ public class CsvFileProcessor extends AbstractFileProcessor {
 
         List<Map<String, String>> result = new ArrayList<>();
 
-        try (Reader reader = Files.newBufferedReader(filePath, options.getCharset());
-             CSVReader csvReader = new CSVReaderBuilder(reader)
-                     .withCSVParser(parser)
-                     .withSkipLines(options.getHeaderRow())
-                     .build()) {
+        try {
+            // Попробуем разные кодировки, если стандартная не работает
+            Reader reader = null;
+            Exception lastException = null;
+
+            // Список кодировок для попытки прочтения
+            List<Charset> charsets = Arrays.asList(
+                    options.getCharset(),
+                    StandardCharsets.UTF_8,
+                    StandardCharsets.ISO_8859_1,
+                    StandardCharsets.US_ASCII,
+                    Charset.forName("windows-1251")  // Для кириллицы
+            );
+
+            // Пробуем прочитать файл с разными кодировками
+            for (Charset charset : charsets) {
+                try {
+                    reader = Files.newBufferedReader(filePath, charset);
+                    // Если чтение успешно, выходим из цикла
+                    options.setCharset(charset); // Запоминаем успешную кодировку
+                    log.debug("Успешное чтение с кодировкой: {}", charset);
+                    break;
+                } catch (Exception e) {
+                    lastException = e;
+                    log.debug("Не удалось прочитать файл с кодировкой {}: {}", charset, e.getMessage());
+                    if (reader != null) {
+                        try {
+                            reader.close();
+                        } catch (Exception ce) {
+                            log.warn("Ошибка при закрытии reader: {}", ce.getMessage());
+                        }
+                        reader = null;
+                    }
+                }
+            }
+
+            // Если ни одна кодировка не подошла
+            if (reader == null) {
+                throw new IOException("Не удалось прочитать файл ни с одной из кодировок", lastException);
+            }
+
+            // Теперь читаем файл с установленной кодировкой
+            CSVReader csvReader = new CSVReaderBuilder(reader)
+                    .withCSVParser(parser)
+                    .withSkipLines(options.getHeaderRow())
+                    .build();
 
             // Читаем заголовки
             String[] headers = determineHeaders(filePath, options);
@@ -132,12 +173,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
             }
 
             log.debug("Прочитано {} записей из CSV файла", result.size());
+            return result;
         } catch (CsvException e) {
             log.error("Ошибка при чтении CSV файла: {}", e.getMessage());
             throw new IOException("Ошибка при чтении CSV файла: " + e.getMessage(), e);
         }
-
-        return result;
     }
 
     @Override
@@ -315,22 +355,52 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     private FileReadingOptions determineReadingOptions(Path filePath, Map<String, String> params) {
         FileReadingOptions options = new FileReadingOptions();
 
-        // Если пользователь указал параметры, используем их
+        // Сначала автоматически определяем все параметры
+        try {
+            detectFileOptions(filePath, options);
+            log.debug("Автоматически определены параметры файла: разделитель='{}', кодировка='{}'",
+                    options.getDelimiter(), options.getCharset());
+        } catch (IOException e) {
+            log.error("Ошибка при автоопределении параметров файла: {}", e.getMessage());
+            // Устанавливаем значения по умолчанию если не удалось определить автоматически
+            options.setDelimiter(DEFAULT_DELIMITER);
+            options.setQuoteChar(DEFAULT_QUOTE);
+            options.setCharset(DEFAULT_CHARSET);
+            options.setHeaderRow(0);
+            options.setSkipEmptyRows(true);
+            options.setTrimWhitespace(true);
+        }
+
+        // Затем переопределяем параметры, указанные пользователем
         if (params != null) {
             if (params.containsKey("delimiter")) {
                 options.setDelimiter(params.get("delimiter").charAt(0));
+                log.debug("Установлен пользовательский разделитель: '{}'", options.getDelimiter());
             }
 
             if (params.containsKey("quoteChar")) {
                 options.setQuoteChar(params.get("quoteChar").charAt(0));
+                log.debug("Установлен пользовательский символ кавычек: '{}'", options.getQuoteChar());
             }
 
             if (params.containsKey("charset")) {
-                options.setCharset(Charset.forName(params.get("charset")));
+                try {
+                    options.setCharset(Charset.forName(params.get("charset")));
+                    log.debug("Установлена пользовательская кодировка: '{}'", options.getCharset());
+                } catch (Exception e) {
+                    log.warn("Неизвестная кодировка: {}, используем автоопределенную: {}",
+                            params.get("charset"), options.getCharset());
+                }
             }
 
             if (params.containsKey("headerRow")) {
-                options.setHeaderRow(Integer.parseInt(params.get("headerRow")));
+                try {
+                    options.setHeaderRow(Integer.parseInt(params.get("headerRow")));
+                    log.debug("Установлена пользовательская строка заголовка: {}", options.getHeaderRow());
+                } catch (NumberFormatException e) {
+                    log.warn("Неверный формат строки заголовка: {}, используем автоопределенную: {}",
+                            params.get("headerRow"), options.getHeaderRow());
+                }
             }
 
             if (params.containsKey("skipEmptyRows")) {
@@ -339,13 +409,6 @@ public class CsvFileProcessor extends AbstractFileProcessor {
 
             if (params.containsKey("trimWhitespace")) {
                 options.setTrimWhitespace(Boolean.parseBoolean(params.get("trimWhitespace")));
-            }
-        } else {
-            // Автоматически определяем параметры
-            try {
-                detectFileOptions(filePath, options);
-            } catch (IOException e) {
-                log.error("Ошибка при автоопределении параметров файла: {}", e.getMessage());
             }
         }
 
@@ -617,12 +680,14 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * @throws IOException если возникла ошибка при чтении файла
      */
     private String[] determineHeaders(Path filePath, FileReadingOptions options) throws IOException {
+        Charset charset = options.getCharset();
+
         CSVParser parser = new CSVParserBuilder()
                 .withSeparator(options.getDelimiter())
                 .withQuoteChar(options.getQuoteChar())
                 .build();
 
-        try (Reader reader = Files.newBufferedReader(filePath, options.getCharset());
+        try (Reader reader = Files.newBufferedReader(filePath, charset);
              CSVReader csvReader = new CSVReaderBuilder(reader)
                      .withCSVParser(parser)
                      .withSkipLines(options.getHeaderRow())

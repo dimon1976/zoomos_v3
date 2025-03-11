@@ -28,6 +28,9 @@ public class FileOperationDto {
     private ZonedDateTime startedAt;
     private ZonedDateTime completedAt;
     private String createdBy;
+    private Integer processingProgress;
+    private Integer processedRecords;
+    private Integer totalRecords;
 
     // Вспомогательные методы для форматирования дат
     public String getFormattedStartedAt() {

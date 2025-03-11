@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -27,6 +28,9 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
 
     // Найти операции для клиента по статусу
     List<FileOperation> findByClientIdAndStatus(Long clientId, OperationStatus status);
+
+    // Найти операции для клиента по списку статусов
+    List<FileOperation> findByClientIdAndStatusIn(Long clientId, Collection<OperationStatus> statuses);
 
     // Найти операции по типу
     List<FileOperation> findByOperationType(OperationType operationType);
@@ -55,6 +59,13 @@ public interface FileOperationRepository extends JpaRepository<FileOperation, Lo
     // Найти последние операции клиента
     @Query("SELECT fo FROM FileOperation fo WHERE fo.client.id = :clientId ORDER BY fo.startedAt DESC")
     List<FileOperation> findLatestOperationsForClient(@Param("clientId") Long clientId, Pageable pageable);
+
+    // Найти последние операции клиента с определенными статусами
+    @Query("SELECT fo FROM FileOperation fo WHERE fo.client.id = :clientId AND fo.status IN :statuses ORDER BY fo.startedAt DESC")
+    List<FileOperation> findLatestOperationsForClientWithStatus(
+            @Param("clientId") Long clientId,
+            @Param("statuses") Collection<OperationStatus> statuses,
+            Pageable pageable);
 
     // Поиск операций по имени файла, содержащего указанную строку
     List<FileOperation> findByFileNameContainingIgnoreCase(String fileNamePart);

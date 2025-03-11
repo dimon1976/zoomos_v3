@@ -1,0 +1,164 @@
+Структура папок
+Серийный номер тома: 2ACC-0DF3
+E:.
+|   tree.txt
+|   
++---java
+|   \---my
+|       \---java
+|           |   Main.java
+|           |   
+|           +---config
+|           |       AsyncConfig.java
+|           |       RequestIdFilter.java
+|           |       WebConfig.java
+|           |       WebSocketConfig.java
+|           |       
+|           +---controller
+|           |       ClientController.java
+|           |       EntityDataController.java
+|           |       FileImportController.java
+|           |       MainController.java
+|           |       
+|           +---dto
+|           |       ClientDto.java
+|           |       FileOperationDto.java
+|           |       
+|           +---exception
+|           |       FileOperationException.java
+|           |       GlobalExceptionHandler.java
+|           |       
+|           +---model
+|           |   |   Client.java
+|           |   |   FileOperation.java
+|           |   |   
+|           |   +---entity
+|           |   |       CompetitorData.java
+|           |   |       ImportableEntity.java
+|           |   |       Product.java
+|           |   |       RegionData.java
+|           |   |       
+|           |   \---enums
+|           |           DataSourceType.java
+|           |           
+|           +---repository
+|           |       ClientRepository.java
+|           |       CompetitorDataRepository.java
+|           |       FileOperationRepository.java
+|           |       ProductRepository.java
+|           |       RegionDataRepository.java
+|           |       
+|           +---service
+|           |   +---client
+|           |   |   |   ClientService.java
+|           |   |   |   
+|           |   |   \---impl
+|           |   |           ClientServiceImpl.java
+|           |   |           
+|           |   +---competitor
+|           |   |       CompetitorDataService.java
+|           |   |       CompetitorDataServiceImpl.java
+|           |   |       
+|           |   +---file
+|           |   |   +---entity
+|           |   |   |       EntitySaverFactory.java
+|           |   |   |       EntitySaverFactoryImpl.java
+|           |   |   |       
+|           |   |   +---importer
+|           |   |   |       FileImportService.java
+|           |   |   |       FileImportServiceImpl.java
+|           |   |   |       
+|           |   |   +---job
+|           |   |   |       FileImportJob.java
+|           |   |   |       
+|           |   |   +---mapping
+|           |   |   |       FieldMappingService.java
+|           |   |   |       FieldMappingServiceImpl.java
+|           |   |   |       
+|           |   |   +---processor
+|           |   |   |       AbstractFileProcessor.java
+|           |   |   |       CsvFileProcessor.java
+|           |   |   |       ExcelFileProcessor.java
+|           |   |   |       FileProcessor.java
+|           |   |   |       FileProcessorFactory.java
+|           |   |   |       
+|           |   |   +---strategy
+|           |   |   |       DefaultFileProcessingStrategy.java
+|           |   |   |       FileProcessingStrategy.java
+|           |   |   |       
+|           |   |   +---tracker
+|           |   |   |       ImportProgressTracker.java
+|           |   |   |       ProgressInfo.java
+|           |   |   |       WebSocketImportProgressTracker.java
+|           |   |   |       
+|           |   |   \---transformer
+|           |   |           AbstractValueTransformer.java
+|           |   |           BooleanTransformer.java
+|           |   |           DateTimeTransformer.java
+|           |   |           EnumTransformer.java
+|           |   |           NumberTransformer.java
+|           |   |           StringTransformer.java
+|           |   |           ValueTransformer.java
+|           |   |           ValueTransformerFactory.java
+|           |   |           
+|           |   +---product
+|           |   |       ProductService.java
+|           |   |       ProductServiceImpl.java
+|           |   |       
+|           |   +---region
+|           |   |       RegionDataService.java
+|           |   |       RegionDataServiceImpl.java
+|           |   |       
+|           |   \---stats
+|           \---util
+|                   PathResolver.java
+|                   
+\---resources
+    |   application-dev.properties
+    |   application.properties
+    |   logback-spring.xml
+    |   
+    +---db
+    |   \---migration
+    |           V1__Create_Initial_Schema.sql
+    |           V2__Fix_Client_Id_Type.sql
+    |           V3__Create_File_Processing_Schema.sql
+    |           V4__Add_Entity_Indexes.sql
+    |           
+    +---static
+    |   +---css
+    |   |       styles.css
+    |   |       
+    |   \---js
+    |           import-progress.js
+    |           main.js
+    |           
+    \---templates
+        |   index.html
+        |   
+        +---clients
+        |       details.html
+        |       form.html
+        |       list.html
+        |       
+        +---error
+        |       access-denied.html
+        |       file-error.html
+        |       general.html
+        |       not-found.html
+        |       
+        +---import
+        |       configure.html
+        |       select-client.html
+        |       status.html
+        |       upload.html
+        |       
+        +---layout
+        |       main.html
+        |       
+        +---statistics
+        |       index.html
+        |       
+        \---utilities
+                index.html
+                

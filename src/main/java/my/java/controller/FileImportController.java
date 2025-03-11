@@ -5,9 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
+import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
 import my.java.service.file.importer.FileImportService;
 import my.java.service.file.mapping.FieldMappingService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -178,10 +180,12 @@ public class FileImportController {
                 // Сохраняем задачу в карте активных импортов
                 activeImports.put(operation.getId(), future);
 
-                // Перенаправляем на страницу отслеживания прогресса
+                // Добавляем сообщение об успешном начале импорта
                 redirectAttributes.addFlashAttribute("successMessage",
-                        "Импорт файла запущен. Используйте эту страницу для отслеживания прогресса.");
-                return "redirect:/import/status/" + operation.getId();
+                        "Импорт файла '" + file.getOriginalFilename() + "' успешно запущен");
+
+                // Перенаправляем на страницу клиента, раздел импорта
+                return "redirect:/clients/" + clientId + "?tab=import";
             } else {
                 redirectAttributes.addFlashAttribute("errorMessage",
                         "Не удалось запустить импорт файла");
@@ -224,15 +228,48 @@ public class FileImportController {
      */
     @GetMapping("/api/status/{operationId}")
     @ResponseBody
-    public ResponseEntity<FileOperationDto> getImportStatus(@PathVariable Long operationId) {
+    public ResponseEntity<Map<String, Object>> getImportStatus(@PathVariable Long operationId) {
         log.debug("GET API request to get import status for operation: {}", operationId);
 
         try {
             FileOperationDto operation = fileImportService.getImportStatus(operationId);
-            return ResponseEntity.ok(operation);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", operation.getId());
+            response.put("status", operation.getStatus().toString());
+//            response.put("processingProgress", operation.getProcessingProgress());
+//            response.put("processedRecords", operation.getProcessedRecords());
+//            response.put("totalRecords", operation.getTotalRecords());
+            response.put("recordCount", operation.getRecordCount());
+            response.put("errorMessage", operation.getErrorMessage());
+            response.put("startedAt", operation.getStartedAt());
+            response.put("completedAt", operation.getCompletedAt());
+            response.put("duration", operation.getDuration());
+
+            // Расчет оставшегося времени (если операция в процессе)
+            if (operation.getStatus() == FileOperation.OperationStatus.PROCESSING &&
+//                    operation.getProcessingProgress() != null &&
+//                    operation.getProcessingProgress() > 0 &&
+                    operation.getStartedAt() != null) {
+
+                long elapsedTime = System.currentTimeMillis() - operation.getStartedAt().toInstant().toEpochMilli();
+//                double recordsPerMs = operation.getProcessedRecords() / (double) elapsedTime;
+//                long remainingRecords = operation.getTotalRecords() - operation.getProcessedRecords();
+//                long estimatedTimeRemaining = (long) (remainingRecords / recordsPerMs);
+                long estimatedTimeRemaining = 0L;
+
+                response.put("estimatedTimeRemaining", estimatedTimeRemaining);
+            }
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error getting import status via API: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().build();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", e.getMessage());
+
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
         }
     }
 

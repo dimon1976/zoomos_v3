@@ -6,12 +6,18 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.ClientDto;
+import my.java.model.FileOperation;
+import my.java.repository.FileOperationRepository;
 import my.java.service.client.ClientService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/clients")
@@ -20,6 +26,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class ClientController {
 
     private final ClientService clientService;
+    private final FileOperationRepository fileOperationRepository;
 
     /**
      * Отображение списка всех клиентов
@@ -72,12 +79,62 @@ public class ClientController {
      * Отображение данных клиента
      */
     @GetMapping("/{id}")
-    public String getClientDetails(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+    public String getClientDetails(@PathVariable Long id,
+                                   @RequestParam(required = false) String tab,
+                                   Model model,
+                                   RedirectAttributes redirectAttributes) {
         log.debug("GET request to get client details for id: {}", id);
 
         return clientService.getClientById(id)
                 .map(client -> {
                     model.addAttribute("client", client);
+
+                    // Получаем активную операцию импорта для клиента (если есть)
+                    List<FileOperation> pendingOperations = fileOperationRepository
+                            .findByClientIdAndStatusIn(
+                                    id,
+                                    Arrays.asList(
+                                            FileOperation.OperationStatus.PENDING,
+                                            FileOperation.OperationStatus.PROCESSING
+                                    )
+                            );
+
+                    // Добавляем самую последнюю операцию, если есть
+                    if (!pendingOperations.isEmpty()) {
+                        // Сортируем по времени начала (сначала новые)
+                        pendingOperations.sort((op1, op2) ->
+                                op2.getStartedAt().compareTo(op1.getStartedAt()));
+
+                        FileOperation latestOperation = pendingOperations.get(0);
+                        model.addAttribute("activeImportOperation", latestOperation);
+                    }
+
+                    // Также можем добавить недавно завершенные операции
+                    List<FileOperation> recentOperations = fileOperationRepository
+                            .findByClientIdAndStatusIn(
+                                    id,
+                                    Arrays.asList(
+                                            FileOperation.OperationStatus.COMPLETED,
+                                            FileOperation.OperationStatus.FAILED
+                                    )
+                            );
+
+                    if (!recentOperations.isEmpty()) {
+                        // Сортируем по времени начала (сначала новые)
+                        recentOperations.sort((op1, op2) ->
+                                op2.getStartedAt().compareTo(op1.getStartedAt()));
+
+                        // Ограничиваем количество операций для отображения
+                        List<FileOperation> recentOps = recentOperations.stream()
+                                .limit(5)
+                                .collect(Collectors.toList());
+
+                        model.addAttribute("recentImportOperations", recentOps);
+                    }
+                    if (tab != null) {
+                        model.addAttribute("activeTab", tab);
+                    }
+
                     return "clients/details";
                 })
                 .orElseGet(() -> {

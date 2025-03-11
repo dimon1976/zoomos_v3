@@ -6,12 +6,19 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.ClientDto;
+import my.java.dto.FileOperationDto;
+import my.java.model.FileOperation;
+import my.java.repository.FileOperationRepository;
 import my.java.service.client.ClientService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/clients")
@@ -20,6 +27,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class ClientController {
 
     private final ClientService clientService;
+    private final FileOperationRepository fileOperationRepository;
 
     /**
      * Отображение списка всех клиентов
@@ -72,12 +80,65 @@ public class ClientController {
      * Отображение данных клиента
      */
     @GetMapping("/{id}")
-    public String getClientDetails(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+    public String getClientDetails(@PathVariable Long id,
+                                   @RequestParam(required = false) String tab,
+                                   Model model,
+                                   RedirectAttributes redirectAttributes) {
         log.debug("GET request to get client details for id: {}", id);
 
         return clientService.getClientById(id)
                 .map(client -> {
                     model.addAttribute("client", client);
+
+                    // Получаем активную операцию импорта для клиента (если есть)
+                    List<FileOperation> pendingOperations = fileOperationRepository
+                            .findByClientIdAndStatusIn(
+                                    id,
+                                    Arrays.asList(
+                                            FileOperation.OperationStatus.PENDING,
+                                            FileOperation.OperationStatus.PROCESSING
+                                    )
+                            );
+
+                    // Добавляем самую последнюю операцию, если есть
+                    if (!pendingOperations.isEmpty()) {
+                        // Сортируем по времени начала (сначала новые)
+                        pendingOperations.sort((op1, op2) ->
+                                op2.getStartedAt().compareTo(op1.getStartedAt()));
+
+                        FileOperation latestOperation = pendingOperations.get(0);
+                        model.addAttribute("activeImportOperation", mapToDto(latestOperation));
+                    }
+
+                    // Также можем добавить недавно завершенные операции
+                    List<FileOperation> recentOperations = fileOperationRepository
+                            .findByClientIdAndStatusIn(
+                                    id,
+                                    Arrays.asList(
+                                            FileOperation.OperationStatus.COMPLETED,
+                                            FileOperation.OperationStatus.FAILED
+                                    )
+                            );
+
+                    if (!recentOperations.isEmpty()) {
+                        // Сортируем по времени начала (сначала новые)
+                        recentOperations.sort((op1, op2) ->
+                                op2.getStartedAt().compareTo(op1.getStartedAt()));
+
+                        // Ограничиваем количество операций для отображения
+                        List<FileOperationDto> recentOps = recentOperations.stream()
+                                .limit(5)
+                                .map(this::mapToDto)
+                                .collect(Collectors.toList());
+
+                        model.addAttribute("recentImportOperations", recentOps);
+                    }
+
+                    // Добавляем активную вкладку в модель, если указана
+                    if (tab != null) {
+                        model.addAttribute("activeTab", tab);
+                    }
+
                     return "clients/details";
                 })
                 .orElseGet(() -> {
@@ -87,6 +148,32 @@ public class ClientController {
                     return "redirect:/clients";
                 });
     }
+
+    // Метод преобразования FileOperation в FileOperationDto
+    private FileOperationDto mapToDto(FileOperation operation) {
+        if (operation == null) {
+            return null;
+        }
+
+        return FileOperationDto.builder()
+                .id(operation.getId())
+                .clientId(operation.getClient() != null ? operation.getClient().getId() : null)
+                .clientName(operation.getClient() != null ? operation.getClient().getName() : null)
+                .operationType(operation.getOperationType())
+                .fileName(operation.getFileName())
+                .fileType(operation.getFileType())
+                .recordCount(operation.getRecordCount())
+                .status(operation.getStatus())
+                .errorMessage(operation.getErrorMessage())
+                .startedAt(operation.getStartedAt())
+                .completedAt(operation.getCompletedAt())
+                .createdBy(operation.getCreatedBy())
+                .processingProgress(operation.getProcessingProgress())
+                .processedRecords(operation.getProcessedRecords())
+                .totalRecords(operation.getTotalRecords())
+                .build();
+    }
+
 
     /**
      * Отображение формы редактирования клиента

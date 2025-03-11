@@ -266,11 +266,19 @@ public class FileImportServiceImpl implements FileImportService {
             log.debug("Тип сущности для импорта: {}", entityType);
 
             // Получаем маппинг полей
-            Map<String, String> fieldMapping = mappingId != null
-                    ? fieldMappingService.getMappingById(mappingId)
-                    : null;
+            Map<String, String> fieldMapping = null;
 
-            // Если маппинг не указан, можем попробовать автоматически сопоставить поля
+            // Если mappingId задан, получаем маппинг по ID
+            if (mappingId != null) {
+                fieldMapping = fieldMappingService.getMappingById(mappingId);
+            }
+
+            // Проверяем, есть ли маппинг в параметрах (случай, когда пользователь создал новый маппинг)
+            if ((fieldMapping == null || fieldMapping.isEmpty()) && params != null) {
+                fieldMapping = extractFieldMappingFromParams(params);
+            }
+
+            // Если маппинг все еще не указан, пробуем автоматически сопоставить поля
             if (fieldMapping == null || fieldMapping.isEmpty()) {
                 Map<String, Object> fileAnalysis = processor.analyzeFile(filePath, null);
                 if (fileAnalysis.containsKey("headers")) {
@@ -312,6 +320,34 @@ public class FileImportServiceImpl implements FileImportService {
             operation = fileOperationRepository.save(operation);
             throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Извлекает маппинг полей из параметров запроса.
+     * Параметры с префиксом "mapping[" содержат маппинг поля.
+     */
+    private Map<String, String> extractFieldMappingFromParams(Map<String, String> params) {
+        Map<String, String> fieldMapping = new HashMap<>();
+
+        if (params == null) {
+            return fieldMapping;
+        }
+
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("mapping[") && key.endsWith("]")) {
+                // Извлекаем имя исходного поля из ключа (между "mapping[" и "]")
+                String sourceField = key.substring(8, key.length() - 1);
+                String targetField = entry.getValue();
+
+                // Добавляем в маппинг только если целевое поле не пустое
+                if (targetField != null && !targetField.trim().isEmpty()) {
+                    fieldMapping.put(sourceField, targetField);
+                }
+            }
+        }
+
+        return fieldMapping;
     }
 
     @Override
@@ -525,6 +561,11 @@ public class FileImportServiceImpl implements FileImportService {
                 .errorMessage(operation.getErrorMessage())
                 .startedAt(operation.getStartedAt())
                 .completedAt(operation.getCompletedAt())
+                .createdBy(operation.getCreatedBy())
+                // Добавляем поля, которые не были в DTO, но необходимы для отображения прогресса
+                .processingProgress(operation.getProcessingProgress())
+                .processedRecords(operation.getProcessedRecords())
+                .totalRecords(operation.getTotalRecords())
                 .build();
     }
 }

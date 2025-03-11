@@ -142,8 +142,40 @@
     <!-- Форма импорта -->
     <form id="importForm" th:action="@{/import/{clientId}/import(clientId=${client.id})}" method="post" enctype="multipart/form-data">
         <!-- Скрытое поле для файла -->
+        <input type="hidden" name="tempFilePath" th:value="${tempFilePath}" />
         <input type="hidden" name="fileName" th:value="${fileName}" />
-        <input type="file" id="fileInput" name="file" style="display: none;" />
+
+        <!-- Добавляем правильную обработку флажка сохранения маппинга -->
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const saveMapping = document.getElementById('saveMapping');
+                const saveMappingOptions = document.getElementById('saveMappingOptions');
+
+                if (saveMapping && saveMappingOptions) {
+                    saveMapping.addEventListener('change', function() {
+                        saveMappingOptions.style.display = this.checked ? 'block' : 'none';
+                    });
+                }
+
+                // Также необходимо убедиться, что при отправке формы с выбранным "new" и не выбранным
+                // saveMapping, параметр mappingName будет установлен в значение по умолчанию
+                const importForm = document.getElementById('importForm');
+                if (importForm) {
+                    importForm.addEventListener('submit', function(e) {
+                        const mappingId = document.querySelector('input[name="mappingId"]:checked')?.value;
+                        const saveMapping = document.getElementById('saveMapping')?.checked;
+
+                        if (mappingId === 'new' && saveMapping) {
+                            const mappingName = document.getElementById('mappingName')?.value;
+                            if (!mappingName || mappingName.trim() === '') {
+                                e.preventDefault();
+                                alert('Пожалуйста, укажите название для новой схемы маппинга');
+                            }
+                        }
+                    });
+                }
+            });
+        </script>
 
         <!-- Вкладки настройки -->
         <ul class="nav nav-tabs" id="importTabs" role="tablist">

@@ -103,7 +103,7 @@ public class CompetitorData implements ImportableEntity {
         boolean success = true;
 
         for (Map.Entry<String, String> entry : data.entrySet()) {
-            String header = entry.getKey();
+            String key = entry.getKey();
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -111,25 +111,33 @@ public class CompetitorData implements ImportableEntity {
                 continue;
             }
 
-            // Получаем имя поля из маппинга
-            String fieldName = FIELD_MAPPINGS.get(header);
-            if (fieldName == null) {
-                // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-                    if (mapping.getKey().equalsIgnoreCase(header)) {
-                        fieldName = mapping.getValue();
-                        break;
-                    }
-                }
-
-                // Если все еще не нашли, пропускаем
-                if (fieldName == null) {
-                    continue;
+            // Проверяем, является ли ключ именем поля напрямую
+            boolean isFieldName = false;
+            for (String fieldName : FIELD_MAPPINGS.values()) {
+                if (fieldName.equals(key)) {
+                    success &= setFieldValue(key, value);
+                    isFieldName = true;
+                    break;
                 }
             }
 
-            // Устанавливаем значение поля
-            success &= setFieldValue(fieldName, value);
+            // Если ключ не является именем поля, пробуем найти соответствие в маппинге
+            if (!isFieldName) {
+                String fieldName = FIELD_MAPPINGS.get(key);
+                if (fieldName == null) {
+                    // Пробуем без учета регистра
+                    for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
+                        if (mapping.getKey().equalsIgnoreCase(key)) {
+                            fieldName = mapping.getValue();
+                            break;
+                        }
+                    }
+                }
+
+                if (fieldName != null) {
+                    success &= setFieldValue(fieldName, value);
+                }
+            }
         }
 
         return success;

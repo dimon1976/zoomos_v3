@@ -9,6 +9,7 @@ import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
 import my.java.repository.FileOperationRepository;
+import my.java.service.file.entity.EntitySaverFactory;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
 import my.java.service.file.strategy.FileProcessingStrategy;
@@ -46,15 +47,10 @@ public class FileImportJob implements Callable<FileOperationDto> {
     private final PlatformTransactionManager transactionManager;
     private final ImportProgressTracker progressTracker;
     private final PathResolver pathResolver;
+    private final EntitySaverFactory entitySaverFactory;
 
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
-    // Колбэки для сохранения сущностей
-    private final Map<String, Function<List<ImportableEntity>, Integer>> entitySavers = new HashMap<>();
-
-    /**
-     * Конструктор с параметрами для выполнения задачи импорта.
-     */
     @Builder
     public FileImportJob(
             FileOperation operation,
@@ -68,7 +64,8 @@ public class FileImportJob implements Callable<FileOperationDto> {
             List<FileProcessingStrategy> processingStrategies,
             PlatformTransactionManager transactionManager,
             ImportProgressTracker progressTracker,
-            PathResolver pathResolver) {
+            PathResolver pathResolver,
+            EntitySaverFactory entitySaverFactory) {
 
         this.operation = operation;
         this.filePath = filePath;
@@ -82,18 +79,7 @@ public class FileImportJob implements Callable<FileOperationDto> {
         this.transactionManager = transactionManager;
         this.progressTracker = progressTracker;
         this.pathResolver = pathResolver;
-    }
-
-    /**
-     * Регистрирует функцию для сохранения сущностей определенного типа.
-     *
-     * @param entityType тип сущности
-     * @param saveFunction функция для сохранения сущностей
-     * @return текущий объект задачи
-     */
-    public FileImportJob registerEntitySaver(String entityType, Function<List<ImportableEntity>, Integer> saveFunction) {
-        this.entitySavers.put(entityType.toLowerCase(), saveFunction);
-        return this;
+        this.entitySaverFactory = entitySaverFactory;
     }
 
     /**
@@ -159,7 +145,7 @@ public class FileImportJob implements Callable<FileOperationDto> {
                 throw new FileOperationException("Операция отменена пользователем");
             }
 
-            // Сохраняем сущности в БД
+            // Сохраняем сущности в БД используя соответствующий сервис из фабрики
             int savedCount = saveEntities(entities);
 
             // Обновляем статус операции
@@ -263,13 +249,8 @@ public class FileImportJob implements Callable<FileOperationDto> {
             return 0;
         }
 
-        // Получаем функцию для сохранения сущностей указанного типа
-        Function<List<ImportableEntity>, Integer> saveFunction = entitySavers.get(entityType.toLowerCase());
-
-        if (saveFunction == null) {
-            log.warn("Не найдена функция для сохранения сущностей типа '{}'", entityType);
-            return 0;
-        }
+        // Получаем функцию для сохранения сущностей указанного типа из фабрики
+        Function<List<ImportableEntity>, Integer> saveFunction = entitySaverFactory.getSaver(entityType.toLowerCase());
 
         // Определяем размер пакета для сохранения
         int batchSize = getBatchSizeFromParams();
@@ -322,6 +303,7 @@ public class FileImportJob implements Callable<FileOperationDto> {
 
         return totalSaved;
     }
+
 
     /**
      * Получает размер пакета из параметров.

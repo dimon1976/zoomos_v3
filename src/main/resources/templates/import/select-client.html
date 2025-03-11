@@ -1,0 +1,105 @@
+<!-- src/main/resources/templates/import/select-client.html -->
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Выбор клиента для импорта - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Выбор клиента для импорта данных',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Выбор клиента для импорта</title>
+    <style>
+        .client-card {
+            transition: all 0.3s ease;
+        }
+        .client-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .client-card .btn {
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+        .client-card:hover .btn {
+            opacity: 1;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+        }
+        .empty-icon {
+            font-size: 3rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+<div class="page-actions">
+    <a th:href="@{/}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>На главную
+    </a>
+</div>
+
+<section>
+    <div class="mb-4">
+        <p class="lead">Выберите клиента, для которого вы хотите импортировать данные</p>
+    </div>
+
+    <!-- Отображение при отсутствии клиентов -->
+    <div th:if="${#lists.isEmpty(clients)}" class="empty-state">
+        <div class="empty-icon">
+            <i class="fas fa-users-slash"></i>
+        </div>
+        <h3>Нет доступных клиентов</h3>
+        <p>Сначала создайте клиента, чтобы импортировать для него данные</p>
+        <a th:href="@{/clients/create}" class="btn btn-primary mt-3">
+            <i class="fas fa-plus me-1"></i>Создать клиента
+        </a>
+    </div>
+
+    <!-- Список клиентов -->
+    <div th:unless="${#lists.isEmpty(clients)}" class="row g-4">
+        <div th:each="client : ${clients}" class="col-md-6 col-lg-4">
+            <div class="card h-100 client-card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-user-tie me-2 text-primary"></i>
+                        <span th:text="${client.name}">Название клиента</span>
+                    </h5>
+                    <p class="card-text text-muted" th:if="${client.description}" th:text="${client.description}">
+                        Описание клиента
+                    </p>
+                    <p class="card-text text-muted" th:unless="${client.description}">
+                        Нет описания
+                    </p>
+
+                    <div class="d-flex align-items-center mt-3">
+                        <i class="fas fa-file-alt text-primary me-2"></i>
+                        <span th:text="${client.fileOperationsCount != null ? client.fileOperationsCount : 0}">0</span>
+                        <span class="ms-1">операций с файлами</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a th:href="@{/import/{id}(id=${client.id})}" class="btn btn-primary w-100">
+                        <i class="fas fa-file-import me-1"></i>Начать импорт данных
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Страница выбора клиента для импорта загружена');
+    });
+</script>
+</body>
+</html>

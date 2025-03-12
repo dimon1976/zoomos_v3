@@ -44,6 +44,13 @@ public interface FileImportService {
     FileOperationDto getImportStatus(Long operationId);
 
     /**
+     * Возвращает список поддерживаемых типов сущностей для импорта.
+     *
+     * @return список типов сущностей
+     */
+    List<String> getSupportedEntityTypes();
+
+    /**
      * Анализирует файл и определяет его структуру.
      *
      * @param file загруженный файл

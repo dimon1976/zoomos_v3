@@ -11,6 +11,7 @@ import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
+import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 import org.mozilla.universalchardet.UniversalDetector;
@@ -51,8 +52,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * @param transformerFactory фабрика трансформеров значений
      */
     @Autowired
-    public CsvFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
-        super(pathResolver, transformerFactory);
+    public CsvFileProcessor(
+            PathResolver pathResolver,
+            ValueTransformerFactory transformerFactory,
+            EntitySetBuilderFactory entitySetBuilderFactory) {
+        super(pathResolver, transformerFactory, entitySetBuilderFactory);
     }
 
     @Override

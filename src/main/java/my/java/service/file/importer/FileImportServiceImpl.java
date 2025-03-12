@@ -339,46 +339,23 @@ public class FileImportServiceImpl implements FileImportService {
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
 
-            // Проверяем, нужно ли использовать строителя для сохранения связанных сущностей
-            if (entityType != null && entityType.equalsIgnoreCase("product_with_related")) {
-                // Получаем строителя из фабрики
-                EntitySetBuilder builder = entitySetBuilderFactory.createBuilder(entityType);
-                if (builder == null) {
-                    throw new FileOperationException("Не удалось создать строителя для типа сущности: " + entityType);
-                }
+            // Обрабатываем файл
+            List<ImportableEntity> entities = processor.processFile(
+                    filePath, entityType, client, fieldMapping, params, operation);
 
-                // Обрабатываем файл с использованием строителя
-                List<ImportableEntity> entities = processor.processFile(
-                        filePath, entityType, client, fieldMapping, params, operation);
+            // Сохраняем сущности в БД через соответствующий механизм
+            int savedEntities = saveEntities(entities, entityType);
 
-                // Сохраняем сущности через специальный репозиторий
-                int savedEntities = saveEntities(entities, entityType);
-
-                // Обновляем статус операции
-                operation.markAsCompleted(savedEntities);
-                operation = fileOperationRepository.save(operation);
-
-                log.info("Файл успешно обработан с использованием строителя: {}, создано сущностей: {}",
-                        filePath, savedEntities);
-            } else {
-                // Стандартная обработка для обычных сущностей
-                List<ImportableEntity> entities = processor.processFile(
-                        filePath, entityType, client, fieldMapping, params, operation);
-
-                // Сохраняем сущности в БД
-                int savedEntities = saveEntities(entities, entityType);
-
-                // Обновляем статус операции
-                operation.markAsCompleted(savedEntities);
-                operation = fileOperationRepository.save(operation);
-
-                log.info("Файл успешно обработан: {}, создано сущностей: {}", filePath, savedEntities);
-            }
+            // Обновляем статус операции
+            operation.markAsCompleted(savedEntities);
+            operation = fileOperationRepository.save(operation);
 
             // Перемещаем файл из временной директории в постоянную
-            Path permanentPath = pathResolver.moveFromTempToUpload(filePath, "imported_" + client.getId());
+            Path permanentPath = pathResolver.moveFromTempToUpload(filePath, "imported_" + client.getId() + "_" + operation.getId());
             operation.setResultFilePath(permanentPath.toString());
             operation = fileOperationRepository.save(operation);
+
+            log.info("Файл успешно обработан: {}, создано сущностей: {}", filePath, savedEntities);
 
             return mapToDto(operation);
         } catch (Exception e) {
@@ -567,15 +544,14 @@ public class FileImportServiceImpl implements FileImportService {
             return 0;
         }
 
-        int savedCount = 0;
-
-        // Если используется составной тип сущности, используем специальный репозиторий
-        if (entityType != null && entityType.equalsIgnoreCase("product_with_related")) {
-            // Используем единый репозиторий для сохранения связанных сущностей
+        // Проверяем специальные типы сущностей для использования единого репозитория
+        if (entityType != null && entitySetBuilderFactory.supportsEntityType(entityType)) {
+            log.info("Используем единый репозиторий для сохранения связанных сущностей типа: {}", entityType);
             return relatedEntitiesRepository.saveRelatedEntities(entities);
         }
 
         // Стандартная обработка для обычных сущностей
+        int savedCount = 0;
         switch (entityType.toLowerCase()) {
             case "product":
                 List<Product> products = entities.stream()

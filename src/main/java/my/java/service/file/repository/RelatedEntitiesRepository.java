@@ -12,9 +12,7 @@ import my.java.service.region.RegionDataService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -48,34 +46,113 @@ public class RelatedEntitiesRepository {
         Map<Class<?>, List<ImportableEntity>> groupedEntities = entities.stream()
                 .collect(Collectors.groupingBy(ImportableEntity::getClass));
 
-        // Сохраняем продукты
+        // Создаем карту соответствия для отслеживания связей между сущностями
+        Map<Product, List<ImportableEntity>> productRelations = new HashMap<>();
+
+        // Сначала обрабатываем и сохраняем продукты
         List<Product> products = groupedEntities.getOrDefault(Product.class, new ArrayList<>()).stream()
                 .map(e -> (Product) e)
                 .collect(Collectors.toList());
 
         if (!products.isEmpty()) {
-            savedCount += productService.saveProducts(products);
-            log.debug("Сохранено {} продуктов", products.size());
+            // Сохраняем все продукты
+            List<Product> savedProducts = new ArrayList<>();
+            for (Product product : products) {
+                Product savedProduct = productService.saveProduct(product);
+                savedProducts.add(savedProduct);
+
+                // Инициализируем список связанных сущностей
+                productRelations.put(savedProduct, new ArrayList<>());
+            }
+
+            savedCount += savedProducts.size();
+            log.debug("Сохранено {} продуктов", savedProducts.size());
+
+            // Обрабатываем связанные регионы
+            List<RegionData> regionDataList = groupedEntities.getOrDefault(RegionData.class, new ArrayList<>()).stream()
+                    .map(e -> (RegionData) e)
+                    .collect(Collectors.toList());
+
+            // Ищем соответствующий продукт для каждого региона
+            for (RegionData regionData : regionDataList) {
+                Product originalProduct = regionData.getProduct();
+                if (originalProduct != null) {
+                    // Находим сохраненный продукт
+                    Optional<Product> savedProductOpt = findProductByOriginal(savedProducts, originalProduct);
+                    if (savedProductOpt.isPresent()) {
+                        Product savedProduct = savedProductOpt.get();
+                        regionData.setProduct(savedProduct);
+
+                        // Добавляем регион в список связанных сущностей продукта
+                        productRelations.get(savedProduct).add(regionData);
+                    }
+                }
+            }
+
+            // Сохраняем регионы
+            if (!regionDataList.isEmpty()) {
+                savedCount += regionDataService.saveRegionDataList(regionDataList);
+                log.debug("Сохранено {} данных регионов", regionDataList.size());
+            }
+
+            // Обрабатываем связанных конкурентов
+            List<CompetitorData> competitorDataList = groupedEntities.getOrDefault(CompetitorData.class, new ArrayList<>()).stream()
+                    .map(e -> (CompetitorData) e)
+                    .collect(Collectors.toList());
+
+            // Ищем соответствующий продукт для каждого конкурента
+            for (CompetitorData competitorData : competitorDataList) {
+                Product originalProduct = competitorData.getProduct();
+                if (originalProduct != null) {
+                    // Находим сохраненный продукт
+                    Optional<Product> savedProductOpt = findProductByOriginal(savedProducts, originalProduct);
+                    if (savedProductOpt.isPresent()) {
+                        Product savedProduct = savedProductOpt.get();
+                        competitorData.setProduct(savedProduct);
+
+                        // Добавляем конкурента в список связанных сущностей продукта
+                        productRelations.get(savedProduct).add(competitorData);
+                    }
+                }
+            }
+
+            // Сохраняем конкурентов
+            if (!competitorDataList.isEmpty()) {
+                savedCount += competitorDataService.saveCompetitorDataList(competitorDataList);
+                log.debug("Сохранено {} данных конкурентов", competitorDataList.size());
+            }
+        } else {
+            // Если нет продуктов, сохраняем регионы и конкурентов отдельно
+            List<RegionData> regionDataList = groupedEntities.getOrDefault(RegionData.class, new ArrayList<>()).stream()
+                    .map(e -> (RegionData) e)
+                    .collect(Collectors.toList());
+
+            if (!regionDataList.isEmpty()) {
+                savedCount += regionDataService.saveRegionDataList(regionDataList);
+                log.debug("Сохранено {} данных регионов", regionDataList.size());
+            }
+
+            List<CompetitorData> competitorDataList = groupedEntities.getOrDefault(CompetitorData.class, new ArrayList<>()).stream()
+                    .map(e -> (CompetitorData) e)
+                    .collect(Collectors.toList());
+
+            if (!competitorDataList.isEmpty()) {
+                savedCount += competitorDataService.saveCompetitorDataList(competitorDataList);
+                log.debug("Сохранено {} данных конкурентов", competitorDataList.size());
+            }
         }
 
-        // Сохраняем регионы
-        List<RegionData> regionDataList = groupedEntities.getOrDefault(RegionData.class, new ArrayList<>()).stream()
-                .map(e -> (RegionData) e)
-                .collect(Collectors.toList());
+        // Выводим информацию о связях для отладки
+        if (!productRelations.isEmpty()) {
+            for (Map.Entry<Product, List<ImportableEntity>> entry : productRelations.entrySet()) {
+                Product product = entry.getKey();
+                List<ImportableEntity> relatedEntities = entry.getValue();
 
-        if (!regionDataList.isEmpty()) {
-            savedCount += regionDataService.saveRegionDataList(regionDataList);
-            log.debug("Сохранено {} данных регионов", regionDataList.size());
-        }
-
-        // Сохраняем конкурентов
-        List<CompetitorData> competitorDataList = groupedEntities.getOrDefault(CompetitorData.class, new ArrayList<>()).stream()
-                .map(e -> (CompetitorData) e)
-                .collect(Collectors.toList());
-
-        if (!competitorDataList.isEmpty()) {
-            savedCount += competitorDataService.saveCompetitorDataList(competitorDataList);
-            log.debug("Сохранено {} данных конкурентов", competitorDataList.size());
+                log.debug("Продукт #{} '{}' связан с {} сущностями",
+                        product.getId(),
+                        product.getProductName(),
+                        relatedEntities.size());
+            }
         }
 
         return savedCount;
@@ -93,11 +170,46 @@ public class RelatedEntitiesRepository {
             return 0;
         }
 
-        // Объединяем все сущности из всех групп
-        List<ImportableEntity> allEntities = entitySets.stream()
-                .flatMap(List::stream)
-                .collect(Collectors.toList());
+        int totalSaved = 0;
 
-        return saveRelatedEntities(allEntities);
+        // Обрабатываем каждую группу сущностей по отдельности
+        for (List<ImportableEntity> entitySet : entitySets) {
+            totalSaved += saveRelatedEntities(entitySet);
+        }
+
+        return totalSaved;
+    }
+
+    /**
+     * Находит сохраненный продукт, соответствующий оригинальному.
+     *
+     * @param savedProducts список сохраненных продуктов
+     * @param originalProduct оригинальный продукт
+     * @return сохраненный продукт или пустой Optional
+     */
+    private Optional<Product> findProductByOriginal(List<Product> savedProducts, Product originalProduct) {
+        // Сначала пробуем найти по ID
+        if (originalProduct.getId() != null) {
+            return savedProducts.stream()
+                    .filter(p -> originalProduct.getId().equals(p.getId()))
+                    .findFirst();
+        }
+
+        // Затем пробуем найти по productId
+        if (originalProduct.getProductId() != null) {
+            return savedProducts.stream()
+                    .filter(p -> originalProduct.getProductId().equals(p.getProductId()))
+                    .findFirst();
+        }
+
+        // Наконец, пробуем найти по имени
+        if (originalProduct.getProductName() != null) {
+            return savedProducts.stream()
+                    .filter(p -> originalProduct.getProductName().equals(p.getProductName()))
+                    .findFirst();
+        }
+
+        // Если не удалось найти подходящий продукт
+        return Optional.empty();
     }
 }

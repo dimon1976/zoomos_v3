@@ -17,39 +17,40 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Slf4j
 public class AsyncConfig {
 
+    private static final int FILE_PROCESSING_CORE_POOL_SIZE = 2;
+    private static final int FILE_PROCESSING_MAX_POOL_SIZE = 4;
+    private static final int FILE_PROCESSING_QUEUE_CAPACITY = 10;
+    private static final String FILE_PROCESSING_THREAD_PREFIX = "file-proc-";
+    private static final int SHUTDOWN_TIMEOUT_SECONDS = 60;
+
+    private static final int STATS_CORE_POOL_SIZE = 1;
+    private static final int STATS_MAX_POOL_SIZE = 2;
+    private static final int STATS_QUEUE_CAPACITY = 20;
+    private static final String STATS_THREAD_PREFIX = "stats-";
+
     /**
      * Создает пул потоков для асинхронной обработки файлов
-     *
-     * @return настроенный TaskExecutor
      */
     @Bean(name = "fileProcessingExecutor")
     public TaskExecutor fileProcessingExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
 
-        // Базовый размер пула (сколько потоков создается сразу)
-        executor.setCorePoolSize(2);
-
-        // Максимальный размер пула (сколько потоков может быть в пике)
-        executor.setMaxPoolSize(4);
-
-        // Размер очереди задач
-        executor.setQueueCapacity(10);
-
-        // Префикс для имен потоков
-        executor.setThreadNamePrefix("file-proc-");
+        // Настройка размеров пула
+        executor.setCorePoolSize(FILE_PROCESSING_CORE_POOL_SIZE);
+        executor.setMaxPoolSize(FILE_PROCESSING_MAX_POOL_SIZE);
+        executor.setQueueCapacity(FILE_PROCESSING_QUEUE_CAPACITY);
+        executor.setThreadNamePrefix(FILE_PROCESSING_THREAD_PREFIX);
 
         // Политика отклонения задач при переполнении пула и очереди
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
 
-        // Разрешаем завершение потоков при завершении приложения
+        // Настройка поведения при завершении
         executor.setWaitForTasksToCompleteOnShutdown(true);
-
-        // Время ожидания завершения задач при завершении приложения (в секундах)
-        executor.setAwaitTerminationSeconds(60);
+        executor.setAwaitTerminationSeconds(SHUTDOWN_TIMEOUT_SECONDS);
 
         executor.initialize();
 
-        log.info("Initialized file processing thread pool: coreSize={}, maxSize={}, queueCapacity={}",
+        log.info("Инициализирован пул обработки файлов: основной размер={}, максимальный размер={}, емкость очереди={}",
                 executor.getCorePoolSize(), executor.getMaxPoolSize(), executor.getQueueCapacity());
 
         return executor;
@@ -57,16 +58,14 @@ public class AsyncConfig {
 
     /**
      * Создает пул потоков для операций с меньшим приоритетом (например, для сбора статистики)
-     *
-     * @return настроенный TaskExecutor
      */
     @Bean(name = "statsExecutor")
     public TaskExecutor statsExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(2);
-        executor.setQueueCapacity(20);
-        executor.setThreadNamePrefix("stats-");
+        executor.setCorePoolSize(STATS_CORE_POOL_SIZE);
+        executor.setMaxPoolSize(STATS_MAX_POOL_SIZE);
+        executor.setQueueCapacity(STATS_QUEUE_CAPACITY);
+        executor.setThreadNamePrefix(STATS_THREAD_PREFIX);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardOldestPolicy());
         executor.initialize();
 

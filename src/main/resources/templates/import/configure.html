@@ -470,7 +470,70 @@
     </form>
 </section>
 
-<script>
+<script th:inline="javascript">
+    // Получаем метаданные полей из контроллера с резервными данными
+    const serverEntityFieldsMetadata = /*[[${entityFieldsMetadata}]]*/ {};
+    const supportedEntityTypes = /*[[${supportedEntityTypes}]]*/ [];
+
+    // Создаем резервные данные на случай, если с сервера ничего не пришло
+    const fallbackMetadata = {
+        // Для обычного продукта
+        "product": {
+            "ID товара": "productId",
+            "Модель": "productName",
+            "Бренд": "productBrand",
+            "Штрихкод": "productBar",
+            "Описание": "productDescription",
+            "Ссылка": "productUrl",
+            "Категория товара 1": "productCategory1",
+            "Категория товара 2": "productCategory2",
+            "Категория товара 3": "productCategory3",
+            "Цена": "productPrice",
+            "Аналог": "productAnalog",
+            "Дополнительное поле 1": "productAdditional1",
+            "Дополнительное поле 2": "productAdditional2"
+        },
+        // Для региона
+        "regiondata": {
+            "Город": "region",
+            "Адрес": "regionAddress"
+        },
+        // Для конкурента
+        "competitordata": {
+            "Сайт": "competitorName",
+            "Цена конкурента": "competitorPrice",
+            "Ссылка": "competitorUrl",
+            "Наименование товара конкурента": "competitorProductName"
+        },
+        // Для продукта с связанными сущностями
+        "product_with_related": {
+            "Товар": [
+                {"key": "ID товара", "value": "productId"},
+                {"key": "Модель", "value": "productName"},
+                {"key": "Бренд", "value": "productBrand"},
+                {"key": "Штрихкод", "value": "productBar"},
+                {"key": "Описание", "value": "productDescription"},
+                {"key": "Ссылка", "value": "productUrl"}
+            ],
+            "Регион": [
+                {"key": "Город", "value": "region"},
+                {"key": "Адрес", "value": "regionAddress"}
+            ],
+            "Конкурент": [
+                {"key": "Сайт", "value": "competitorName"},
+                {"key": "Цена конкурента", "value": "competitorPrice"},
+                {"key": "Ссылка", "value": "competitorUrl"}
+            ]
+        }
+    };
+
+    // Используем данные сервера, если они не пусты, иначе резервные данные
+    const entityFieldsMetadata = (serverEntityFieldsMetadata && Object.keys(serverEntityFieldsMetadata).length > 0) ?
+        serverEntityFieldsMetadata : fallbackMetadata;
+
+    console.log('DEBUG - Метаданные полей:', entityFieldsMetadata);
+    console.log('DEBUG - Типы сущностей:', Object.keys(entityFieldsMetadata));
+
     document.addEventListener('DOMContentLoaded', function() {
         // Инициализация файла в форме
         initFileInput();
@@ -490,138 +553,6 @@
         // Заполнение сопоставления полей, если выбрана схема
         checkForAutomaticMapping();
     });
-
-    // Обновленная функция для отображения группированной таблицы маппинга
-
-    function showRelatedEntitiesMappingTable() {
-        const mappingTableBody = document.getElementById('mappingTableBody');
-        const headers = Array.from(mappingTableBody.querySelectorAll('tr td:first-child')).map(td => td.textContent);
-
-        // Получаем метаданные полей из модели
-        const entityFieldsMetadata = JSON.parse(document.getElementById('entityFieldsMetadata').textContent);
-        const fieldGroups = entityFieldsMetadata.product_with_related;
-
-        // Создаем новый HTML для таблицы маппинга
-        let newRows = '';
-        headers.forEach(header => {
-            newRows += `
-        <tr>
-            <td class="source-header">${header}</td>
-            <td>
-                <select name="mapping[${header}]" class="form-select entity-field-selector">
-                    <option value="">-- Не импортировать --</option>`;
-
-            // Добавляем группы полей
-            Object.entries(fieldGroups).forEach(([groupName, fields]) => {
-                newRows += `<optgroup label="${groupName}">`;
-
-                // Добавляем поля из группы
-                fields.forEach(field => {
-                    newRows += `<option value="${field.value}">${field.key}</option>`;
-                });
-
-                newRows += `</optgroup>`;
-            });
-
-            newRows += `</select>
-            </td>
-        </tr>`;
-        });
-
-        mappingTableBody.innerHTML = newRows;
-
-        // Добавляем информационное сообщение
-        const mappingInfo = document.createElement('div');
-        mappingInfo.className = 'alert alert-info mt-3';
-        mappingInfo.innerHTML = `
-        <i class="fas fa-info-circle me-2"></i>
-        <strong>Импорт связанных сущностей:</strong> Для каждого поля из файла выберите соответствующее поле сущности.
-        Поля могут относиться к разным типам сущностей (Товар, Регион, Конкурент).
-        Система автоматически создаст и свяжет все необходимые сущности.
-    `;
-
-        const existingInfo = document.querySelector('#mappingTableContainer .alert');
-        if (existingInfo) {
-            existingInfo.remove();
-        }
-
-        document.getElementById('mappingTableContainer').insertBefore(mappingInfo, document.querySelector('#mappingTableContainer .table-scroll'));
-
-        // Пробуем рекомендовать сопоставления на основе имени поля
-        autoSuggestRelatedFieldMappings(headers);
-    }
-
-    // Обновленная функция для автоматического сопоставления полей
-
-    function autoSuggestRelatedFieldMappings(headers) {
-        // Получаем метаданные полей из модели
-        const entityFieldsMetadata = JSON.parse(document.getElementById('entityFieldsMetadata').textContent);
-
-        // Создаем обратный маппинг (имя поля в файле -> имя поля сущности)
-        const reverseMapping = {};
-
-        // Добавляем маппинги из всех типов сущностей
-        ['product', 'regiondata', 'competitordata'].forEach(entityType => {
-            const mappings = entityFieldsMetadata[entityType];
-            if (mappings) {
-                Object.entries(mappings).forEach(([displayName, fieldName]) => {
-                    reverseMapping[displayName.toLowerCase()] = fieldName;
-                });
-            }
-        });
-
-        // Применяем сопоставление
-        headers.forEach(header => {
-            const selector = document.querySelector(`select[name="mapping[${header}]"]`);
-            if (selector) {
-                const lowerHeader = header.toLowerCase();
-
-                // Проверяем точное совпадение
-                if (reverseMapping[lowerHeader]) {
-                    for (let i = 0; i < selector.options.length; i++) {
-                        if (selector.options[i].value === reverseMapping[lowerHeader]) {
-                            selector.selectedIndex = i;
-                            break;
-                        }
-                    }
-                    return;
-                }
-
-                // Проверяем частичное совпадение
-                for (const [key, value] of Object.entries(reverseMapping)) {
-                    if (key.includes(lowerHeader) || lowerHeader.includes(key)) {
-                        for (let i = 0; i < selector.options.length; i++) {
-                            if (selector.options[i].value === value) {
-                                selector.selectedIndex = i;
-                                break;
-                            }
-                        }
-                        return;
-                    }
-                }
-            }
-        });
-    }
-    // Скрипт для добавления скрытого поля с метаданными полей
-    document.addEventListener('DOMContentLoaded', function() {
-        // Проверяем, есть ли уже элемент с метаданными
-        if (!document.getElementById('entityFieldsMetadata')) {
-            // Создаем скрытое поле для метаданных полей
-            const metadataInput = document.createElement('script');
-            metadataInput.id = 'entityFieldsMetadata';
-            metadataInput.type = 'application/json';
-            metadataInput.textContent = JSON.stringify(${entityFieldsMetadata});
-            document.body.appendChild(metadataInput);
-
-            // Создаем скрытое поле для поддерживаемых типов сущностей
-            const typesInput = document.createElement('script');
-            typesInput.id = 'supportedEntityTypes';
-            typesInput.type = 'application/json';
-            typesInput.textContent = JSON.stringify(${supportedEntityTypes});
-            document.body.appendChild(typesInput);
-        }
-    });
-
 
     // Инициализация файла в форме
     function initFileInput() {
@@ -698,7 +629,6 @@
 
     // Загрузка данных схемы сопоставления
     function loadMappingData(mappingId) {
-        // В реальном приложении здесь будет AJAX-запрос для получения данных схемы
         console.log('Loading mapping data for ID: ' + mappingId);
 
         // Эмуляция запроса
@@ -727,40 +657,33 @@
 
     // Загрузка полей сущности
     function loadEntityFields(entityType) {
-        console.log('Loading entity fields for type: ' + entityType);
+        console.log('Загрузка полей сущности для типа:', entityType);
 
-        // В реальном приложении здесь будет AJAX-запрос
-        // Для демонстрации используем заглушки
-
-        let fields = [];
-
-        if (entityType === 'product') {
-            fields = [
-                { name: 'productId', displayName: 'ID товара' },
-                { name: 'productName', displayName: 'Название товара' },
-                { name: 'productBrand', displayName: 'Бренд' },
-                { name: 'productBar', displayName: 'Штрихкод' },
-                { name: 'productDescription', displayName: 'Описание' },
-                { name: 'productUrl', displayName: 'URL товара' },
-                { name: 'productCategory1', displayName: 'Категория 1' },
-                { name: 'productCategory2', displayName: 'Категория 2' },
-                { name: 'productCategory3', displayName: 'Категория 3' },
-                { name: 'productPrice', displayName: 'Цена' },
-                { name: 'productAnalog', displayName: 'Аналог' }
-            ];
-        } else if (entityType === 'regiondata') {
-            fields = [
-                { name: 'region', displayName: 'Регион' },
-                { name: 'regionAddress', displayName: 'Адрес' }
-            ];
-        } else if (entityType === 'competitordata') {
-            fields = [
-                { name: 'competitorName', displayName: 'Название конкурента' },
-                { name: 'competitorPrice', displayName: 'Цена у конкурента' },
-                { name: 'competitorUrl', displayName: 'URL конкурента' },
-                { name: 'competitorProductName', displayName: 'Название товара у конкурента' }
-            ];
+        if (!entityFieldsMetadata || !entityFieldsMetadata[entityType]) {
+            console.error('Метаданные для типа ' + entityType + ' не найдены');
+            return;
         }
+
+        // Проверяем, является ли это product_with_related
+        if (entityType === 'product_with_related') {
+            // Показываем специальную таблицу для связанных сущностей
+            showRelatedEntitiesMappingTable();
+            return;
+        }
+
+        // Получаем поля для данного типа сущности
+        const fieldMappings = entityFieldsMetadata[entityType];
+        const fields = [];
+
+        // Преобразуем объект маппинга в массив полей
+        for (const [displayName, fieldName] of Object.entries(fieldMappings)) {
+            fields.push({
+                name: fieldName,
+                displayName: displayName
+            });
+        }
+
+        console.log('Поля для типа ' + entityType + ':', fields);
 
         // Заполняем все селекторы полей
         const fieldSelectors = document.querySelectorAll('.entity-field-selector');
@@ -883,6 +806,138 @@
                     optionValue.includes(sourceFieldLower) || sourceFieldLower.includes(optionValue)) {
                     selector.selectedIndex = i;
                     return;
+                }
+            }
+        });
+    }
+
+    // Функция для отображения группированной таблицы маппинга
+    function showRelatedEntitiesMappingTable() {
+        console.log('Вызов showRelatedEntitiesMappingTable');
+
+        const mappingTableBody = document.getElementById('mappingTableBody');
+        const headers = Array.from(mappingTableBody.querySelectorAll('tr td:first-child')).map(td => td.textContent);
+
+        // Получаем метаданные для связанных сущностей
+        const productWithRelated = entityFieldsMetadata['product_with_related'];
+
+        console.log('Структура product_with_related:', productWithRelated);
+
+        if (!productWithRelated) {
+            console.error('Метаданные для product_with_related не найдены!');
+            return;
+        }
+
+        // Создаем новый HTML для таблицы маппинга
+        let newRows = '';
+        headers.forEach(header => {
+            newRows += `
+        <tr>
+            <td class="source-header">${header}</td>
+            <td>
+                <select name="mapping[${header}]" class="form-select entity-field-selector">
+                    <option value="">-- Не импортировать --</option>`;
+
+            // Группа "Товар"
+            newRows += `<optgroup label="Товар">`;
+            // Получаем поля для товара из метаданных
+            const productFields = entityFieldsMetadata['product'] || {};
+            for (const [displayName, fieldName] of Object.entries(productFields)) {
+                newRows += `<option value="${fieldName}">${displayName}</option>`;
+            }
+            newRows += `</optgroup>`;
+
+            // Группа "Регион"
+            newRows += `<optgroup label="Регион">`;
+            const regionFields = entityFieldsMetadata['regiondata'] || {};
+            for (const [displayName, fieldName] of Object.entries(regionFields)) {
+                newRows += `<option value="${fieldName}">${displayName}</option>`;
+            }
+            newRows += `</optgroup>`;
+
+            // Группа "Конкурент"
+            newRows += `<optgroup label="Конкурент">`;
+            const competitorFields = entityFieldsMetadata['competitordata'] || {};
+            for (const [displayName, fieldName] of Object.entries(competitorFields)) {
+                newRows += `<option value="${fieldName}">${displayName}</option>`;
+            }
+            newRows += `</optgroup>`;
+
+            newRows += `</select>
+            </td>
+        </tr>`;
+        });
+
+        mappingTableBody.innerHTML = newRows;
+
+        // Добавляем информационное сообщение
+        const mappingInfo = document.createElement('div');
+        mappingInfo.className = 'alert alert-info mt-3';
+        mappingInfo.innerHTML = `
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Импорт связанных сущностей:</strong> Для каждого поля из файла выберите соответствующее поле сущности.
+        Поля могут относиться к разным типам сущностей (Товар, Регион, Конкурент).
+        Система автоматически создаст и свяжет все необходимые сущности.
+    `;
+
+        const existingInfo = document.querySelector('#mappingTableContainer .alert');
+        if (existingInfo) {
+            existingInfo.remove();
+        }
+
+        document.getElementById('mappingTableContainer').insertBefore(mappingInfo, document.querySelector('#mappingTableContainer .table-scroll'));
+
+        // Пробуем рекомендовать сопоставления на основе имени поля
+        autoSuggestRelatedFieldMappings(headers);
+    }
+
+    // Обновленная функция для автоматического сопоставления полей
+    function autoSuggestRelatedFieldMappings(headers) {
+        console.log('Автоматическое сопоставление полей для headers:', headers);
+
+        // Создаем обратный маппинг (имя поля в файле -> имя поля сущности)
+        const reverseMapping = {};
+
+        // Добавляем маппинги из всех типов сущностей
+        ['product', 'regiondata', 'competitordata'].forEach(entityType => {
+            const mappings = entityFieldsMetadata[entityType];
+            if (mappings) {
+                Object.entries(mappings).forEach(([displayName, fieldName]) => {
+                    reverseMapping[displayName.toLowerCase()] = fieldName;
+                });
+            }
+        });
+
+        console.log('Обратный маппинг:', reverseMapping);
+
+        // Применяем сопоставление
+        headers.forEach(header => {
+            const selector = document.querySelector(`select[name="mapping[${header}]"]`);
+            if (selector) {
+                const lowerHeader = header.toLowerCase();
+
+                // Проверяем точное совпадение
+                if (reverseMapping[lowerHeader]) {
+                    for (let i = 0; i < selector.options.length; i++) {
+                        if (selector.options[i].value === reverseMapping[lowerHeader]) {
+                            selector.selectedIndex = i;
+                            break;
+                        }
+                    }
+                    return;
+                }
+
+                // Проверяем частичное совпадение
+                for (const [key, value] of Object.entries(reverseMapping)) {
+                    if (key.includes(lowerHeader) || lowerHeader.includes(key)) {
+                        for (let i = 0; i < selector.options.length; i++) {
+                            if (selector.options[i].value === value) {
+                                selector.selectedIndex = i;
+                                break;
+                            }
+                        }
+                        return;
+                    }
                 }
             }
         });

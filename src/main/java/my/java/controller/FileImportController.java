@@ -9,6 +9,7 @@ import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
 import my.java.service.file.importer.FileImportService;
 import my.java.service.file.mapping.FieldMappingService;
+import my.java.service.file.metadata.EntityFieldService;
 import my.java.util.PathResolver;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +41,7 @@ public class FileImportController {
     private final ClientService clientService;
     private final FieldMappingService fieldMappingService;
     private final PathResolver pathResolver;
+    private final EntityFieldService entityFieldService;
 
     // Карта активных операций импорта для отслеживания
     private final Map<Long, CompletableFuture<FileOperationDto>> activeImports = Collections.synchronizedMap(new HashMap<>());
@@ -113,7 +115,7 @@ public class FileImportController {
                         model.addAttribute("analysis", analysis);
                         model.addAttribute("fileName", file.getOriginalFilename());
                         model.addAttribute("fileSize", formatFileSize(file.getSize()));
-                        model.addAttribute("tempFilePath", tempFilePath.toString()); // Добавляем путь к временному файлу
+                        model.addAttribute("tempFilePath", tempFilePath.toString());
 
                         // Получаем доступные маппинги полей
                         String entityType = "product"; // По умолчанию
@@ -123,6 +125,10 @@ public class FileImportController {
 
                         List<Map<String, Object>> mappings = fieldMappingService.getAvailableMappingsForClient(clientId, entityType);
                         model.addAttribute("availableMappings", mappings);
+
+                        // Добавляем метаданные о полях всех типов сущностей
+                        model.addAttribute("entityFieldsMetadata", entityFieldService.getAllEntityFieldsMetadata());
+                        model.addAttribute("supportedEntityTypes", entityFieldService.getSupportedEntityTypes());
 
                         // Возвращаем страницу настройки импорта
                         return "import/configure";

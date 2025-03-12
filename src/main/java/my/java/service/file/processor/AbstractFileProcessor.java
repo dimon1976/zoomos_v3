@@ -5,6 +5,8 @@ import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.service.file.builder.EntitySetBuilder;
+import my.java.service.file.builder.ProductWithRelatedEntitiesBuilder;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 
@@ -15,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Абстрактный класс для процессоров файлов.
@@ -30,12 +33,129 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Конструктор с необходимыми зависимостями.
      *
-     * @param pathResolver утилита для работы с путями
+     * @param pathResolver       утилита для работы с путями
      * @param transformerFactory фабрика трансформеров значений
      */
     protected AbstractFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
         this.pathResolver = pathResolver;
         this.transformerFactory = transformerFactory;
+    }
+
+    /**
+     * Обрабатывает файл с использованием строителя наборов сущностей.
+     *
+     * @param filePath   путь к файлу
+     * @param entityType тип сущности
+     * @param client     клиент
+     * @param builder    строитель для создания сущностей
+     * @param operation  объект операции для обновления прогресса
+     * @return список групп связанных сущностей
+     */
+    protected List<List<ImportableEntity>> processFileWithBuilder(
+            Path filePath,
+            String entityType,
+            Client client,
+            Map<String, String> params,
+            FileOperation operation,
+            EntitySetBuilder builder) {
+
+        try {
+            // Проверяем строителя
+            if (builder == null) {
+                throw new FileOperationException("Строитель не может быть null");
+            }
+
+            // Вызываем метод для внутренней валидации файла
+            validateFileInternal(filePath);
+            log.info("Начало обработки файла строителем: {}, тип сущности: {}, клиент: {}",
+                    filePath, entityType, client.getName());
+
+            // Обновляем статус операции
+            updateOperationStatus(operation, FileOperation.OperationStatus.PROCESSING);
+
+            // Получаем данные из файла
+            List<Map<String, String>> rawData = readFile(filePath, params);
+            log.debug("Прочитано {} записей из файла", rawData.size());
+
+            // Обновляем информацию о количестве записей
+            if (operation != null) {
+                operation.setTotalRecords(rawData.size());
+            }
+
+            List<List<ImportableEntity>> entitySets = new ArrayList<>();
+            int totalRecords = rawData.size();
+            int processedRecords = 0;
+            int successfulRecords = 0;
+            List<String> errors = new ArrayList<>();
+
+            // Устанавливаем клиента для строителя
+            builder.withClientId(client.getId());
+
+            // Устанавливаем ID файла, если есть
+            if (operation != null && operation.getId() != null) {
+                builder.withFileId(operation.getId());
+            }
+
+            // Обрабатываем каждую строку
+            for (Map<String, String> row : rawData) {
+                processedRecords++;
+
+                try {
+                    // Сбрасываем строитель для новой строки
+                    builder.reset();
+
+                    // Применяем данные строки к строителю
+                    boolean applied = builder.applyRow(row);
+                    if (!applied) {
+                        errors.add("Не удалось применить данные из строки " + processedRecords);
+                        continue;
+                    }
+
+                    // Валидируем строитель
+                    String validationError = builder.validate();
+                    if (validationError != null) {
+                        errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
+                        continue;
+                    }
+
+                    // Строим сущности
+                    List<ImportableEntity> rowEntities = builder.build();
+                    if (rowEntities.isEmpty()) {
+                        errors.add("Не удалось создать сущности из строки " + processedRecords);
+                        continue;
+                    }
+
+                    // Добавляем созданные сущности в результат
+                    entitySets.add(rowEntities);
+                    successfulRecords++;
+                } catch (Exception e) {
+                    errors.add("Ошибка в строке " + processedRecords + ": " + e.getMessage());
+                    log.warn("Ошибка при обработке строки {}: {}", processedRecords, e.getMessage());
+                }
+
+                // Обновляем прогресс
+                updateProgress(operation, processedRecords, totalRecords);
+            }
+
+            // Обновляем статистику операции
+            if (operation != null) {
+                operation.setProcessedRecords(processedRecords);
+            }
+
+            // Логируем итоги обработки
+            log.info("Обработка файла с использованием строителя завершена. Всего записей: {}, успешно: {}, с ошибками: {}",
+                    totalRecords, successfulRecords, errors.size());
+
+            if (!errors.isEmpty()) {
+                log.debug("Ошибки при обработке: {}", String.join("; ", errors));
+            }
+
+            return entitySets;
+        } catch (Exception e) {
+            String errorMessage = "Ошибка при обработке файла строителем: " + e.getMessage();
+            log.error(errorMessage, e);
+            throw new FileOperationException(errorMessage, e);
+        }
     }
 
     @Override
@@ -65,7 +185,22 @@ public abstract class AbstractFileProcessor implements FileProcessor {
                 operation.setTotalRecords(rawData.size());
             }
 
-            // Преобразуем сырые данные в сущности
+            // Проверяем, используется ли строитель
+            if (entityType != null && entityType.equalsIgnoreCase("product_with_related")) {
+                // Получаем строитель (обычно это делала бы фабрика, но для примера создаем напрямую)
+                EntitySetBuilder builder = new ProductWithRelatedEntitiesBuilder(transformerFactory);
+
+                // Обрабатываем данные с использованием строителя
+                List<List<ImportableEntity>> entitySets = processFileWithBuilder(
+                        filePath, entityType, client, params, operation, builder);
+
+                // Конвертируем список групп сущностей в плоский список всех сущностей
+                return entitySets.stream()
+                        .flatMap(List::stream)
+                        .collect(Collectors.toList());
+            }
+
+            // Стандартная обработка для обычных сущностей
             List<ImportableEntity> entities = convertToEntities(rawData, entityType, client, fieldMapping, operation);
             log.debug("Создано {} сущностей типа {}", entities.size(), entityType);
 
@@ -85,7 +220,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      * Считывает данные из файла.
      *
      * @param filePath путь к файлу
-     * @param params параметры чтения
+     * @param params   параметры чтения
      * @return список сырых данных
      * @throws IOException если возникла ошибка при чтении файла
      */
@@ -147,11 +282,11 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Преобразует сырые данные в сущности.
      *
-     * @param rawData сырые данные из файла
-     * @param entityType тип сущности
-     * @param client клиент
+     * @param rawData      сырые данные из файла
+     * @param entityType   тип сущности
+     * @param client       клиент
      * @param fieldMapping маппинг полей
-     * @param operation информация об операции
+     * @param operation    информация об операции
      * @return список созданных сущностей
      */
     protected List<ImportableEntity> convertToEntities(
@@ -274,7 +409,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Применяет маппинг полей к данным.
      *
-     * @param rawData исходные данные
+     * @param rawData      исходные данные
      * @param fieldMapping маппинг полей
      * @return данные с примененным маппингом
      */
@@ -303,7 +438,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      * Обновляет статус операции.
      *
      * @param operation операция
-     * @param status новый статус
+     * @param status    новый статус
      */
     protected void updateOperationStatus(FileOperation operation, FileOperation.OperationStatus status) {
         if (operation != null) {
@@ -314,9 +449,9 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Обновляет прогресс операции.
      *
-     * @param operation операция
+     * @param operation        операция
      * @param processedRecords количество обработанных записей
-     * @param totalRecords общее количество записей
+     * @param totalRecords     общее количество записей
      */
     protected void updateProgress(FileOperation operation, int processedRecords, int totalRecords) {
         if (operation != null && totalRecords > 0) {

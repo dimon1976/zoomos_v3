@@ -32,6 +32,9 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     private Map<String, String> regionFieldMapping;
     private Map<String, String> competitorFieldMapping;
 
+    // Маппинг между заголовками файла и полями сущностей
+    private Map<String, String> fileHeaderToEntityField;
+
     public ProductWithRelatedEntitiesBuilder(ValueTransformerFactory transformerFactory, EntityFieldService entityFieldService) {
         this.transformerFactory = transformerFactory;
         this.entityFieldService = entityFieldService;
@@ -40,6 +43,9 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         this.productFieldMapping = entityFieldService.getFieldMappings("product");
         this.regionFieldMapping = entityFieldService.getFieldMappings("regiondata");
         this.competitorFieldMapping = entityFieldService.getFieldMappings("competitordata");
+
+        // Инициализируем пустой маппинг заголовков файла
+        this.fileHeaderToEntityField = new HashMap<>();
 
         reset();
     }
@@ -74,10 +80,11 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
 
         product.setDataSource(DataSourceType.FILE);
 
-        // Заполняем поля продукта
+        // Заполняем поля продукта на основе маппинга заголовков файла
         Map<String, String> productData = new HashMap<>();
+
         for (Map.Entry<String, String> entry : row.entrySet()) {
-            String key = entry.getKey();
+            String fileHeader = entry.getKey();
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -85,11 +92,11 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
                 continue;
             }
 
-            // Используем маппинг полей
-            if (productFieldMapping.containsKey(key)) {
+            // Получаем имя поля сущности из маппинга заголовков
+            String entityField = fileHeaderToEntityField.get(fileHeader);
+            if (entityField != null && entityField.startsWith("product")) {
                 hasData = true;
-                String fieldName = productFieldMapping.get(key);
-                productData.put(fieldName, value);
+                productData.put(entityField, value);
             }
         }
 
@@ -103,9 +110,17 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     private boolean applyRegionData(Map<String, String> row) {
         boolean hasData = false;
 
-        // Проверяем, есть ли данные для региона
-        for (String key : regionFieldMapping.keySet()) {
-            if (row.containsKey(key) && !row.get(key).trim().isEmpty()) {
+        // Проверяем, есть ли данные для региона на основе маппинга заголовков
+        for (Map.Entry<String, String> entry : row.entrySet()) {
+            String fileHeader = entry.getKey();
+            String value = entry.getValue();
+
+            if (value == null || value.trim().isEmpty()) {
+                continue;
+            }
+
+            String entityField = fileHeaderToEntityField.get(fileHeader);
+            if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
                 hasData = true;
                 break;
             }
@@ -129,7 +144,7 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         // Заполняем поля региона
         Map<String, String> regionDataMap = new HashMap<>();
         for (Map.Entry<String, String> entry : row.entrySet()) {
-            String key = entry.getKey();
+            String fileHeader = entry.getKey();
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -137,9 +152,9 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
                 continue;
             }
 
-            if (regionFieldMapping.containsKey(key)) {
-                String fieldName = regionFieldMapping.get(key);
-                regionDataMap.put(fieldName, value);
+            String entityField = fileHeaderToEntityField.get(fileHeader);
+            if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
+                regionDataMap.put(entityField, value);
             }
         }
 
@@ -147,15 +162,23 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
             regionData.fillFromMap(regionDataMap);
         }
 
-        return true;
+        return !regionDataMap.isEmpty();
     }
 
     private boolean applyCompetitorData(Map<String, String> row) {
         boolean hasData = false;
 
-        // Проверяем, есть ли данные для конкурента
-        for (String key : competitorFieldMapping.keySet()) {
-            if (row.containsKey(key) && !row.get(key).trim().isEmpty()) {
+        // Проверяем, есть ли данные для конкурента на основе маппинга заголовков
+        for (Map.Entry<String, String> entry : row.entrySet()) {
+            String fileHeader = entry.getKey();
+            String value = entry.getValue();
+
+            if (value == null || value.trim().isEmpty()) {
+                continue;
+            }
+
+            String entityField = fileHeaderToEntityField.get(fileHeader);
+            if (entityField != null && entityField.startsWith("competitor")) {
                 hasData = true;
                 break;
             }
@@ -179,7 +202,7 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         // Заполняем поля конкурента
         Map<String, String> competitorDataMap = new HashMap<>();
         for (Map.Entry<String, String> entry : row.entrySet()) {
-            String key = entry.getKey();
+            String fileHeader = entry.getKey();
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -187,9 +210,9 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
                 continue;
             }
 
-            if (competitorFieldMapping.containsKey(key)) {
-                String fieldName = competitorFieldMapping.get(key);
-                competitorDataMap.put(fieldName, value);
+            String entityField = fileHeaderToEntityField.get(fileHeader);
+            if (entityField != null && entityField.startsWith("competitor")) {
+                competitorDataMap.put(entityField, value);
             }
         }
 
@@ -197,7 +220,7 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
             competitorData.fillFromMap(competitorDataMap);
         }
 
-        return true;
+        return !competitorDataMap.isEmpty();
     }
 
     /**
@@ -211,48 +234,31 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
             return this;
         }
 
-        // Создаем маппинги на основе сопоставлений полей
-        Map<String, String> productFieldMap = new HashMap<>();
-        Map<String, String> regionFieldMap = new HashMap<>();
-        Map<String, String> competitorFieldMap = new HashMap<>();
+        // Очищаем существующий маппинг заголовков
+        fileHeaderToEntityField.clear();
 
         // Обрабатываем все параметры маппинга
         for (Map.Entry<String, String> entry : params.entrySet()) {
             String key = entry.getKey();
             if (key.startsWith("mapping[") && key.endsWith("]")) {
                 // Извлекаем имя исходного поля из ключа (между "mapping[" и "]")
-                String sourceField = key.substring(8, key.length() - 1);
-                String targetField = entry.getValue();
+                String fileHeader = key.substring(8, key.length() - 1);
+                String entityField = entry.getValue();
 
                 // Пропускаем пустые значения
-                if (targetField == null || targetField.trim().isEmpty()) {
+                if (entityField == null || entityField.trim().isEmpty()) {
                     continue;
                 }
 
-                // Определяем, к какому типу сущности относится целевое поле
-                if (targetField.startsWith("product")) {
-                    productFieldMap.put(sourceField, targetField);
-                } else if (targetField.equals("region") || targetField.equals("regionAddress")) {
-                    regionFieldMap.put(sourceField, targetField);
-                } else if (targetField.startsWith("competitor")) {
-                    competitorFieldMap.put(sourceField, targetField);
-                }
+                // Добавляем в маппинг заголовков
+                fileHeaderToEntityField.put(fileHeader, entityField);
+
+                // Логируем маппинг для отладки
+                log.debug("Добавлен маппинг заголовка: '{}' -> '{}'", fileHeader, entityField);
             }
         }
 
-        // Если маппинги не пусты, устанавливаем их
-        if (!productFieldMap.isEmpty()) {
-            this.productFieldMapping = productFieldMap;
-        }
-
-        if (!regionFieldMap.isEmpty()) {
-            this.regionFieldMapping = regionFieldMap;
-        }
-
-        if (!competitorFieldMap.isEmpty()) {
-            this.competitorFieldMapping = competitorFieldMap;
-        }
-
+        log.info("Установлено {} маппингов заголовков файла", fileHeaderToEntityField.size());
         return this;
     }
 

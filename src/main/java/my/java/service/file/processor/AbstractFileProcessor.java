@@ -6,7 +6,7 @@ import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
 import my.java.service.file.builder.EntitySetBuilder;
-import my.java.service.file.builder.ProductWithRelatedEntitiesBuilder;
+import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 
@@ -29,6 +29,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
 
     protected final PathResolver pathResolver;
     protected final ValueTransformerFactory transformerFactory;
+    protected final EntitySetBuilderFactory entitySetBuilderFactory;
 
     /**
      * Конструктор с необходимыми зависимостями.
@@ -36,9 +37,10 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      * @param pathResolver       утилита для работы с путями
      * @param transformerFactory фабрика трансформеров значений
      */
-    protected AbstractFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
+    protected AbstractFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory, EntitySetBuilderFactory entitySetBuilderFactory) {
         this.pathResolver = pathResolver;
         this.transformerFactory = transformerFactory;
+        this.entitySetBuilderFactory = entitySetBuilderFactory;
     }
 
     /**
@@ -47,8 +49,9 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      * @param filePath   путь к файлу
      * @param entityType тип сущности
      * @param client     клиент
-     * @param builder    строитель для создания сущностей
+     * @param params     дополнительные параметры
      * @param operation  объект операции для обновления прогресса
+     * @param builder    строитель для создания сущностей
      * @return список групп связанных сущностей
      */
     protected List<List<ImportableEntity>> processFileWithBuilder(
@@ -87,14 +90,6 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             int processedRecords = 0;
             int successfulRecords = 0;
             List<String> errors = new ArrayList<>();
-
-            // Устанавливаем клиента для строителя
-            builder.withClientId(client.getId());
-
-            // Устанавливаем ID файла, если есть
-            if (operation != null && operation.getId() != null) {
-                builder.withFileId(operation.getId());
-            }
 
             // Обрабатываем каждую строку
             for (Map<String, String> row : rawData) {
@@ -135,6 +130,12 @@ public abstract class AbstractFileProcessor implements FileProcessor {
 
                 // Обновляем прогресс
                 updateProgress(operation, processedRecords, totalRecords);
+
+                // Проверяем, не была ли операция отменена
+                if (operation != null && operation.getStatus() == FileOperation.OperationStatus.FAILED) {
+                    log.info("Операция была отменена, прерываем обработку файла");
+                    break;
+                }
             }
 
             // Обновляем статистику операции
@@ -143,11 +144,18 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             }
 
             // Логируем итоги обработки
-            log.info("Обработка файла с использованием строителя завершена. Всего записей: {}, успешно: {}, с ошибками: {}",
-                    totalRecords, successfulRecords, errors.size());
+            if (errors.isEmpty()) {
+                log.info("Обработка файла с использованием строителя успешно завершена. Всего записей: {}, успешно: {}",
+                        totalRecords, successfulRecords);
+            } else {
+                log.info("Обработка файла с использованием строителя завершена с ошибками. Всего записей: {}, успешно: {}, с ошибками: {}",
+                        totalRecords, successfulRecords, errors.size());
+                log.debug("Ошибки при обработке: {}", String.join("; ", errors.subList(0, Math.min(10, errors.size()))));
 
-            if (!errors.isEmpty()) {
-                log.debug("Ошибки при обработке: {}", String.join("; ", errors));
+                // Если есть много ошибок, логируем только первые несколько с полным стектрейсом
+                if (errors.size() > 10) {
+                    log.debug("... и еще {} ошибок", errors.size() - 10);
+                }
             }
 
             return entitySets;
@@ -186,9 +194,33 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             }
 
             // Проверяем, используется ли строитель
-            if (entityType != null && entityType.equalsIgnoreCase("product_with_related")) {
-                // Получаем строитель (обычно это делала бы фабрика, но для примера создаем напрямую)
-                EntitySetBuilder builder = new ProductWithRelatedEntitiesBuilder(transformerFactory);
+            if (entityType != null && entitySetBuilderFactory.supportsEntityType(entityType)) {
+                // Получаем строитель из фабрики и настраиваем его
+                Map<String, String> builderParams = new HashMap<>();
+                if (params != null) {
+                    builderParams.putAll(params);
+                }
+
+                // Добавляем маппинг полей в параметры
+                if (fieldMapping != null) {
+                    // Преобразуем маппинг полей в формат для билдера
+                    for (Map.Entry<String, String> entry : fieldMapping.entrySet()) {
+                        builderParams.put("mapping[" + entry.getKey() + "]", entry.getValue());
+                    }
+                }
+
+                // Добавляем ID операции как ID файла
+                if (operation != null && operation.getId() != null) {
+                    builderParams.put("fileId", operation.getId().toString());
+                }
+
+                EntitySetBuilder builder = entitySetBuilderFactory.createAndConfigureBuilder(entityType, builderParams);
+                if (builder == null) {
+                    throw new FileOperationException("Не удалось создать строителя для типа сущности: " + entityType);
+                }
+
+                // Устанавливаем клиента для строителя
+                builder.withClientId(client.getId());
 
                 // Обрабатываем данные с использованием строителя
                 List<List<ImportableEntity>> entitySets = processFileWithBuilder(

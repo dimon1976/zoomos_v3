@@ -156,6 +156,9 @@ E:.
         |       general.html
         |       not-found.html
         |       
+        +---fragments
+        |       notifications.html
+        |       
         +---import
         |       configure.html
         |       progress.html

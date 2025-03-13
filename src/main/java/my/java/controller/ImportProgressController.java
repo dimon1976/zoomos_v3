@@ -70,9 +70,9 @@ public class ImportProgressController {
             Map<String, Object> response = new HashMap<>();
             response.put("operationId", operationId);
             response.put("status", operation.getStatus().toString());
-//            response.put("progress", operation.getProcessingProgress() != null ? operation.getProcessingProgress() : 0);
-//            response.put("processedRecords", operation.getProcessedRecords() != null ? operation.getProcessedRecords() : 0);
-//            response.put("totalRecords", operation.getTotalRecords() != null ? operation.getTotalRecords() : 0);
+            response.put("progress", operation.getProcessingProgress() != null ? operation.getProcessingProgress() : 0);
+            response.put("processedRecords", operation.getProcessedRecords() != null ? operation.getProcessedRecords() : 0);
+            response.put("totalRecords", operation.getTotalRecords() != null ? operation.getTotalRecords() : 0);
             response.put("completed", operation.getStatus() == my.java.model.FileOperation.OperationStatus.COMPLETED ||
                     operation.getStatus() == my.java.model.FileOperation.OperationStatus.FAILED);
             response.put("successful", operation.getStatus() == my.java.model.FileOperation.OperationStatus.COMPLETED);

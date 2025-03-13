@@ -5,10 +5,14 @@ import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.repository.FileOperationRepository;
 import my.java.service.file.builder.EntitySetBuilder;
 import my.java.service.file.builder.EntitySetBuilderFactory;
+import my.java.service.file.tracker.ImportProgressTracker;
 import my.java.service.file.transformer.ValueTransformerFactory;
+import my.java.util.ApplicationContextProvider;
 import my.java.util.PathResolver;
+import org.springframework.context.ApplicationContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -30,17 +34,20 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     protected final PathResolver pathResolver;
     protected final ValueTransformerFactory transformerFactory;
     protected final EntitySetBuilderFactory entitySetBuilderFactory;
+    protected final FileOperationRepository fileOperationRepository;
 
     /**
      * Конструктор с необходимыми зависимостями.
      *
-     * @param pathResolver       утилита для работы с путями
-     * @param transformerFactory фабрика трансформеров значений
+     * @param pathResolver            утилита для работы с путями
+     * @param transformerFactory      фабрика трансформеров значений
+     * @param fileOperationRepository
      */
-    protected AbstractFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory, EntitySetBuilderFactory entitySetBuilderFactory) {
+    protected AbstractFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory, EntitySetBuilderFactory entitySetBuilderFactory, FileOperationRepository fileOperationRepository) {
         this.pathResolver = pathResolver;
         this.transformerFactory = transformerFactory;
         this.entitySetBuilderFactory = entitySetBuilderFactory;
+        this.fileOperationRepository = fileOperationRepository;
     }
 
     /**
@@ -176,6 +183,12 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             FileOperation operation) {
 
         try {
+            // Логируем параметры импорта
+            log.info("Параметры импорта: {}", params);
+
+            // Применяем настройки процесса из параметров
+            applyImportParameters(params, operation);
+
             // Вызываем метод для внутренней валидации файла (бросает исключение при проблеме)
             validateFileInternal(filePath);
             log.info("Начало обработки файла: {}, тип сущности: {}, клиент: {}",
@@ -246,6 +259,40 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             }
             throw new FileOperationException(errorMessage, e);
         }
+    }
+
+    // Новый метод в AbstractFileProcessor.java для применения параметров импорта
+    private void applyImportParameters(Map<String, String> params, FileOperation operation) {
+        if (params == null || operation == null) {
+            return;
+        }
+
+        // Установка размера пакета, если указан
+        if (params.containsKey("batchSize")) {
+            try {
+                int batchSize = Integer.parseInt(params.get("batchSize"));
+//                operation.setBatchSize(batchSize);
+                log.debug("Установлен размер пакета: {}", batchSize);
+            } catch (NumberFormatException e) {
+                log.warn("Неверный формат размера пакета: {}", params.get("batchSize"));
+            }
+        }
+
+        // Добавление других метаданных
+        if (params.containsKey("processingStrategy")) {
+//            operation.setProcessingStrategy(params.get("processingStrategy"));
+            log.debug("Установлена стратегия обработки: {}", params.get("processingStrategy"));
+        }
+
+        if (params.containsKey("errorHandling")) {
+//            operation.setErrorHandling(params.get("errorHandling"));
+            log.debug("Установлен метод обработки ошибок: {}", params.get("errorHandling"));
+        }
+
+        // Сохраняем все параметры в метаданных операции
+        Map<String, String> metadata = new HashMap<>(params);
+//        operation.setMetadata(metadata);
+        log.debug("Сохранены метаданные операции: {}", metadata);
     }
 
     /**
@@ -488,8 +535,39 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     protected void updateProgress(FileOperation operation, int processedRecords, int totalRecords) {
         if (operation != null && totalRecords > 0) {
             int progress = (int) (((double) processedRecords / totalRecords) * 100);
+
+            // Обновляем состояние операции
             operation.setProcessingProgress(progress);
             operation.setProcessedRecords(processedRecords);
+            operation.setTotalRecords(totalRecords);
+
+            // Сохраняем обновленное состояние
+            try {
+                fileOperationRepository.save(operation);
+
+                // Отправляем уведомление о прогрессе через WebSocket
+                if (operation.getId() != null) {
+                    // Используем ImportProgressTracker для отправки уведомления
+                    try {
+                        // Получаем трекер из контекста Spring, если он доступен
+                        ApplicationContext context = ApplicationContextProvider.getContext();
+                        if (context != null) {
+                            ImportProgressTracker tracker = context.getBean(ImportProgressTracker.class);
+                            if (tracker != null) {
+                                tracker.updateProgress(operation.getId(), processedRecords);
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Не удалось отправить уведомление о прогрессе: {}", e.getMessage());
+                    }
+                }
+
+                log.debug("Прогресс обновлен: операция #{}, прогресс {}%, обработано {} из {} записей",
+                        operation.getId(), progress, processedRecords, totalRecords);
+            } catch (Exception e) {
+                log.error("Ошибка при обновлении прогресса операции #{}: {}",
+                        operation.getId(), e.getMessage());
+            }
         }
     }
 }

@@ -116,8 +116,31 @@ public class FileImportController {
         // Анализируем файл
         Map<String, Object> analysis = fileImportService.analyzeFile(file);
 
+        // Подробный лог образца данных
+        if (analysis.containsKey("sampleData")) {
+            List<?> sampleData = (List<?>) analysis.get("sampleData");
+            log.debug("Размер образца данных: {}", sampleData.size());
+            if (sampleData.isEmpty()) {
+                log.warn("Образец данных пуст!");
+            } else {
+                log.debug("Первая строка образца: {}", sampleData.get(0));
+            }
+        } else {
+            log.warn("Образец данных отсутствует в результате анализа!");
+        }
+
+        // Проверяем наличие заголовков
+        if (analysis.containsKey("headers")) {
+            log.debug("Заголовки: {}", analysis.get("headers"));
+        } else {
+            log.warn("Заголовки отсутствуют в результате анализа!");
+        }
+
         // Добавляем данные в модель
         prepareAnalysisModel(model, client, file, tempFilePath, analysis, clientId);
+
+        // Отладка модели
+        log.debug("Модель перед отправкой на страницу: {}", model.asMap().keySet());
 
         // Возвращаем страницу настройки импорта
         return "import/configure";
@@ -144,6 +167,7 @@ public class FileImportController {
     private String getEntityTypeFromAnalysis(Map<String, Object> analysis) {
         return analysis.containsKey("entityType") ? (String) analysis.get("entityType") : "product";
     }
+
 
     @PostMapping("/{clientId}/import")
     public String importFile(
@@ -228,7 +252,53 @@ public class FileImportController {
         for (Map.Entry<String, String> entry : params.entrySet()) {
             if (!isReservedParam(entry.getKey())) {
                 importParams.put(entry.getKey(), entry.getValue());
+                log.debug("Добавлен параметр импорта: {} = {}", entry.getKey(), entry.getValue());
             }
+        }
+
+        // Явно добавляем параметры стратегии обработки
+        if (params.containsKey("processingStrategy")) {
+            importParams.put("processingStrategy", params.get("processingStrategy"));
+            log.debug("Установлена стратегия обработки: {}", params.get("processingStrategy"));
+        }
+
+        // Явно добавляем параметры пакетной обработки
+        if (params.containsKey("batchSize")) {
+            importParams.put("batchSize", params.get("batchSize"));
+            log.debug("Установлен размер пакета: {}", params.get("batchSize"));
+        }
+
+        // Явно добавляем параметры обработки ошибок
+        if (params.containsKey("errorHandling")) {
+            importParams.put("errorHandling", params.get("errorHandling"));
+            log.debug("Установлен способ обработки ошибок: {}", params.get("errorHandling"));
+        }
+
+        // Явно добавляем параметры обработки дубликатов
+        if (params.containsKey("duplicateHandling")) {
+            importParams.put("duplicateHandling", params.get("duplicateHandling"));
+            log.debug("Установлен способ обработки дубликатов: {}", params.get("duplicateHandling"));
+        }
+
+        // Явно добавляем флаги
+        if (params.containsKey("validateData")) {
+            importParams.put("validateData", "true");
+            log.debug("Включена валидация данных");
+        }
+
+        if (params.containsKey("trimWhitespace")) {
+            importParams.put("trimWhitespace", "true");
+            log.debug("Включена обрезка пробелов");
+        }
+
+        if (params.containsKey("generateReport")) {
+            importParams.put("generateReport", "true");
+            log.debug("Включена генерация отчета");
+        }
+
+        if (params.containsKey("notifyOnComplete")) {
+            importParams.put("notifyOnComplete", "true");
+            log.debug("Включено уведомление о завершении");
         }
 
         return importParams;
@@ -277,8 +347,8 @@ public class FileImportController {
             redirectAttributes.addFlashAttribute("successMessage",
                     "Импорт файла '" + fileName + "' успешно запущен");
 
-            // Перенаправляем на страницу клиента, раздел импорта
-            return "redirect:/clients/" + clientId + "?tab=import";
+            // Перенаправляем на страницу прогресса импорта вместо страницы клиента
+            return "redirect:/import/progress/" + operation.getId();
         } else {
             redirectAttributes.addFlashAttribute("errorMessage",
                     "Не удалось запустить импорт файла");

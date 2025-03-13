@@ -14,31 +14,39 @@
         .badge-operation {
             font-size: 85%;
         }
+
         .status-pending {
             background-color: #ffc107;
         }
+
         .status-processing {
             background-color: #17a2b8;
             color: white;
         }
+
         .status-success {
             background-color: #28a745;
             color: white;
         }
+
         .status-error {
             background-color: #dc3545;
             color: white;
         }
+
         .operation-card {
             transition: transform 0.2s;
         }
+
         .operation-card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
+
         .tab-content {
             padding: 20px 0;
         }
+
         /* Стили для загрузки файла */
         .file-upload-container {
             border: 2px dashed #ccc;
@@ -50,27 +58,33 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
+
         .file-upload-container:hover {
             border-color: #007bff;
             background-color: #f1f8ff;
         }
+
         .file-upload-container.drag-over {
             border-color: #28a745;
             background-color: #e8f4e8;
         }
+
         .file-icon {
             font-size: 3rem;
             margin-bottom: 1rem;
             color: #6c757d;
         }
+
         .file-upload-text {
             font-size: 1.2rem;
             margin-bottom: 0.5rem;
         }
+
         .file-upload-hint {
             color: #6c757d;
             margin-bottom: 1rem;
         }
+
         .supported-formats {
             display: inline-block;
             padding: 0.25rem 0.5rem;
@@ -79,9 +93,11 @@
             margin: 0.25rem;
             font-size: 0.875rem;
         }
+
         #fileInput {
             display: none;
         }
+
         .file-preview {
             display: none;
             margin-top: 1rem;
@@ -90,17 +106,21 @@
             border-radius: 0.5rem;
             background-color: white;
         }
+
         .file-preview.show {
             display: block;
         }
+
         .file-preview-name {
             font-weight: bold;
             margin-bottom: 0.5rem;
         }
+
         .file-preview-size {
             color: #6c757d;
             margin-bottom: 0.5rem;
         }
+
         .file-preview-actions {
             margin-top: 1rem;
         }
@@ -109,19 +129,23 @@
         .progress-container {
             margin: 30px 0;
         }
+
         .progress {
             height: 20px;
         }
+
         .progress-bar {
             transition: width 0.3s ease;
             position: relative;
         }
+
         .progress-percent {
             position: absolute;
             right: 10px;
             color: white;
             font-weight: bold;
         }
+
         .log-container {
             height: 200px;
             overflow-y: auto;
@@ -132,30 +156,38 @@
             font-family: monospace;
             margin-top: 1rem;
         }
+
         .log-entry {
             margin-bottom: 0.25rem;
             padding-bottom: 0.25rem;
             border-bottom: 1px solid #eee;
         }
+
         .log-time {
             color: #6c757d;
             margin-right: 0.5rem;
         }
+
         .log-info {
             color: #0d6efd;
         }
+
         .log-warning {
             color: #ffc107;
         }
+
         .log-error {
             color: #dc3545;
         }
+
         .log-success {
             color: #198754;
         }
+
         .recent-operations {
             margin-top: 1.5rem;
         }
+
         .operation-row:hover {
             background-color: #f8f9fa;
         }
@@ -257,19 +289,22 @@
                             </td>
                             <td th:text="${operation.fileName}">file.csv</td>
                             <td>
-                                <span class="badge" th:classappend="${operation.getStatusClass()}" th:text="${operation.getStatusDisplay()}">Статус</span>
+                                <span class="badge" th:classappend="${operation.getStatusClass()}"
+                                      th:text="${operation.getStatusDisplay()}">Статус</span>
                             </td>
                             <td th:text="${operation.getFormattedStartedAt()}">01.01.2025</td>
                             <td>
-                                    <span th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}"
-                                          th:text="${operation.recordCount + ' записей'}">100 записей</span>
+        <span th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}"
+              th:text="${operation.recordCount + ' записей'}">100 записей</span>
                                 <span th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}"
                                       class="text-danger" th:text="${operation.errorMessage}">Ошибка</span>
                             </td>
                             <td>
-                                <button class="btn btn-sm btn-outline-secondary">
+                                <!-- Заменяем кнопку на ссылку -->
+                                <a th:href="@{/import/status/{operationId}(operationId=${operation.id})}"
+                                   class="btn btn-sm btn-outline-secondary">
                                     <i class="fas fa-eye me-1"></i>Детали
-                                </button>
+                                </a>
                             </td>
                         </tr>
                         </tbody>
@@ -329,20 +364,29 @@
                         <div class="card-body p-0">
                             <div id="logContainer" class="log-container">
                                 <div class="log-entry">
-                                    <span class="log-time" th:text="${#temporals.format(activeImportOperation.startedAt, 'HH:mm:ss')}">12:00:00</span>
+                                    <span class="log-time"
+                                          th:text="${#temporals.format(activeImportOperation.startedAt, 'HH:mm:ss')}">12:00:00</span>
                                     <span class="log-info">Операция импорта инициализирована.</span>
                                 </div>
-                                <div class="log-entry" th:if="${activeImportOperation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}">
-                                    <span class="log-time" th:text="${#temporals.format(#temporals.createNow(), 'HH:mm:ss')}">12:01:00</span>
+                                <div class="log-entry"
+                                     th:if="${activeImportOperation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}">
+                                    <span class="log-time"
+                                          th:text="${#temporals.format(#temporals.createNow(), 'HH:mm:ss')}">12:01:00</span>
                                     <span class="log-info">Начало обработки файла.</span>
                                 </div>
-                                <div class="log-entry" th:if="${activeImportOperation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
-                                    <span class="log-time" th:text="${#temporals.format(activeImportOperation.completedAt, 'HH:mm:ss')}">12:05:00</span>
-                                    <span class="log-success">Импорт успешно завершен. Обработано записей: <span th:text="${activeImportOperation.recordCount}">0</span></span>
+                                <div class="log-entry"
+                                     th:if="${activeImportOperation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
+                                    <span class="log-time"
+                                          th:text="${#temporals.format(activeImportOperation.completedAt, 'HH:mm:ss')}">12:05:00</span>
+                                    <span class="log-success">Импорт успешно завершен. Обработано записей: <span
+                                            th:text="${activeImportOperation.recordCount}">0</span></span>
                                 </div>
-                                <div class="log-entry" th:if="${activeImportOperation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}">
-                                    <span class="log-time" th:text="${#temporals.format(activeImportOperation.completedAt, 'HH:mm:ss')}">12:05:00</span>
-                                    <span class="log-error">Импорт завершился с ошибкой: <span th:text="${activeImportOperation.errorMessage}">Ошибка</span></span>
+                                <div class="log-entry"
+                                     th:if="${activeImportOperation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}">
+                                    <span class="log-time"
+                                          th:text="${#temporals.format(activeImportOperation.completedAt, 'HH:mm:ss')}">12:05:00</span>
+                                    <span class="log-error">Импорт завершился с ошибкой: <span
+                                            th:text="${activeImportOperation.errorMessage}">Ошибка</span></span>
                                 </div>
                             </div>
                         </div>
@@ -371,9 +415,11 @@
                     <h5 class="card-title">Импорт данных из файла</h5>
                     <p class="card-text">Загрузите файл CSV или Excel для импорта данных.</p>
 
-                    <form id="uploadForm" th:action="@{/import/{clientId}/analyze(clientId=${client.id})}" method="post" enctype="multipart/form-data">
+                    <form id="uploadForm" th:action="@{/import/{clientId}/analyze(clientId=${client.id})}" method="post"
+                          enctype="multipart/form-data">
                         <!-- Область для перетаскивания файла -->
-                        <div id="dropZone" class="file-upload-container" onclick="document.getElementById('fileInput').click();">
+                        <div id="dropZone" class="file-upload-container"
+                             onclick="document.getElementById('fileInput').click();">
                             <div class="file-icon">
                                 <i class="fas fa-file-upload"></i>
                             </div>
@@ -385,7 +431,8 @@
                                 <span class="supported-formats">XLS</span>
                                 <span class="supported-formats">TXT</span>
                             </div>
-                            <input type="file" id="fileInput" name="file" accept=".csv,.xlsx,.xls,.txt" onchange="handleFileSelect(this.files)" />
+                            <input type="file" id="fileInput" name="file" accept=".csv,.xlsx,.xls,.txt"
+                                   onchange="handleFileSelect(this.files)"/>
                         </div>
 
                         <!-- Предпросмотр файла -->
@@ -400,7 +447,8 @@
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-cogs me-1"></i>Анализировать и настроить импорт
                                 </button>
-                                <button type="button" class="btn btn-outline-secondary ms-2" onclick="resetFileUpload()">
+                                <button type="button" class="btn btn-outline-secondary ms-2"
+                                        onclick="resetFileUpload()">
                                     <i class="fas fa-times me-1"></i>Отменить
                                 </button>
                             </div>
@@ -420,7 +468,8 @@
                     <form action="#" method="post">
                         <!-- Форма экспорта будет здесь -->
                         <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность экспорта будет добавлена позже
+                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность экспорта будет добавлена
+                            позже
                         </div>
                     </form>
                 </div>
@@ -429,7 +478,8 @@
     </div>
 
     <!-- Модальное окно подтверждения удаления -->
-    <div class="modal fade" id="deleteClientModal" tabindex="-1" aria-labelledby="deleteClientModalLabel" aria-hidden="true">
+    <div class="modal fade" id="deleteClientModal" tabindex="-1" aria-labelledby="deleteClientModalLabel"
+         aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -438,7 +488,8 @@
                 </div>
                 <div class="modal-body">
                     <p>Вы уверены, что хотите удалить клиента <strong th:text="${client.name}">Имя клиента</strong>?</p>
-                    <p class="text-danger"><strong>Внимание:</strong> Это действие нельзя отменить. Все файлы и операции этого клиента будут удалены.</p>
+                    <p class="text-danger"><strong>Внимание:</strong> Это действие нельзя отменить. Все файлы и операции
+                        этого клиента будут удалены.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -454,12 +505,12 @@
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         // Активация вкладок Bootstrap
         const triggerTabList = [].slice.call(document.querySelectorAll('#clientTabs button'));
-        triggerTabList.forEach(function(triggerEl) {
+        triggerTabList.forEach(function (triggerEl) {
             const tabTrigger = new bootstrap.Tab(triggerEl);
-            triggerEl.addEventListener('click', function(event) {
+            triggerEl.addEventListener('click', function (event) {
                 event.preventDefault();
                 tabTrigger.show();
             });
@@ -486,7 +537,7 @@
         // Обработчик для кнопки отмены импорта
         const cancelImportBtn = document.getElementById('cancelImportBtn');
         if (cancelImportBtn) {
-            cancelImportBtn.addEventListener('click', function() {
+            cancelImportBtn.addEventListener('click', function () {
                 if (confirm('Вы уверены, что хотите отменить импорт? Это действие нельзя отменить.')) {
                     cancelImport();
                 }
@@ -561,9 +612,9 @@
         }
 
         // Проверяем размер файла (максимум 10 МБ)
-        const maxFileSize = 10 * 1024 * 1024; // 10 МБ в байтах
+        const maxFileSize = 600 * 1024 * 1024; // 10 МБ в байтах
         if (file.size > maxFileSize) {
-            alert('Размер файла превышает 10 МБ. Пожалуйста, загрузите файл меньшего размера.');
+            alert('Размер файла превышает 600 МБ. Пожалуйста, загрузите файл меньшего размера.');
             resetFileUpload();
             return;
         }
@@ -623,14 +674,14 @@
         // Отключаем логи
         stompClient.debug = null;
 
-        stompClient.connect({}, function(frame) {
+        stompClient.connect({}, function (frame) {
             console.log('Connected to WebSocket for import progress tracking');
 
             // Подписываемся на обновления
-            stompClient.subscribe('/topic/import-progress/' + operationId, function(message) {
+            stompClient.subscribe('/topic/import-progress/' + operationId, function (message) {
                 updateImportProgress(JSON.parse(message.body));
             });
-        }, function(error) {
+        }, function (error) {
             console.error('Error connecting to WebSocket:', error);
         });
 
@@ -663,7 +714,7 @@
 
         // Если операция завершена, обновляем страницу через некоторое время
         if (update.completed) {
-            setTimeout(function() {
+            setTimeout(function () {
                 window.location.reload();
             }, 3000);
         }

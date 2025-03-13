@@ -19,6 +19,7 @@
             font-size: 4rem;
             color: #dc3545;
             margin-bottom: 20px;
+            animation: pulse 2s infinite;
         }
         .error-code {
             font-size: 1.5rem;
@@ -32,10 +33,46 @@
         .error-details {
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
-            border-radius: 4px;
+            border-radius: 0.5rem;
             padding: 15px;
             margin-top: 20px;
             text-align: left;
+        }
+        .detail-item {
+            margin-bottom: 0.5rem;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #495057;
+        }
+        .suggestions {
+            margin-top: 2rem;
+            text-align: left;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+        }
+        .suggestions h5 {
+            margin-bottom: 1rem;
+            color: #495057;
+        }
+        .suggestions ul {
+            padding-left: 1.5rem;
+        }
+        .suggestions li {
+            margin-bottom: 0.5rem;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .action-buttons {
+            margin-top: 2rem;
+        }
+        .action-buttons .btn {
+            margin: 0 0.5rem;
+            min-width: 150px;
         }
     </style>
 </head>
@@ -55,23 +92,63 @@
         <div class="error-message" th:text="${errorMessage ?: 'Произошла непредвиденная ошибка'}">
             Произошла непредвиденная ошибка
         </div>
-        <div class="mt-4">
+
+        <!-- Кнопки действий -->
+        <div class="action-buttons">
             <a th:href="@{/}" class="btn btn-primary">
-                <i class="fas fa-home me-1"></i>Вернуться на главную
+                <i class="fas fa-home me-1"></i>На главную
             </a>
-            <button onclick="window.history.back()" class="btn btn-outline-secondary ms-2">
+            <button onclick="window.history.back()" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i>Вернуться назад
             </button>
+            <button onclick="window.location.reload()" class="btn btn-outline-info">
+                <i class="fas fa-sync-alt me-1"></i>Обновить страницу
+            </button>
         </div>
+
+        <!-- Детали ошибки -->
         <div class="error-details mt-4" th:if="${requestUri}">
-            <p><strong>URL:</strong> <span th:text="${requestUri}"></span></p>
-            <p><strong>Время:</strong> <span th:text="${#dates.format(new java.util.Date(timestamp), 'dd.MM.yyyy HH:mm:ss')}"></span></p>
+            <div class="detail-item">
+                <span class="detail-label">URL:</span>
+                <span th:text="${requestUri}"></span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Время:</span>
+                <span th:text="${#dates.format(new java.util.Date(timestamp), 'dd.MM.yyyy HH:mm:ss')}"></span>
+            </div>
+            <div class="detail-item" th:if="${status}">
+                <span class="detail-label">Статус:</span>
+                <span th:text="${status}"></span>
+            </div>
+        </div>
+
+        <!-- Возможные решения -->
+        <div class="suggestions">
+            <h5>Возможные решения:</h5>
+            <ul>
+                <li>Проверьте правильность введенных данных</li>
+                <li>Убедитесь, что URL указан правильно</li>
+                <li>Возможно, требуется повторная авторизация</li>
+                <li>Попробуйте очистить кэш браузера и повторить попытку</li>
+                <li>Если проблема повторяется, обратитесь к администратору системы</li>
+            </ul>
         </div>
     </div>
 </section>
 
 <script>
-    console.error('Page error: ' + document.querySelector('.error-message').textContent);
+    document.addEventListener('DOMContentLoaded', function() {
+        console.error('Ошибка страницы: ' + document.querySelector('.error-message').textContent);
+
+        // Отправка информации об ошибке в аналитику
+        if (typeof gtag === 'function') {
+            gtag('event', 'error', {
+                'event_category': 'error',
+                'event_label': document.querySelector('.error-message').textContent,
+                'value': window.location.pathname
+            });
+        }
+    });
 </script>
 </body>
 </html>

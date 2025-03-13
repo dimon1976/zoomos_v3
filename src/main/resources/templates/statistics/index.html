@@ -1,44 +1,270 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org"
-      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout}">
+      th:replace="~{layout/main :: html(
+        'Статистика - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Общая статистика',
+        ~{::.page-actions}
+      )}">
 <head>
-    <title>Статистика</title>
+    <title>Статистика - Обработка файлов</title>
+    <style>
+        .stats-card {
+            transition: all 0.3s ease;
+            border-radius: 0.5rem;
+            height: 100%;
+            overflow: hidden;
+        }
+        .stats-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .stats-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: white;
+            width: 5rem;
+            height: 5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        .stats-primary {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+        }
+        .stats-success {
+            background: linear-gradient(135deg, #28a745, #145523);
+        }
+        .stats-warning {
+            background: linear-gradient(135deg, #ffc107, #d39e00);
+        }
+        .stats-info {
+            background: linear-gradient(135deg, #17a2b8, #0f6674);
+        }
+        .stats-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .stats-label {
+            font-size: 1rem;
+            color: #6c757d;
+        }
+        .stats-description {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 1rem;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+        }
+        .log-container {
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-size: 0.85rem;
+        }
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        .filter-toolbar {
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
 </head>
 <body>
-<!-- Page title -->
-<h1 layout:fragment="page-title">Общая статистика</h1>
+<div class="page-actions">
+    <button class="btn btn-outline-primary" id="refreshStats">
+        <i class="fas fa-sync-alt me-1"></i>Обновить
+    </button>
+    <a th:href="@{/stats/export}" class="btn btn-outline-success ms-2">
+        <i class="fas fa-file-export me-1"></i>Экспорт
+    </a>
+</div>
 
-<!-- Main content -->
-<div layout:fragment="content">
-    <div class="row">
-        <div class="col-12 mb-4">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-chart-line me-2"></i> Общая статистика операций
-                    </h5>
+<section>
+    <!-- Фильтры статистики -->
+    <div class="filter-toolbar mb-4">
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label for="dateRangeSelect" class="form-label">Период</label>
+                <select id="dateRangeSelect" class="form-select">
+                    <option value="today">Сегодня</option>
+                    <option value="yesterday">Вчера</option>
+                    <option value="week" selected>Неделя</option>
+                    <option value="month">Месяц</option>
+                    <option value="quarter">Квартал</option>
+                    <option value="year">Год</option>
+                    <option value="custom">Произвольный</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="clientSelect" class="form-label">Клиент</label>
+                <select id="clientSelect" class="form-select">
+                    <option value="all" selected>Все клиенты</option>
+                    <!-- Здесь будут опции с клиентами -->
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="operationTypeSelect" class="form-label">Тип операции</label>
+                <select id="operationTypeSelect" class="form-select">
+                    <option value="all" selected>Все операции</option>
+                    <option value="import">Импорт</option>
+                    <option value="export">Экспорт</option>
+                    <option value="process">Обработка</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button id="applyFilters" class="btn btn-primary w-100">
+                    <i class="fas fa-filter me-1"></i>Применить
+                </button>
+            </div>
+        </div>
+
+        <!-- Дополнительные параметры фильтрации (скрыты по умолчанию) -->
+        <div id="advancedFilters" class="mt-3" style="display: none;">
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="startDate" class="form-label">Начальная дата</label>
+                    <input type="date" id="startDate" class="form-control">
                 </div>
-                <div class="card-body text-center">
-                    <p class="text-muted">Статистика по операциям пока недоступна</p>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i> Данный раздел будет содержать информацию о всех операциях в системе с возможностью фильтрации по датам и клиентам
+                <div class="col-md-4">
+                    <label for="endDate" class="form-label">Конечная дата</label>
+                    <input type="date" id="endDate" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label for="statusSelect" class="form-label">Статус</label>
+                    <select id="statusSelect" class="form-select">
+                        <option value="all" selected>Все статусы</option>
+                        <option value="completed">Завершено</option>
+                        <option value="failed">Ошибка</option>
+                        <option value="processing">В процессе</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопка для показа/скрытия дополнительных фильтров -->
+        <div class="text-center mt-2">
+            <button id="toggleAdvancedFilters" class="btn btn-sm btn-link">
+                Дополнительные фильтры <i class="fas fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Сводная статистика -->
+    <div class="row mb-4">
+        <!-- Всего операций -->
+        <div class="col-md-3 mb-4">
+            <div class="stats-card card text-center">
+                <div class="card-body">
+                    <div class="stats-icon stats-primary mx-auto">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stats-value">0</div>
+                    <div class="stats-label">Всего операций</div>
+                    <div class="stats-description">
+                        Общее количество операций со всеми файлами
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Успешных операций -->
+        <div class="col-md-3 mb-4">
+            <div class="stats-card card text-center">
+                <div class="card-body">
+                    <div class="stats-icon stats-success mx-auto">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stats-value">0</div>
+                    <div class="stats-label">Успешных</div>
+                    <div class="stats-description">
+                        Операции, завершенные успешно
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ошибок -->
+        <div class="col-md-3 mb-4">
+            <div class="stats-card card text-center">
+                <div class="card-body">
+                    <div class="stats-icon stats-warning mx-auto">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stats-value">0</div>
+                    <div class="stats-label">Ошибок</div>
+                    <div class="stats-description">
+                        Операции, завершенные с ошибкой
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Обработано данных -->
+        <div class="col-md-3 mb-4">
+            <div class="stats-card card text-center">
+                <div class="card-body">
+                    <div class="stats-icon stats-info mx-auto">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="stats-value">0</div>
+                    <div class="stats-label">Записей</div>
+                    <div class="stats-description">
+                        Общее количество обработанных записей
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- График операций -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-chart-line me-2"></i>График операций
+            </h5>
+        </div>
+        <div class="card-body">
+            <div id="operationsChart" class="chart-container">
+                <div class="empty-state">
+                    <i class="fas fa-chart-area fa-3x text-muted mb-3"></i>
+                    <h5>Данные для графика пока недоступны</h5>
+                    <p class="text-muted">Статистика будет отображаться здесь после выполнения операций</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Статистика по типам операций -->
     <div class="row">
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">
                     <h5 class="card-title mb-0">
-                        <i class="fas fa-file-import me-2"></i> Импорт данных
+                        <i class="fas fa-file-import me-2"></i>Импорт данных
                     </h5>
                 </div>
-                <div class="card-body text-center">
-                    <p class="text-muted">Статистика по импорту пока недоступна</p>
+                <div class="card-body">
+                    <div id="importStats" class="chart-container">
+                        <div class="empty-state">
+                            <p class="text-muted">Статистика по импорту пока недоступна</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -47,30 +273,89 @@
             <div class="card h-100">
                 <div class="card-header bg-warning text-dark">
                     <h5 class="card-title mb-0">
-                        <i class="fas fa-file-export me-2"></i> Экспорт данных
+                        <i class="fas fa-file-export me-2"></i>Экспорт данных
                     </h5>
                 </div>
-                <div class="card-body text-center">
-                    <p class="text-muted">Статистика по экспорту пока недоступна</p>
+                <div class="card-body">
+                    <div id="exportStats" class="chart-container">
+                        <div class="empty-state">
+                            <p class="text-muted">Статистика по экспорту пока недоступна</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-info text-white">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-clock me-2"></i> Журнал последних операций
-                    </h5>
-                </div>
-                <div class="card-body text-center">
+    <!-- Журнал последних операций -->
+    <div class="card">
+        <div class="card-header bg-info text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-history me-2"></i>Журнал последних операций
+            </h5>
+        </div>
+        <div class="card-body">
+            <div id="operationsLog" class="log-container">
+                <div class="empty-state">
                     <p class="text-muted">Журнал операций пока пуст</p>
                 </div>
             </div>
         </div>
     </div>
-</div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Страница статистики загружена');
+
+        // Обработчик отображения дополнительных фильтров
+        const toggleButton = document.getElementById('toggleAdvancedFilters');
+        const advancedFilters = document.getElementById('advancedFilters');
+
+        toggleButton.addEventListener('click', function() {
+            const isVisible = advancedFilters.style.display !== 'none';
+            advancedFilters.style.display = isVisible ? 'none' : 'block';
+
+            // Изменяем иконку
+            const icon = toggleButton.querySelector('i');
+            icon.classList.toggle('fa-chevron-down', isVisible);
+            icon.classList.toggle('fa-chevron-up', !isVisible);
+        });
+
+        // Обработчик изменения периода
+        const dateRangeSelect = document.getElementById('dateRangeSelect');
+        dateRangeSelect.addEventListener('change', function() {
+            const isCustomRange = this.value === 'custom';
+            if (isCustomRange && advancedFilters.style.display === 'none') {
+                advancedFilters.style.display = 'block';
+                toggleButton.querySelector('i').classList.replace('fa-chevron-down', 'fa-chevron-up');
+            }
+        });
+
+        // Обработчик кнопки обновления статистики
+        const refreshButton = document.getElementById('refreshStats');
+        refreshButton.addEventListener('click', function() {
+            refreshButton.disabled = true;
+            refreshButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Обновление...';
+
+            // Имитация загрузки данных
+            setTimeout(() => {
+                refreshButton.disabled = false;
+                refreshButton.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Обновить';
+
+                // Здесь должен быть запрос на обновление статистики
+                console.log('Обновление статистики...');
+            }, 1500);
+        });
+
+        // Инициализация с текущими датами для произвольного периода
+        const today = new Date();
+        const weekAgo = new Date();
+        weekAgo.setDate(today.getDate() - 7);
+
+        document.getElementById('startDate').valueAsDate = weekAgo;
+        document.getElementById('endDate').valueAsDate = today;
+    });
+</script>
 </body>
 </html>

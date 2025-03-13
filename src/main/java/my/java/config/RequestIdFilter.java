@@ -23,20 +23,11 @@ public class RequestIdFilter implements Filter {
     private static final String REQUEST_ID_HEADER = "X-Request-ID";
     private static final int REQUEST_ID_LENGTH = 16;
 
-    /**
-     * Обрабатывает HTTP-запрос, добавляя к нему уникальный идентификатор.
-     *
-     * @param request запрос
-     * @param response ответ
-     * @param chain цепочка фильтров
-     * @throws IOException если возникла ошибка ввода-вывода
-     * @throws ServletException если возникла ошибка в сервлете
-     */
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
         try {
-            // Получаем идентификатор запроса из заголовка или генерируем новый
+            // Получаем или создаем идентификатор запроса
             String requestId = getOrCreateRequestId((HttpServletRequest) request);
             log.trace("Запрос получил ID: {}", requestId);
 
@@ -54,25 +45,14 @@ public class RequestIdFilter implements Filter {
 
     /**
      * Получает идентификатор запроса из заголовка или генерирует новый.
-     *
-     * @param request HTTP-запрос
-     * @return идентификатор запроса
      */
     private String getOrCreateRequestId(HttpServletRequest request) {
         String requestId = request.getHeader(REQUEST_ID_HEADER);
-
-        if (isValidRequestId(requestId)) {
-            return requestId;
-        }
-
-        return generateRequestId();
+        return isValidRequestId(requestId) ? requestId : generateRequestId();
     }
 
     /**
      * Проверяет, является ли идентификатор запроса валидным.
-     *
-     * @param requestId идентификатор запроса
-     * @return true, если идентификатор валиден
      */
     private boolean isValidRequestId(String requestId) {
         return requestId != null && !requestId.isEmpty();
@@ -80,8 +60,6 @@ public class RequestIdFilter implements Filter {
 
     /**
      * Генерирует новый уникальный идентификатор запроса.
-     *
-     * @return новый идентификатор запроса
      */
     private String generateRequestId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, REQUEST_ID_LENGTH);

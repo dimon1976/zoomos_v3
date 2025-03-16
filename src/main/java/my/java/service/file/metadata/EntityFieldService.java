@@ -1,9 +1,8 @@
 package my.java.service.file.metadata;
 
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -39,10 +38,10 @@ public class EntityFieldService {
         Product product = new Product();
         product.setTransformerFactory(transformerFactory);
 
-        RegionData regionData = new RegionData();
+        MarketData regionData = new MarketData();
         regionData.setTransformerFactory(transformerFactory);
 
-        CompetitorData competitorData = new CompetitorData();
+        MarketData competitorData = new MarketData();
         competitorData.setTransformerFactory(transformerFactory);
 
         // Сохраняем маппинги в кэше
@@ -116,11 +115,11 @@ public class EntityFieldService {
                 product.setTransformerFactory(transformerFactory);
                 return product;
             case "regiondata":
-                RegionData regionData = new RegionData();
+                MarketData regionData = new MarketData();
                 regionData.setTransformerFactory(transformerFactory);
                 return regionData;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
+                MarketData competitorData = new MarketData();
                 competitorData.setTransformerFactory(transformerFactory);
                 return competitorData;
             default:

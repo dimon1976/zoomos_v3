@@ -3,12 +3,10 @@ package my.java.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
-import my.java.service.competitor.CompetitorDataService;
+import my.java.service.market.MarketDataService;
 import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,8 +23,8 @@ import java.util.Map;
 public class EntityDataController {
 
     private final ProductService productService;
-    private final RegionDataService regionDataService;
-    private final CompetitorDataService competitorDataService;
+    private final MarketDataService marketDataService;
+
 
     /**
      * Получение продуктов по клиенту
@@ -42,9 +40,9 @@ public class EntityDataController {
      * Получение данных регионов по клиенту
      */
     @GetMapping("/regions/client/{clientId}")
-    public ResponseEntity<List<RegionData>> getRegionsByClient(@PathVariable Long clientId) {
+    public ResponseEntity<List<MarketData>> getRegionsByClient(@PathVariable Long clientId) {
         log.debug("GET request to get regions by client: {}", clientId);
-        List<RegionData> regions = regionDataService.findByClientId(clientId);
+        List<MarketData> regions = marketDataService.findByClientId(clientId);
         return ResponseEntity.ok(regions);
     }
 
@@ -52,9 +50,9 @@ public class EntityDataController {
      * Получение данных конкурентов по клиенту
      */
     @GetMapping("/competitors/client/{clientId}")
-    public ResponseEntity<List<CompetitorData>> getCompetitorsByClient(@PathVariable Long clientId) {
+    public ResponseEntity<List<MarketData>> getCompetitorsByClient(@PathVariable Long clientId) {
         log.debug("GET request to get competitors by client: {}", clientId);
-        List<CompetitorData> competitors = competitorDataService.findByClientId(clientId);
+        List<MarketData> competitors = marketDataService.findByClientId(clientId);
         return ResponseEntity.ok(competitors);
     }
 

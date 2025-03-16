@@ -321,9 +321,9 @@ public class FieldMappingServiceImpl implements FieldMappingService {
                 case "product":
                     return new my.java.model.entity.Product();
                 case "regiondata":
-                    return new my.java.model.entity.RegionData();
+                    return new my.java.model.entity.MarketData();
                 case "competitordata":
-                    return new my.java.model.entity.CompetitorData();
+                    return new my.java.model.entity.MarketData();
                 default:
                     log.warn("Неизвестный тип сущности: {}", entityType);
                     return null;

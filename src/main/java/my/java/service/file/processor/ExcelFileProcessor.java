@@ -6,10 +6,11 @@ import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
+import my.java.repository.FileOperationRepository;
+import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -48,8 +49,12 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
      * @param transformerFactory фабрика трансформеров значений
      */
     @Autowired
-    public ExcelFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
-        super(pathResolver, transformerFactory);
+    public ExcelFileProcessor(
+            PathResolver pathResolver,
+            ValueTransformerFactory transformerFactory,
+            EntitySetBuilderFactory entitySetBuilderFactory,
+            FileOperationRepository fileOperationRepository) {
+        super(pathResolver, transformerFactory, entitySetBuilderFactory, fileOperationRepository);
     }
 
     @Override

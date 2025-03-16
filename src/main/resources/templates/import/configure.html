@@ -596,39 +596,6 @@
     function loadEntityFields(entityType) {
         console.log('Loading entity fields for type: ' + entityType);
 
-        // В реальном приложении здесь будет AJAX-запрос
-        // Для демонстрации используем заглушки
-
-        // let fields = [];
-        //
-        // if (entityType === 'product') {
-        //     fields = [
-        //         { name: 'productId', displayName: 'ID товара' },
-        //         { name: 'productName', displayName: 'Название товара' },
-        //         { name: 'productBrand', displayName: 'Бренд' },
-        //         { name: 'productBar', displayName: 'Штрихкод' },
-        //         { name: 'productDescription', displayName: 'Описание' },
-        //         { name: 'productUrl', displayName: 'URL товара' },
-        //         { name: 'productCategory1', displayName: 'Категория 1' },
-        //         { name: 'productCategory2', displayName: 'Категория 2' },
-        //         { name: 'productCategory3', displayName: 'Категория 3' },
-        //         { name: 'productPrice', displayName: 'Цена' },
-        //         { name: 'productAnalog', displayName: 'Аналог' }
-        //     ];
-        // } else if (entityType === 'regiondata') {
-        //     fields = [
-        //         { name: 'region', displayName: 'Регион' },
-        //         { name: 'regionAddress', displayName: 'Адрес' }
-        //     ];
-        // } else if (entityType === 'competitordata') {
-        //     fields = [
-        //         { name: 'competitorName', displayName: 'Название конкурента' },
-        //         { name: 'competitorPrice', displayName: 'Цена у конкурента' },
-        //         { name: 'competitorUrl', displayName: 'URL конкурента' },
-        //         { name: 'competitorProductName', displayName: 'Название товара у конкурента' }
-        //     ];
-        // }
-
         // Заполняем все селекторы полей
         const fieldSelectors = document.querySelectorAll('.entity-field-selector');
 

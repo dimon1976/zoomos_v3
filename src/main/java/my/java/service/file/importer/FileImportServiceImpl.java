@@ -1,6 +1,6 @@
 package my.java.service.file.importer;
 
-import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
@@ -12,10 +12,13 @@ import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
 import my.java.repository.FileOperationRepository;
 import my.java.service.competitor.CompetitorDataService;
+import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.mapping.FieldMappingService;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
+import my.java.service.file.repository.RelatedEntitiesRepository;
 import my.java.service.file.strategy.FileProcessingStrategy;
+import my.java.service.file.tracker.ImportProgressTracker;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.service.product.ProductService;
 import my.java.service.region.RegionDataService;
@@ -32,6 +35,7 @@ import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Реализация сервиса импорта файлов.
@@ -39,7 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
+//@RequiredArgsConstructor
 public class FileImportServiceImpl implements FileImportService {
 
     private final PathResolver pathResolver;
@@ -50,6 +54,40 @@ public class FileImportServiceImpl implements FileImportService {
     private final ProductService productService;
     private final RegionDataService regionDataService;
     private final CompetitorDataService competitorDataService;
+    private final RelatedEntitiesRepository relatedEntitiesRepository;
+    private final EntitySetBuilderFactory entitySetBuilderFactory;
+    private final ImportProgressTracker importProgressTracker;
+
+
+    // Новый явный конструктор
+    public FileImportServiceImpl(
+            PathResolver pathResolver,
+            FileOperationRepository fileOperationRepository,
+            FileProcessorFactory fileProcessorFactory,
+            FieldMappingService fieldMappingService,
+            ValueTransformerFactory transformerFactory,
+            ProductService productService,
+            RegionDataService regionDataService,
+            CompetitorDataService competitorDataService,
+            @Qualifier("fileProcessingExecutor") TaskExecutor fileProcessingExecutor,
+            List<FileProcessingStrategy> processingStrategies,
+            RelatedEntitiesRepository relatedEntitiesRepository,
+            EntitySetBuilderFactory entitySetBuilderFactory, ImportProgressTracker importProgressTracker) {
+
+        this.pathResolver = pathResolver;
+        this.fileOperationRepository = fileOperationRepository;
+        this.fileProcessorFactory = fileProcessorFactory;
+        this.fieldMappingService = fieldMappingService;
+        this.transformerFactory = transformerFactory;
+        this.productService = productService;
+        this.regionDataService = regionDataService;
+        this.competitorDataService = competitorDataService;
+        this.fileProcessingExecutor = fileProcessingExecutor;
+        this.processingStrategies = processingStrategies;
+        this.relatedEntitiesRepository = relatedEntitiesRepository;
+        this.entitySetBuilderFactory = entitySetBuilderFactory;
+        this.importProgressTracker = importProgressTracker;
+    }
 
     // Пул потоков для асинхронной обработки файлов
     @Qualifier("fileProcessingExecutor")
@@ -111,6 +149,16 @@ public class FileImportServiceImpl implements FileImportService {
             log.error("Ошибка при сохранении файла: {}", e.getMessage(), e);
             throw new FileOperationException("Не удалось сохранить файл: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public List<String> getSupportedEntityTypes() {
+        List<String> types = new ArrayList<>();
+        types.add("product");
+        types.add("regiondata");
+        types.add("competitordata");
+        types.add("product_with_related");
+        return types;
     }
 
     @Override
@@ -249,7 +297,14 @@ public class FileImportServiceImpl implements FileImportService {
         log.info("Обработка загруженного файла: {}, клиент: {}", filePath, client.getName());
 
         // Создаем запись об операции, если еще не создана
-        FileOperation operation = findOrCreateFileOperation(client, filePath);
+        FileOperation operation = findOrCreateFileOperation(client, filePath, params);
+
+        // Инициализируем трекер прогресса для операции
+        if (operation != null && operation.getId() != null) {
+            log.debug("Инициализация трекера прогресса для операции #{}", operation.getId());
+            importProgressTracker.initProgress(operation.getId(), 0);
+            importProgressTracker.updateProgress(operation.getId(), 1);
+        }
 
         try {
             // Получаем подходящий процессор для файла
@@ -295,30 +350,43 @@ public class FileImportServiceImpl implements FileImportService {
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
 
-            // Обрабатываем файл и получаем список сущностей
+            // Обрабатываем файл
             List<ImportableEntity> entities = processor.processFile(
                     filePath, entityType, client, fieldMapping, params, operation);
 
-            // Сохраняем сущности в БД
+            // Сохраняем сущности в БД через соответствующий механизм
             int savedEntities = saveEntities(entities, entityType);
 
             // Обновляем статус операции
             operation.markAsCompleted(savedEntities);
             operation = fileOperationRepository.save(operation);
 
-            log.info("Файл успешно обработан: {}, создано сущностей: {}", filePath, savedEntities);
+            // Завершаем отслеживание прогресса
+            if (operation != null && operation.getId() != null) {
+                importProgressTracker.completeProgress(operation.getId(), true, savedEntities,
+                        savedEntities, null);
+            }
 
             // Перемещаем файл из временной директории в постоянную
-            Path permanentPath = pathResolver.moveFromTempToUpload(filePath, "imported_" + client.getId());
+            Path permanentPath = pathResolver.moveFromTempToUpload(filePath, "imported_" + client.getId() + "_" + operation.getId());
             operation.setResultFilePath(permanentPath.toString());
             operation = fileOperationRepository.save(operation);
+
+            log.info("Файл успешно обработан: {}, создано сущностей: {}", filePath, savedEntities);
 
             return mapToDto(operation);
         } catch (Exception e) {
             log.error("Ошибка при обработке файла: {}", e.getMessage(), e);
             operation.markAsFailed(e.getMessage());
             operation = fileOperationRepository.save(operation);
+
+            // Отмечаем прогресс как завершенный с ошибкой
+            if (operation != null && operation.getId() != null) {
+                importProgressTracker.completeProgress(operation.getId(), false, 0, 0, e.getMessage());
+            }
+
             throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
+
         }
     }
 
@@ -404,7 +472,7 @@ public class FileImportServiceImpl implements FileImportService {
      * @param filePath путь к файлу
      * @return операция
      */
-    private FileOperation findOrCreateFileOperation(Client client, Path filePath) {
+    private FileOperation findOrCreateFileOperation(Client client, Path filePath, Map<String, String> params) {
         // Проверяем, есть ли уже операция для этого файла
         List<FileOperation> operations = fileOperationRepository.findByClientIdAndStatus(
                 client.getId(), FileOperation.OperationStatus.PENDING);
@@ -426,9 +494,50 @@ public class FileImportServiceImpl implements FileImportService {
         operation.setFileSize(pathResolver.getFileSize(filePath));
         operation.setStartedAt(ZonedDateTime.now());
 
+        // Установка параметров операции из переданных параметров
+        if (params != null) {
+            // Установка размера пакета
+            if (params.containsKey("batchSize")) {
+                try {
+                    int batchSize = Integer.parseInt(params.get("batchSize"));
+                    operation.setBatchSize(batchSize);
+                    log.debug("Установлен размер пакета: {}", batchSize);
+                } catch (NumberFormatException e) {
+                    log.warn("Невозможно преобразовать batchSize к int: {}", params.get("batchSize"));
+                }
+            }
+
+            // Установка стратегии обработки
+            if (params.containsKey("processingStrategy")) {
+                operation.setProcessingStrategy(params.get("processingStrategy"));
+                log.debug("Установлена стратегия обработки: {}", params.get("processingStrategy"));
+            }
+
+            // Установка способа обработки ошибок
+            if (params.containsKey("errorHandling")) {
+                operation.setErrorHandling(params.get("errorHandling"));
+                log.debug("Установлен способ обработки ошибок: {}", params.get("errorHandling"));
+            }
+
+            // Установка способа обработки дубликатов
+            if (params.containsKey("duplicateHandling")) {
+                operation.setDuplicateHandling(params.get("duplicateHandling"));
+                log.debug("Установлен способ обработки дубликатов: {}", params.get("duplicateHandling"));
+            }
+
+            // Сохранение всех параметров в виде JSON в processingParams
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                operation.setProcessingParams(mapper.writeValueAsString(params));
+            } catch (Exception e) {
+                log.error("Ошибка при сериализации параметров: {}", e.getMessage());
+            }
+        }
+
         // Сохраняем операцию в БД
         return fileOperationRepository.save(operation);
     }
+
 
     /**
      * Определяет тип файла по MultipartFile.
@@ -500,15 +609,20 @@ public class FileImportServiceImpl implements FileImportService {
             return 0;
         }
 
-        int savedCount = 0;
+        // Проверяем специальные типы сущностей для использования единого репозитория
+        if (entityType != null && entitySetBuilderFactory.supportsEntityType(entityType)) {
+            log.info("Используем единый репозиторий для сохранения связанных сущностей типа: {}", entityType);
+            return relatedEntitiesRepository.saveRelatedEntities(entities);
+        }
 
-        // В зависимости от типа сущности, используем соответствующий сервис
+        // Стандартная обработка для обычных сущностей
+        int savedCount = 0;
         switch (entityType.toLowerCase()) {
             case "product":
                 List<Product> products = entities.stream()
                         .filter(e -> e instanceof Product)
                         .map(e -> (Product) e)
-                        .toList();
+                        .collect(Collectors.toList());
                 savedCount = productService.saveProducts(products);
                 log.info("Сохранено {} продуктов", savedCount);
                 break;
@@ -517,7 +631,7 @@ public class FileImportServiceImpl implements FileImportService {
                 List<RegionData> regionDataList = entities.stream()
                         .filter(e -> e instanceof RegionData)
                         .map(e -> (RegionData) e)
-                        .toList();
+                        .collect(Collectors.toList());
                 savedCount = regionDataService.saveRegionDataList(regionDataList);
                 log.info("Сохранено {} данных регионов", savedCount);
                 break;
@@ -526,7 +640,7 @@ public class FileImportServiceImpl implements FileImportService {
                 List<CompetitorData> competitorDataList = entities.stream()
                         .filter(e -> e instanceof CompetitorData)
                         .map(e -> (CompetitorData) e)
-                        .toList();
+                        .collect(Collectors.toList());
                 savedCount = competitorDataService.saveCompetitorDataList(competitorDataList);
                 log.info("Сохранено {} данных конкурентов", savedCount);
                 break;
@@ -566,6 +680,10 @@ public class FileImportServiceImpl implements FileImportService {
                 .processingProgress(operation.getProcessingProgress())
                 .processedRecords(operation.getProcessedRecords())
                 .totalRecords(operation.getTotalRecords())
+                .batchSize(operation.getBatchSize())
+                .processingStrategy(operation.getProcessingStrategy())
+                .errorHandling(operation.getErrorHandling())
+                .duplicateHandling(operation.getDuplicateHandling())
                 .build();
     }
 }

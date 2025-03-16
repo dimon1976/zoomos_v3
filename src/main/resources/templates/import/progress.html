@@ -1,306 +1,204 @@
-<!-- src/main/resources/templates/import/progress.html -->
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
-        'Процесс импорта - Обработка файлов',
+        'Прогресс импорта - Обработка файлов',
         ~{::section},
         ~{::script},
         ~{::style},
-        'Процесс импорта файла',
+        'Прогресс импорта файла ' + ${operation.fileName},
         ~{::.page-actions}
       )}">
 <head>
-    <title>Процесс импорта - Обработка файлов</title>
+    <title>Прогресс импорта - Обработка файлов</title>
     <style>
         .progress-container {
-            margin: 30px 0;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
         }
         .progress {
-            height: 25px;
+            height: 2rem;
         }
         .progress-bar {
-            transition: width 0.3s ease;
-            position: relative;
-        }
-        .progress-percent {
-            position: absolute;
-            right: 10px;
-            color: white;
-            font-weight: bold;
-        }
-        .status-badge {
             font-size: 1rem;
-            padding: 0.5rem 1rem;
+            line-height: 2rem;
+        }
+        .info-card {
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+            padding: 1.5rem;
+            background-color: #f8f9fa;
+        }
+        .operation-details dt {
+            font-weight: 600;
+            color: #495057;
+        }
+        .operation-details dd {
+            margin-bottom: 0.75rem;
         }
         .log-container {
-            height: 300px;
+            max-height: 300px;
             overflow-y: auto;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: #212529;
+            color: #f8f9fa;
             border-radius: 0.25rem;
-            padding: 1rem;
             font-family: monospace;
+            padding: 1rem;
+            margin-top: 1.5rem;
         }
         .log-entry {
             margin-bottom: 0.25rem;
-            padding-bottom: 0.25rem;
-            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
         }
         .log-time {
             color: #6c757d;
             margin-right: 0.5rem;
         }
         .log-info {
-            color: #0d6efd;
+            color: #17a2b8;
         }
-        .log-warning {
-            color: #ffc107;
+        .log-success {
+            color: #28a745;
         }
         .log-error {
             color: #dc3545;
         }
-        .log-success {
-            color: #198754;
-        }
-        .file-info {
-            background-color: #f8f9fa;
-            border-radius: 0.25rem;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .completion-actions {
+        #completionActions {
             display: none;
-            margin-top: 2rem;
-        }
-        .animated-spinner {
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-<!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-primary me-2">
-        <i class="fas fa-user me-1"></i>Профиль клиента
-    </a>
-    <a th:href="@{/import/{clientId}(clientId=${client.id})}" class="btn btn-outline-secondary">
-        <i class="fas fa-file-import me-1"></i>Новый импорт
+    <a th:href="@{/clients/{clientId}(clientId=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Вернуться к клиенту
     </a>
 </div>
 
 <section>
-    <!-- Скрытые поля для JS -->
     <input type="hidden" id="operationId" th:value="${operation.id}">
     <input type="hidden" id="clientId" th:value="${client.id}">
 
-    <!-- Информация о файле -->
-    <div class="file-info">
-        <div class="d-flex align-items-center">
-            <i class="fas fa-file-alt text-primary me-2 fa-2x"></i>
+    <!-- Данные о времени начала операции -->
+    <div th:if="${operation.startedAt}" th:data-start-time="${operation.startedAt}" style="display: none;"></div>
+
+    <!-- Информация об операции -->
+    <div class="info-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h5 class="mb-0" th:text="${operation.fileName}">filename.csv</h5>
-                <p class="text-muted mb-0" th:text="${client.name}">Имя клиента</p>
+                <h4 class="mb-0">
+                    <i class="fas fa-file-import me-2 text-primary"></i>
+                    <span th:text="${operation.fileName}">filename.csv</span>
+                </h4>
+                <p class="text-muted mb-0">
+                    Импорт данных для клиента
+                    <strong th:text="${client.name}">Client Name</strong>
+                </p>
+            </div>
+            <div>
+                <span id="importStatus" class="badge bg-primary">Импорт в процессе</span>
+            </div>
+        </div>
+
+        <!-- Строка прогресса -->
+        <div class="progress-container">
+            <div class="progress">
+                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+                     style="width: 0%">0%</div>
+            </div>
+            <p id="progressText" class="text-center mt-2">Подготовка к импорту...</p>
+        </div>
+
+        <!-- Детали операции -->
+        <div class="row">
+            <div class="col-md-6">
+                <dl class="row operation-details">
+                    <dt class="col-sm-5">Время начала:</dt>
+                    <dd class="col-sm-7" th:text="${#temporals.format(operation.startedAt, 'dd.MM.yyyy HH:mm:ss')}">
+                        01.01.2023 12:00:00
+                    </dd>
+
+                    <dt class="col-sm-5">Прошло времени:</dt>
+                    <dd class="col-sm-7" id="elapsedTime">0 мин 0 сек</dd>
+
+                    <dt class="col-sm-5">Тип файла:</dt>
+                    <dd class="col-sm-7" th:text="${operation.fileType}">CSV</dd>
+                </dl>
+            </div>
+            <div class="col-md-6">
+                <dl class="row operation-details">
+                    <dt class="col-sm-5">Стратегия:</dt>
+                    <dd class="col-sm-7" th:text="${operation.processingStrategy ?: 'Стандартная'}">
+                        Стандартная
+                    </dd>
+
+                    <dt class="col-sm-5">Размер пакета:</dt>
+                    <dd class="col-sm-7" th:text="${operation.batchSize ?: '500'} + ' записей'">
+                        500 записей
+                    </dd>
+
+                    <dt class="col-sm-5">Ожидается записей:</dt>
+                    <dd class="col-sm-7" th:text="${operation.totalRecords ?: 'Неизвестно'}">
+                        1000
+                    </dd>
+                </dl>
             </div>
         </div>
     </div>
 
-    <!-- Статус импорта -->
-    <div class="text-center mb-4">
-        <div id="connectionStatus" class="alert alert-warning">
-            <i class="fas fa-sync-alt fa-spin me-2"></i>Подключение для отслеживания прогресса...
-        </div>
-
-        <h3>Статус импорта:
-            <span id="importStatus" th:class="${'badge ' + (operation.status == T(my.java.model.FileOperation.OperationStatus).PENDING ? 'bg-warning' :
-               operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING ? 'bg-primary' :
-               operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED ? 'bg-success' : 'bg-danger')}"
-                  th:text="${operation.status == T(my.java.model.FileOperation.OperationStatus).PENDING ? 'Ожидание' :
-                      operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING ? 'Импорт в процессе' :
-                      operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED ? 'Завершено' : 'Ошибка'}">
-                Статус
-            </span>
-        </h3>
-
-        <div id="errorMessage" class="alert alert-danger mt-3 d-none">
-            <i class="fas fa-exclamation-circle me-2"></i>
-            <span th:text="${operation.errorMessage}">Сообщение об ошибке</span>
-        </div>
+    <!-- Сообщение об ошибке подключения -->
+    <div id="connectionStatus" class="alert alert-warning">
+        <i class="fas fa-spinner fa-spin me-2"></i>
+        Подключение к серверу для отслеживания прогресса...
     </div>
 
-    <!-- Прогресс импорта -->
-    <div class="progress-container">
-        <div class="progress">
-            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                 role="progressbar"
-                 th:style="'width: ' + ${operation.processingProgress != null ? operation.processingProgress : 0} + '%'"
-                 th:aria-valuenow="${operation.processingProgress != null ? operation.processingProgress : 0}"
-                 aria-valuemin="0" aria-valuemax="100"
-                 th:text="${operation.processingProgress != null ? operation.processingProgress : 0} + '%'">
-                0%
-            </div>
-        </div>
-        <p id="progressText" class="text-center mt-2">
-            <span th:if="${operation.processedRecords != null}">
-                Обработано <span th:text="${operation.processedRecords}">0</span> из
-                <span th:text="${operation.totalRecords != null ? operation.totalRecords : 'неизвестно'}">0</span> записей
-            </span>
-            <span th:unless="${operation.processedRecords != null}">
-                Ожидание начала импорта...
-            </span>
-        </p>
-    </div>
+    <!-- Сообщение об ошибке -->
+    <div id="errorMessage" class="alert alert-danger d-none"></div>
 
     <!-- Журнал операции -->
-    <div class="card mt-4">
-        <div class="card-header bg-light">
-            <h5 class="card-title mb-0">
-                <i class="fas fa-list-alt me-2"></i>Журнал импорта
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-list-ul me-2"></i>
+                Журнал операции
             </h5>
+            <button id="cancelImportBtn" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-ban me-1"></i>
+                Отменить импорт
+            </button>
         </div>
         <div class="card-body">
             <div id="logContainer" class="log-container">
                 <div class="log-entry">
-                    <span class="log-time" th:text="${#temporals.format(operation.startedAt, 'HH:mm:ss')}">12:00:00</span>
-                    <span class="log-info">Операция импорта инициализирована.</span>
-                </div>
-                <div class="log-entry" th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}">
-                    <span class="log-time" th:text="${#temporals.format(#temporals.createNow(), 'HH:mm:ss')}">12:01:00</span>
-                    <span class="log-info">Начало обработки файла.</span>
-                </div>
-                <div class="log-entry" th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
-                    <span class="log-time" th:text="${#temporals.format(operation.completedAt, 'HH:mm:ss')}">12:05:00</span>
-                    <span class="log-success">Импорт успешно завершен. Обработано записей: <span th:text="${operation.recordCount}">0</span></span>
-                </div>
-                <div class="log-entry" th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}">
-                    <span class="log-time" th:text="${#temporals.format(operation.completedAt, 'HH:mm:ss')}">12:05:00</span>
-                    <span class="log-error">Импорт завершился с ошибкой: <span th:text="${operation.errorMessage}">Ошибка</span></span>
+                    <span class="log-time">00:00:00</span>
+                    <span class="log-info">Начало импорта файла...</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Информация о выполнении и длительности -->
-    <div class="card mt-4">
-        <div class="card-header bg-light">
-            <h5 class="card-title mb-0">
-                <i class="fas fa-info-circle me-2"></i>Информация о выполнении
-            </h5>
+    <!-- Кнопки действий после завершения -->
+    <div id="completionActions" class="mt-4 d-none">
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle me-2"></i>
+            Импорт успешно завершен
+            <span id="processingTime" class="ms-2"></span>
         </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <p><strong>Начало обработки:</strong>
-                        <span th:text="${#temporals.format(operation.startedAt, 'dd.MM.yyyy HH:mm:ss')}">01.01.2025 12:00:00</span>
-                    </p>
-                    <p><strong>Завершение обработки:</strong>
-                        <span th:if="${operation.completedAt != null}" th:text="${#temporals.format(operation.completedAt, 'dd.MM.yyyy HH:mm:ss')}">01.01.2025 12:05:00</span>
-                        <span th:unless="${operation.completedAt != null}" id="processingTime">В процессе...</span>
-                    </p>
-                </div>
-                <div class="col-md-6">
-                    <p><strong>Длительность:</strong>
-                        <span th:if="${operation.completedAt != null}" th:text="${operation.getDuration()}">5 мин</span>
-                        <span th:unless="${operation.completedAt != null}" id="elapsedTime">Расчет...</span>
-                    </p>
-                    <p><strong>Тип файла:</strong>
-                        <span th:text="${operation.fileType}">CSV</span>
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Кнопки действий -->
-    <div id="completionActions" class="completion-actions" th:classappend="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED || operation.status == T(my.java.model.FileOperation.OperationStatus).FAILED ? '' : 'd-none'}">
-        <div class="d-flex justify-content-center mt-4">
-            <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-primary btn-lg me-2">
-                <i class="fas fa-user me-1"></i>Вернуться к профилю клиента
+        <div class="d-flex justify-content-between">
+            <a th:href="@{/clients/{clientId}(clientId=${client.id})}" class="btn btn-primary">
+                <i class="fas fa-users me-1"></i>
+                Вернуться к клиенту
             </a>
-            <a th:href="@{/import/{clientId}(clientId=${client.id})}" class="btn btn-success btn-lg">
-                <i class="fas fa-file-import me-1"></i>Импортировать еще файл
+            <a th:href="@{/import/{clientId}(clientId=${client.id})}" class="btn btn-outline-primary">
+                <i class="fas fa-file-upload me-1"></i>
+                Импортировать еще файл
             </a>
         </div>
-    </div>
-
-    <!-- Кнопка отмены импорта -->
-    <div th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING
-                || operation.status == T(my.java.model.FileOperation.OperationStatus).PENDING}"
-         class="text-center mt-4">
-        <button id="cancelImportBtn" class="btn btn-danger">
-            <i class="fas fa-stop-circle me-1"></i>Отменить импорт
-        </button>
     </div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4-next/lib/stomp.min.js"></script>
+<script th:src="@{/js/lib/sockjs.min.js}"></script>
+<script th:src="@{/js/lib/stomp.min.js}"></script>
 <script th:src="@{/js/import-progress.js}"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Обработчик для кнопки отмены импорта
-        const cancelImportBtn = document.getElementById('cancelImportBtn');
-        if (cancelImportBtn) {
-            cancelImportBtn.addEventListener('click', function() {
-                if (confirm('Вы уверены, что хотите отменить импорт? Это действие нельзя отменить.')) {
-                    cancelImport();
-                }
-            });
-        }
-
-        // Функция для отмены импорта
-        function cancelImport() {
-            const operationId = document.getElementById('operationId').value;
-
-            fetch(`/import/api/cancel/${operationId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Операция успешно отменена, перезагружаем страницу
-                        window.location.reload();
-                    } else {
-                        alert(`Не удалось отменить импорт: ${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error cancelling import:', error);
-                    alert('Произошла ошибка при отмене импорта');
-                });
-        }
-
-        // Рассчет и обновление прошедшего времени
-        if (document.getElementById('elapsedTime')) {
-            updateElapsedTime();
-            setInterval(updateElapsedTime, 1000);
-        }
-
-        function updateElapsedTime() {
-            const startTime = new Date([[${operation.startedAt}]]);
-            const now = new Date();
-            const elapsed = now - startTime;
-
-            // Форматирование времени
-            const hours = Math.floor(elapsed / 3600000);
-            const minutes = Math.floor((elapsed % 3600000) / 60000);
-            const seconds = Math.floor((elapsed % 60000) / 1000);
-
-            let timeString = '';
-            if (hours > 0) {
-                timeString += hours + ' ч ';
-            }
-            timeString += minutes + ' мин ' + seconds + ' сек';
-
-            document.getElementById('elapsedTime').textContent = timeString;
-        }
-    });
-</script>
 </body>
 </html>

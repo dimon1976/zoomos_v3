@@ -29,112 +29,57 @@ public class ClientController {
     private final ClientService clientService;
     private final FileOperationRepository fileOperationRepository;
 
-    /**
-     * Отображение списка всех клиентов
-     */
     @GetMapping
     public String getAllClients(Model model, HttpServletRequest request) {
-        log.debug("GET request to get all clients");
+        log.debug("Получение списка всех клиентов");
         model.addAttribute("clients", clientService.getAllClients());
         model.addAttribute("currentUri", request.getRequestURI());
         return "clients/list";
     }
 
-    /**
-     * Отображение формы создания нового клиента
-     */
     @GetMapping("/create")
     public String showCreateForm(Model model) {
-        log.debug("GET request to show create client form");
+        log.debug("Отображение формы создания клиента");
         model.addAttribute("client", new ClientDto());
         return "clients/form";
     }
 
-    /**
-     * Обработка создания нового клиента
-     */
     @PostMapping("/create")
     public String createClient(@Valid @ModelAttribute("client") ClientDto clientDto,
                                BindingResult result,
                                RedirectAttributes redirectAttributes) {
-        log.debug("POST request to create a client: {}", clientDto);
+        log.debug("Создание нового клиента: {}", clientDto);
 
         if (result.hasErrors()) {
-            log.debug("Validation errors detected: {}", result.getAllErrors());
+            log.debug("Обнаружены ошибки валидации: {}", result.getAllErrors());
             return "clients/form";
         }
 
         try {
             ClientDto createdClient = clientService.createClient(clientDto);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Клиент '" + createdClient.getName() + "' успешно создан");
+            addSuccessMessage(redirectAttributes, "Клиент '" + createdClient.getName() + "' успешно создан");
             return "redirect:/clients";
         } catch (IllegalArgumentException e) {
-            log.error("Error creating client: {}", e.getMessage());
+            log.error("Ошибка при создании клиента: {}", e.getMessage());
             result.rejectValue("name", "error.client", e.getMessage());
             return "clients/form";
         }
     }
 
-    /**
-     * Отображение данных клиента
-     */
     @GetMapping("/{id}")
     public String getClientDetails(@PathVariable Long id,
                                    @RequestParam(required = false) String tab,
                                    Model model,
                                    RedirectAttributes redirectAttributes) {
-        log.debug("GET request to get client details for id: {}", id);
+        log.debug("Получение информации о клиенте с ID: {}", id);
 
         return clientService.getClientById(id)
                 .map(client -> {
                     model.addAttribute("client", client);
 
-                    // Получаем активную операцию импорта для клиента (если есть)
-                    List<FileOperation> pendingOperations = fileOperationRepository
-                            .findByClientIdAndStatusIn(
-                                    id,
-                                    Arrays.asList(
-                                            FileOperation.OperationStatus.PENDING,
-                                            FileOperation.OperationStatus.PROCESSING
-                                    )
-                            );
+                    addActiveOperationToModel(id, model);
+                    addRecentOperationsToModel(id, model);
 
-                    // Добавляем самую последнюю операцию, если есть
-                    if (!pendingOperations.isEmpty()) {
-                        // Сортируем по времени начала (сначала новые)
-                        pendingOperations.sort((op1, op2) ->
-                                op2.getStartedAt().compareTo(op1.getStartedAt()));
-
-                        FileOperation latestOperation = pendingOperations.get(0);
-                        model.addAttribute("activeImportOperation", mapToDto(latestOperation));
-                    }
-
-                    // Также можем добавить недавно завершенные операции
-                    List<FileOperation> recentOperations = fileOperationRepository
-                            .findByClientIdAndStatusIn(
-                                    id,
-                                    Arrays.asList(
-                                            FileOperation.OperationStatus.COMPLETED,
-                                            FileOperation.OperationStatus.FAILED
-                                    )
-                            );
-
-                    if (!recentOperations.isEmpty()) {
-                        // Сортируем по времени начала (сначала новые)
-                        recentOperations.sort((op1, op2) ->
-                                op2.getStartedAt().compareTo(op1.getStartedAt()));
-
-                        // Ограничиваем количество операций для отображения
-                        List<FileOperationDto> recentOps = recentOperations.stream()
-                                .limit(5)
-                                .map(this::mapToDto)
-                                .collect(Collectors.toList());
-
-                        model.addAttribute("recentImportOperations", recentOps);
-                    }
-
-                    // Добавляем активную вкладку в модель, если указана
                     if (tab != null) {
                         model.addAttribute("activeTab", tab);
                     }
@@ -142,14 +87,58 @@ public class ClientController {
                     return "clients/details";
                 })
                 .orElseGet(() -> {
-                    log.warn("Client not found with id: {}", id);
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + id + " не найден");
+                    logClientNotFound(id);
+                    addErrorMessage(redirectAttributes, "Клиент с ID " + id + " не найден");
                     return "redirect:/clients";
                 });
     }
 
-    // Метод преобразования FileOperation в FileOperationDto
+    private void logClientNotFound(Long id) {
+        log.warn("Клиент с ID {} не найден", id);
+    }
+
+    private void addActiveOperationToModel(Long clientId, Model model) {
+        List<FileOperation> pendingOperations = fileOperationRepository
+                .findByClientIdAndStatusIn(
+                        clientId,
+                        Arrays.asList(
+                                FileOperation.OperationStatus.PENDING,
+                                FileOperation.OperationStatus.PROCESSING
+                        )
+                );
+
+        if (!pendingOperations.isEmpty()) {
+            pendingOperations.sort((op1, op2) ->
+                    op2.getStartedAt().compareTo(op1.getStartedAt()));
+
+            FileOperation latestOperation = pendingOperations.get(0);
+            model.addAttribute("activeImportOperation", mapToDto(latestOperation));
+        }
+    }
+
+    private void addRecentOperationsToModel(Long clientId, Model model) {
+        List<FileOperation> recentOperations = fileOperationRepository
+                .findByClientIdAndStatusIn(
+                        clientId,
+                        Arrays.asList(
+                                FileOperation.OperationStatus.COMPLETED,
+                                FileOperation.OperationStatus.FAILED
+                        )
+                );
+
+        if (!recentOperations.isEmpty()) {
+            recentOperations.sort((op1, op2) ->
+                    op2.getStartedAt().compareTo(op1.getStartedAt()));
+
+            List<FileOperationDto> recentOps = recentOperations.stream()
+                    .limit(5)
+                    .map(this::mapToDto)
+                    .collect(Collectors.toList());
+
+            model.addAttribute("recentImportOperations", recentOps);
+        }
+    }
+
     private FileOperationDto mapToDto(FileOperation operation) {
         if (operation == null) {
             return null;
@@ -174,13 +163,9 @@ public class ClientController {
                 .build();
     }
 
-
-    /**
-     * Отображение формы редактирования клиента
-     */
     @GetMapping("/{id}/edit")
     public String showEditForm(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
-        log.debug("GET request to show edit form for client id: {}", id);
+        log.debug("Отображение формы редактирования клиента с ID: {}", id);
 
         return clientService.getClientById(id)
                 .map(client -> {
@@ -188,76 +173,70 @@ public class ClientController {
                     return "clients/form";
                 })
                 .orElseGet(() -> {
-                    log.warn("Client not found with id: {}", id);
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Клиент с ID " + id + " не найден");
+                    logClientNotFound(id);
+                    addErrorMessage(redirectAttributes, "Клиент с ID " + id + " не найден");
                     return "redirect:/clients";
                 });
     }
 
-    /**
-     * Обработка обновления данных клиента
-     */
     @PostMapping("/{id}/edit")
     public String updateClient(@PathVariable Long id,
                                @Valid @ModelAttribute("client") ClientDto clientDto,
                                BindingResult result,
                                RedirectAttributes redirectAttributes) {
-        log.debug("POST request to update client id: {}", id);
+        log.debug("Обновление клиента с ID: {}", id);
 
         if (result.hasErrors()) {
-            log.debug("Validation errors detected: {}", result.getAllErrors());
+            log.debug("Обнаружены ошибки валидации: {}", result.getAllErrors());
             return "clients/form";
         }
 
         try {
             ClientDto updatedClient = clientService.updateClient(id, clientDto);
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Клиент '" + updatedClient.getName() + "' успешно обновлен");
+            addSuccessMessage(redirectAttributes, "Клиент '" + updatedClient.getName() + "' успешно обновлен");
             return "redirect:/clients/" + id;
         } catch (EntityNotFoundException e) {
-            log.error("Client not found for update: {}", e.getMessage());
-            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+            log.error("Клиент для обновления не найден: {}", e.getMessage());
+            addErrorMessage(redirectAttributes, e.getMessage());
             return "redirect:/clients";
         } catch (IllegalArgumentException e) {
-            log.error("Error updating client: {}", e.getMessage());
+            log.error("Ошибка при обновлении клиента: {}", e.getMessage());
             result.rejectValue("name", "error.client", e.getMessage());
             return "clients/form";
         }
     }
 
-    /**
-     * Удаление клиента
-     */
     @PostMapping("/{id}/delete")
     public String deleteClient(@PathVariable Long id, RedirectAttributes redirectAttributes) {
-        log.debug("POST request to delete client id: {}", id);
+        log.debug("Удаление клиента с ID: {}", id);
 
-        // Получаем имя клиента перед удалением для сообщения
         String clientName = clientService.getClientById(id)
                 .map(ClientDto::getName)
                 .orElse("неизвестный");
 
         if (clientService.deleteClient(id)) {
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Клиент '" + clientName + "' успешно удален");
+            addSuccessMessage(redirectAttributes, "Клиент '" + clientName + "' успешно удален");
         } else {
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Клиент с ID " + id + " не найден");
+            addErrorMessage(redirectAttributes, "Клиент с ID " + id + " не найден");
         }
 
         return "redirect:/clients";
     }
 
-    /**
-     * Поиск клиентов
-     */
     @GetMapping("/search")
     public String searchClients(@RequestParam String query, Model model) {
-        log.debug("GET request to search clients with query: {}", query);
+        log.debug("Поиск клиентов по запросу: {}", query);
 
         model.addAttribute("clients", clientService.searchClients(query));
         model.addAttribute("searchQuery", query);
         return "clients/list";
+    }
+
+    private void addSuccessMessage(RedirectAttributes redirectAttributes, String message) {
+        redirectAttributes.addFlashAttribute("successMessage", message);
+    }
+
+    private void addErrorMessage(RedirectAttributes redirectAttributes, String message) {
+        redirectAttributes.addFlashAttribute("errorMessage", message);
     }
 }

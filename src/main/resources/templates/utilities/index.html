@@ -1,80 +1,281 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org"
-      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
-      layout:decorate="~{layout}">
+      th:replace="~{layout/main :: html(
+        'Утилиты - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Утилиты',
+        ~{::.page-actions}
+      )}">
 <head>
-    <title>Утилиты</title>
+    <title>Утилиты - Обработка файлов</title>
+    <style>
+        .utility-card {
+            transition: all 0.3s ease;
+            border-radius: 0.5rem;
+            height: 100%;
+            overflow: hidden;
+        }
+        .utility-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .utility-icon {
+            font-size: 2.5rem;
+            margin: 1rem 0;
+        }
+        .card-header {
+            border-radius: 0.5rem 0.5rem 0 0 !important;
+        }
+        .card-footer {
+            background-color: rgba(0, 0, 0, 0.03);
+            font-size: 0.875rem;
+        }
+        .coming-soon {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-left: 0.5rem;
+        }
+        .feature-list {
+            margin-bottom: 0;
+            padding-left: 1.5rem;
+        }
+        .feature-list li {
+            margin-bottom: 0.5rem;
+        }
+        .utility-description {
+            min-height: 3rem;
+        }
+    </style>
 </head>
 <body>
-<!-- Page title -->
-<h1 layout:fragment="page-title">Утилиты</h1>
+<div class="page-actions">
+    <a th:href="@{/}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>На главную
+    </a>
+</div>
 
-<!-- Main content -->
-<div layout:fragment="content">
+<section>
+    <p class="lead mb-4">Набор инструментов для работы с файлами и данными</p>
+
     <div class="row">
+        <!-- Работа с CSV -->
         <div class="col-md-4 mb-4">
-            <div class="card h-100">
+            <div class="card utility-card h-100">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-file-csv me-2"></i> Работа с CSV
+                    <h5 class="card-title mb-0 d-flex align-items-center">
+                        <i class="fas fa-file-csv me-2"></i>
+                        <span>Работа с CSV</span>
+                        <span class="coming-soon ms-auto">В разработке</span>
                     </h5>
                 </div>
-                <div class="card-body">
-                    <p>Инструменты для работы с CSV файлами</p>
-                    <ul>
-                        <li>Конвертация формата</li>
-                        <li>Валидация данных</li>
-                        <li>Анализ структуры</li>
+                <div class="card-body text-center">
+                    <div class="utility-icon text-primary">
+                        <i class="fas fa-table"></i>
+                    </div>
+                    <p class="utility-description">Инструменты для работы с CSV файлами</p>
+                    <ul class="feature-list text-start">
+                        <li>Конвертация формата и кодировки</li>
+                        <li>Валидация структуры и данных</li>
+                        <li>Анализ содержимого и статистика</li>
+                        <li>Объединение и разделение файлов</li>
                     </ul>
                 </div>
-                <div class="card-footer">
-                    <span class="text-muted">Функционал в разработке</span>
+                <div class="card-footer text-center">
+                    <button class="btn btn-outline-primary" disabled>
+                        <i class="fas fa-tools me-1"></i>Открыть инструменты
+                    </button>
                 </div>
             </div>
         </div>
 
+        <!-- Работа с Excel -->
         <div class="col-md-4 mb-4">
-            <div class="card h-100">
+            <div class="card utility-card h-100">
                 <div class="card-header bg-success text-white">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-file-excel me-2"></i> Работа с Excel
+                    <h5 class="card-title mb-0 d-flex align-items-center">
+                        <i class="fas fa-file-excel me-2"></i>
+                        <span>Работа с Excel</span>
+                        <span class="coming-soon ms-auto">В разработке</span>
                     </h5>
                 </div>
-                <div class="card-body">
-                    <p>Инструменты для работы с Excel файлами</p>
-                    <ul>
-                        <li>Анализ структуры</li>
-                        <li>Извлечение данных</li>
-                        <li>Создание шаблонов</li>
+                <div class="card-body text-center">
+                    <div class="utility-icon text-success">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                    <p class="utility-description">Инструменты для работы с Excel файлами</p>
+                    <ul class="feature-list text-start">
+                        <li>Анализ структуры и содержимого</li>
+                        <li>Извлечение данных из листов</li>
+                        <li>Создание шаблонов для выгрузки</li>
+                        <li>Конвертация в другие форматы</li>
                     </ul>
                 </div>
-                <div class="card-footer">
-                    <span class="text-muted">Функционал в разработке</span>
+                <div class="card-footer text-center">
+                    <button class="btn btn-outline-success" disabled>
+                        <i class="fas fa-tools me-1"></i>Открыть инструменты
+                    </button>
                 </div>
             </div>
         </div>
 
+        <!-- Системные утилиты -->
         <div class="col-md-4 mb-4">
-            <div class="card h-100">
+            <div class="card utility-card h-100">
                 <div class="card-header bg-info text-white">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-cog me-2"></i> Системные утилиты
+                    <h5 class="card-title mb-0 d-flex align-items-center">
+                        <i class="fas fa-cog me-2"></i>
+                        <span>Системные утилиты</span>
+                        <span class="coming-soon ms-auto">В разработке</span>
                     </h5>
                 </div>
-                <div class="card-body">
-                    <p>Общие системные инструменты</p>
-                    <ul>
+                <div class="card-body text-center">
+                    <div class="utility-icon text-info">
+                        <i class="fas fa-wrench"></i>
+                    </div>
+                    <p class="utility-description">Общие системные инструменты</p>
+                    <ul class="feature-list text-start">
                         <li>Очистка временных файлов</li>
                         <li>Проверка целостности данных</li>
-                        <li>Обслуживание БД</li>
+                        <li>Обслуживание базы данных</li>
+                        <li>Сжатие и архивация файлов</li>
                     </ul>
                 </div>
-                <div class="card-footer">
-                    <span class="text-muted">Функционал в разработке</span>
+                <div class="card-footer text-center">
+                    <button class="btn btn-outline-info" disabled>
+                        <i class="fas fa-tools me-1"></i>Открыть инструменты
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-</div>
+
+    <!-- Дополнительный ряд утилит -->
+    <div class="row">
+        <!-- Конвертер файлов -->
+        <div class="col-md-4 mb-4">
+            <div class="card utility-card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0 d-flex align-items-center">
+                        <i class="fas fa-exchange-alt me-2"></i>
+                        <span>Конвертер файлов</span>
+                        <span class="coming-soon ms-auto">В разработке</span>
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="utility-icon text-warning">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <p class="utility-description">Конвертация между различными форматами</p>
+                    <ul class="feature-list text-start">
+                        <li>Преобразование CSV в Excel и обратно</li>
+                        <li>Экспорт в PDF и другие форматы</li>
+                        <li>Изменение кодировки текстовых файлов</li>
+                        <li>Пакетная обработка нескольких файлов</li>
+                    </ul>
+                </div>
+                <div class="card-footer text-center">
+                    <button class="btn btn-outline-warning" disabled>
+                        <i class="fas fa-tools me-1"></i>Открыть инструменты
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Генератор отчетов -->
+        <div class="col-md-4 mb-4">
+            <div class="card utility-card h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="card-title mb-0 d-flex align-items-center">
+                        <i class="fas fa-file-alt me-2"></i>
+                        <span>Генератор отчетов</span>
+                        <span class="coming-soon ms-auto">В разработке</span>
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="utility-icon text-dark">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <p class="utility-description">Создание отчетов на основе данных</p>
+                    <ul class="feature-list text-start">
+                        <li>Готовые шаблоны отчетов</li>
+                        <li>Настраиваемые графики и диаграммы</li>
+                        <li>Экспорт в различные форматы</li>
+                        <li>Планирование регулярных отчетов</li>
+                    </ul>
+                </div>
+                <div class="card-footer text-center">
+                    <button class="btn btn-outline-dark" disabled>
+                        <i class="fas fa-tools me-1"></i>Открыть инструменты
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Проверка данных -->
+        <div class="col-md-4 mb-4">
+            <div class="card utility-card h-100">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0 d-flex align-items-center">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <span>Проверка данных</span>
+                        <span class="coming-soon ms-auto">В разработке</span>
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="utility-icon text-danger">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <p class="utility-description">Инструменты для валидации данных</p>
+                    <ul class="feature-list text-start">
+                        <li>Поиск и исправление ошибок</li>
+                        <li>Проверка целостности связей</li>
+                        <li>Валидация по шаблонам и правилам</li>
+                        <li>Генерация отчетов о проблемах</li>
+                    </ul>
+                </div>
+                <div class="card-footer text-center">
+                    <button class="btn btn-outline-danger" disabled>
+                        <i class="fas fa-tools me-1"></i>Открыть инструменты
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информационный блок -->
+    <div class="alert alert-info mt-4">
+        <div class="d-flex align-items-center">
+            <i class="fas fa-info-circle fa-2x me-3"></i>
+            <div>
+                <h5 class="alert-heading">Раздел находится в разработке</h5>
+                <p class="mb-0">Новые инструменты и функции будут добавляться в ближайшее время. Следите за обновлениями!</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Страница утилит загружена');
+
+        // Анимация при наведении на карточки
+        const cards = document.querySelectorAll('.utility-card');
+        cards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                const icon = this.querySelector('.utility-icon i');
+                icon.classList.add('fa-pulse');
+                setTimeout(() => {
+                    icon.classList.remove('fa-pulse');
+                }, 500);
+            });
+        });
+    });
+</script>
 </body>
 </html>

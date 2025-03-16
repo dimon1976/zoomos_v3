@@ -1,4 +1,4 @@
-package my.java.service.client;
+package my.java.service.client.impl;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.ClientDto;
 import my.java.model.Client;
 import my.java.repository.ClientRepository;
+import my.java.service.client.ClientService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,12 +28,14 @@ public class ClientServiceImpl implements ClientService {
         List<Object[]> clientsWithCounts = clientRepository.findClientsWithFileOperationCount();
 
         return clientsWithCounts.stream()
-                .map(result -> {
-                    Client client = (Client) result[0];
-                    Long count = (Long) result[1];
-                    return mapToDto(client, count.intValue());
-                })
+                .map(this::buildClientDtoFromQueryResult)
                 .collect(Collectors.toList());
+    }
+
+    private ClientDto buildClientDtoFromQueryResult(Object[] result) {
+        Client client = (Client) result[0];
+        Long count = (Long) result[1];
+        return mapToDto(client, count.intValue());
     }
 
     @Override
@@ -55,11 +58,7 @@ public class ClientServiceImpl implements ClientService {
     @Transactional
     public ClientDto createClient(ClientDto clientDto) {
         log.debug("Creating new client: {}", clientDto.getName());
-
-        // Проверка существования клиента с таким именем
-        if (clientRepository.existsByNameIgnoreCase(clientDto.getName())) {
-            throw new IllegalArgumentException("Клиент с именем '" + clientDto.getName() + "' уже существует");
-        }
+        validateClientNameUniqueness(clientDto.getName());
 
         Client client = mapToEntity(clientDto);
         Client savedClient = clientRepository.save(client);
@@ -68,30 +67,41 @@ public class ClientServiceImpl implements ClientService {
         return mapToDto(savedClient, 0);
     }
 
+    private void validateClientNameUniqueness(String clientName) {
+        if (clientRepository.existsByNameIgnoreCase(clientName)) {
+            throw new IllegalArgumentException("Клиент с именем '" + clientName + "' уже существует");
+        }
+    }
+
     @Override
     @Transactional
     public ClientDto updateClient(Long id, ClientDto clientDto) {
         log.debug("Updating client with id: {}", id);
 
-        Client client = clientRepository.findById(id)
+        Client client = findClientEntityById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Клиент с ID " + id + " не найден"));
 
-        // Проверка на дублирование имени при изменении
-        if (!client.getName().equalsIgnoreCase(clientDto.getName()) &&
-                clientRepository.existsByNameIgnoreCase(clientDto.getName())) {
-            throw new IllegalArgumentException("Клиент с именем '" + clientDto.getName() + "' уже существует");
-        }
-
-        // Обновление полей
-        client.setName(clientDto.getName());
-        client.setDescription(clientDto.getDescription());
-        client.setContactEmail(clientDto.getContactEmail());
-        client.setContactPhone(clientDto.getContactPhone());
+        validateClientNameForUpdate(client, clientDto);
+        updateClientFields(client, clientDto);
 
         Client updatedClient = clientRepository.save(client);
         log.info("Updated client with id: {}", id);
 
         return mapToDto(updatedClient, updatedClient.getFileOperations().size());
+    }
+
+    private void validateClientNameForUpdate(Client existingClient, ClientDto clientDto) {
+        if (!existingClient.getName().equalsIgnoreCase(clientDto.getName()) &&
+                clientRepository.existsByNameIgnoreCase(clientDto.getName())) {
+            throw new IllegalArgumentException("Клиент с именем '" + clientDto.getName() + "' уже существует");
+        }
+    }
+
+    private void updateClientFields(Client client, ClientDto clientDto) {
+        client.setName(clientDto.getName());
+        client.setDescription(clientDto.getDescription());
+        client.setContactEmail(clientDto.getContactEmail());
+        client.setContactPhone(clientDto.getContactPhone());
     }
 
     @Override
@@ -127,7 +137,9 @@ public class ClientServiceImpl implements ClientService {
         return clientRepository.findById(id);
     }
 
-    // Маппер из entity в DTO
+    /**
+     * Маппер из entity в DTO
+     */
     private ClientDto mapToDto(Client client, Integer fileOperationsCount) {
         return ClientDto.builder()
                 .id(client.getId())
@@ -139,7 +151,9 @@ public class ClientServiceImpl implements ClientService {
                 .build();
     }
 
-    // Маппер из DTO в entity
+    /**
+     * Маппер из DTO в entity
+     */
     private Client mapToEntity(ClientDto dto) {
         return Client.builder()
                 .name(dto.getName())

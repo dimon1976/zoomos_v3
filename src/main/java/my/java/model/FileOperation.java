@@ -87,6 +87,18 @@ public class FileOperation {
     @Column(name = "file_hash")
     private String fileHash;
 
+    @Column(name = "batch_size")
+    private Integer batchSize;
+
+    @Column(name = "processing_strategy")
+    private String processingStrategy;
+
+    @Column(name = "error_handling")
+    private String errorHandling;
+
+    @Column(name = "duplicate_handling")
+    private String duplicateHandling;
+
     // Enum для типа операции
     public enum OperationType {
         IMPORT, EXPORT, PROCESS

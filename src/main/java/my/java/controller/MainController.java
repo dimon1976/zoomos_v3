@@ -19,8 +19,8 @@ public class MainController {
      * Отображение главной страницы приложения
      */
     @GetMapping("/")
-    public String index(Model model, HttpServletRequest request) {
-        log.debug("GET request to get index page");
+    public String displayHomePage(Model model, HttpServletRequest request) {
+        log.debug("Запрос на отображение главной страницы");
         model.addAttribute("currentUri", request.getRequestURI());
         model.addAttribute("pageTitle", "Главная страница");
         return "index";

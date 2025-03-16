@@ -106,7 +106,8 @@ public class FileImportJob implements Callable<FileOperationDto> {
      */
     @Override
     public FileOperationDto call() throws Exception {
-        log.info("Начало выполнения задачи импорта для операции #{}", operation.getId());
+        log.info("НАЧАЛО ВЫПОЛНЕНИЯ ЗАДАЧИ ИМПОРТА ДЛЯ ОПЕРАЦИИ #{} - поток {}",
+                operation.getId(), Thread.currentThread().getName());
 
         // Обновляем статус операции
         operation.markAsProcessing();

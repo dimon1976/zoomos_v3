@@ -22,8 +22,24 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Вариант 1: Использовать allowedOriginPatterns вместо allowedOrigins
         registry.addEndpoint("/ws")
-                .setAllowedOrigins("*") // Разрешаем подключения с любых источников (можно ограничить)
-                .withSockJS(); // Добавляем поддержку SockJS для клиентов без нативной поддержки WebSocket
+                .setAllowedOriginPatterns("*")  // Вместо setAllowedOrigins("*")
+                .withSockJS();
+
+        // ИЛИ Вариант 2: Отключить credentials, если они не нужны
+    /*
+    registry.addEndpoint("/ws")
+            .setAllowedOrigins("*")
+            .setAllowCredentials(false)
+            .withSockJS();
+    */
+
+        // ИЛИ Вариант 3: Указать конкретные источники
+    /*
+    registry.addEndpoint("/ws")
+            .setAllowedOrigins("http://localhost:8080")
+            .withSockJS();
+    */
     }
 }

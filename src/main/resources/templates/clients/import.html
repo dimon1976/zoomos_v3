@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Импорт файлов'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Импорт файлов'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Импорт файлов'}">Клиент - Импорт файлов</title>
+    <style>
+        .dropzone {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .dropzone:hover {
+            background-color: #f8f9fa;
+        }
+        .file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Основная информация -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="card-title" th:text="${client.name}">Имя клиента</h4>
+                <div>
+                    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-sm btn-outline-primary me-2">
+                        <i class="fas fa-history me-1"></i>Операции
+                    </a>
+                    <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-file-export me-1"></i>Экспорт данных
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Форма импорта файла -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Импорт данных из файла</h5>
+        </div>
+        <div class="card-body">
+            <p class="card-text">Загрузите файл CSV или Excel для импорта данных для клиента.</p>
+
+            <form th:action="@{/files/upload}" method="post" enctype="multipart/form-data" id="uploadForm">
+                <input type="hidden" name="clientId" th:value="${client.id}" />
+
+                <div class="mb-3">
+                    <label for="fileType" class="form-label">Тип данных в файле:</label>
+                    <select class="form-select" id="fileType" name="fileType" required>
+                        <option value="">-- Выберите тип данных --</option>
+                        <option value="CLIENTS">Данные о клиентах</option>
+                        <option value="TRANSACTIONS">Транзакции</option>
+                        <option value="PRODUCTS">Продукты</option>
+                        <option value="CUSTOM">Другое (требует конфигурации)</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="processingOptions" class="form-label">Опции обработки:</label>
+                    <select class="form-select" id="processingOptions" name="processingOptions">
+                        <option value="STANDARD">Стандартная обработка</option>
+                        <option value="VALIDATE_ONLY">Только проверка данных без импорта</option>
+                        <option value="FORCE_UPDATE">Принудительное обновление существующих записей</option>
+                    </select>
+                </div>
+
+                <div class="mb-4 dropzone" id="dropzone">
+                    <input type="file" id="file" name="file" class="file-input" accept=".csv,.xlsx,.xls" required />
+                    <div class="py-3">
+                        <i class="fas fa-cloud-upload-alt fa-3x mb-3 text-muted"></i>
+                        <p id="dropzoneText">Перетащите файл сюда или кликните для выбора</p>
+                        <p class="small text-muted">Допустимые форматы: CSV, Excel (.xlsx, .xls)</p>
+                    </div>
+                </div>
+
+                <div class="mb-3" id="fileSelectedInfo" style="display: none;">
+                    <div class="alert alert-info">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-file-alt me-2"></i>
+                            <span id="selectedFileName">file.csv</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger ms-auto" id="removeFile">
+                                <i class="fas fa-times"></i> Удалить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span>
+                        Обратите внимание, что процесс импорта может занять некоторое время в зависимости от размера файла.
+                        Статус операции можно отслеживать в разделе «Операции».
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary" id="submitButton" disabled>
+                        <i class="fas fa-upload me-1"></i>Загрузить файл
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file');
+        const fileSelectedInfo = document.getElementById('fileSelectedInfo');
+        const selectedFileName = document.getElementById('selectedFileName');
+        const removeFileBtn = document.getElementById('removeFile');
+        const submitButton = document.getElementById('submitButton');
+        const dropzoneText = document.getElementById('dropzoneText');
+
+        // Обработка клика по дропзоне
+        dropzone.addEventListener('click', function() {
+            fileInput.click();
+        });
+
+        // Обработка перетаскивания файлов
+        dropzone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropzone.classList.add('bg-light');
+        });
+
+        dropzone.addEventListener('dragleave', function() {
+            dropzone.classList.remove('bg-light');
+        });
+
+        dropzone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropzone.classList.remove('bg-light');
+
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileInfo();
+            }
+        });
+
+        // Обработка изменения файла
+        fileInput.addEventListener('change', function() {
+            updateFileInfo();
+        });
+
+        // Удаление выбранного файла
+        removeFileBtn.addEventListener('click', function() {
+            fileInput.value = '';
+            fileSelectedInfo.style.display = 'none';
+            dropzone.style.display = 'block';
+            submitButton.disabled = true;
+        });
+
+        // Функция обновления информации о выбранном файле
+        function updateFileInfo() {
+            if (fileInput.files.length > 0) {
+                selectedFileName.textContent = fileInput.files[0].name;
+                fileSelectedInfo.style.display = 'block';
+                dropzone.querySelector('.py-3').style.display = 'none';
+                dropzoneText.textContent = 'Перетащите другой файл или кликните для замены';
+                submitButton.disabled = false;
+            } else {
+                fileSelectedInfo.style.display = 'none';
+                dropzone.querySelector('.py-3').style.display = 'block';
+                submitButton.disabled = true;
+            }
+        }
+    });
+</script>
+</body>
+</html>

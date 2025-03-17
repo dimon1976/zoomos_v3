@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Экспорт данных'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Экспорт данных'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Экспорт данных'}">Клиент - Экспорт данных</title>
+    <style>
+        .export-option {
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .export-option:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .export-option.selected {
+            border-color: #0d6efd;
+            background-color: rgba(13, 110, 253, 0.05);
+        }
+        .export-format-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Основная информация -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="card-title" th:text="${client.name}">Имя клиента</h4>
+                <div>
+                    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-sm btn-outline-primary me-2">
+                        <i class="fas fa-history me-1"></i>Операции
+                    </a>
+                    <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-file-import me-1"></i>Импорт файлов
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Форма экспорта данных -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Экспорт данных</h5>
+        </div>
+        <div class="card-body">
+            <p class="card-text">Выберите тип данных и формат для экспорта информации о клиенте.</p>
+
+            <form th:action="@{/clients/{id}/export/generate(id=${client.id})}" method="post" id="exportForm">
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Тип данных для экспорта:</label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="dataType" id="dataTypeAll" value="ALL" checked>
+                        <label class="form-check-label" for="dataTypeAll">
+                            Вся информация о клиенте
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="dataType" id="dataTypeTransactions" value="TRANSACTIONS">
+                        <label class="form-check-label" for="dataTypeTransactions">
+                            Только транзакции клиента
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="dataType" id="dataTypeFiles" value="FILES">
+                        <label class="form-check-label" for="dataTypeFiles">
+                            Только файловые операции
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="dataType" id="dataTypeCustom" value="CUSTOM">
+                        <label class="form-check-label" for="dataTypeCustom">
+                            Настраиваемый набор данных
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Период данных -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Период данных:</label>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="startDate" class="form-label">Дата с:</label>
+                            <input type="date" class="form-control" id="startDate" name="startDate">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="endDate" class="form-label">Дата по:</label>
+                            <input type="date" class="form-control" id="endDate" name="endDate">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Выбор формата файла -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Формат файла:</label>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="export-option text-center" data-format="CSV">
+                                <div class="export-format-icon">
+                                    <i class="fas fa-file-csv text-success"></i>
+                                </div>
+                                <h5>CSV</h5>
+                                <p class="text-muted small">Простой текстовый формат для таблиц данных</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileFormat" id="formatCSV" value="CSV" checked>
+                                    <label class="form-check-label" for="formatCSV">
+                                        Выбрать CSV
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="export-option text-center" data-format="XLSX">
+                                <div class="export-format-icon">
+                                    <i class="fas fa-file-excel text-primary"></i>
+                                </div>
+                                <h5>Excel (XLSX)</h5>
+                                <p class="text-muted small">Табличный формат Microsoft Excel</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileFormat" id="formatXLSX" value="XLSX">
+                                    <label class="form-check-label" for="formatXLSX">
+                                        Выбрать Excel
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="export-option text-center" data-format="PDF">
+                                <div class="export-format-icon">
+                                    <i class="fas fa-file-pdf text-danger"></i>
+                                </div>
+                                <h5>PDF</h5>
+                                <p class="text-muted small">Документ для печати и просмотра</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="fileFormat" id="formatPDF" value="PDF">
+                                    <label class="form-check-label" for="formatPDF">
+                                        Выбрать PDF
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Дополнительные опции -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Дополнительные опции:</label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeHeaders" name="includeHeaders" value="true" checked>
+                        <label class="form-check-label" for="includeHeaders">
+                            Включить заголовки столбцов
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="zipFiles" name="zipFiles" value="true">
+                        <label class="form-check-label" for="zipFiles">
+                            Упаковать файлы в ZIP-архив
+                        </label>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span>
+                        Обратите внимание, что процесс экспорта может занять некоторое время для больших объемов данных.
+                        Статус операции можно отслеживать в разделе «Операции».
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-download me-1"></i>Экспортировать данные
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Подсветка выбранного формата
+        const exportOptions = document.querySelectorAll('.export-option');
+        const formatRadios = document.querySelectorAll('input[name="fileFormat"]');
+
+        // Инициализация
+        updateSelectedFormat();
+
+        // Обработка клика по карточке формата
+        exportOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                const format = this.dataset.format;
+                const radio = document.getElementById('format' + format);
+                radio.checked = true;
+                updateSelectedFormat();
+            });
+        });
+
+        // Обработка изменения радиокнопки
+        formatRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                updateSelectedFormat();
+            });
+        });
+
+        // Обновление выбранного формата
+        function updateSelectedFormat() {
+            exportOptions.forEach(option => {
+                option.classList.remove('selected');
+            });
+
+            formatRadios.forEach(radio => {
+                if (radio.checked) {
+                    const format = radio.value;
+                    const option = document.querySelector(`.export-option[data-format="${format}"]`);
+                    if (option) {
+                        option.classList.add('selected');
+                    }
+                }
+            });
+        }
+    });
+</script>
+</body>
+</html>

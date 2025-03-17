@@ -36,9 +36,6 @@
             transform: translateY(-3px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        .tab-content {
-            padding: 20px 0;
-        }
     </style>
 </head>
 <body>
@@ -78,68 +75,70 @@
         </div>
     </div>
 
-    <!-- Вкладки с операциями -->
-    <ul class="nav nav-tabs" id="clientTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations"
-                    type="button" role="tab" aria-controls="operations" aria-selected="true">
-                <i class="fas fa-history me-1"></i>Операции
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import"
-                    type="button" role="tab" aria-controls="import" aria-selected="false">
-                <i class="fas fa-file-import me-1"></i>Импорт файлов
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="export-tab" data-bs-toggle="tab" data-bs-target="#export"
-                    type="button" role="tab" aria-controls="export" aria-selected="false">
-                <i class="fas fa-file-export me-1"></i>Экспорт данных
-            </button>
-        </li>
-    </ul>
+    <!-- Секция навигации вместо вкладок -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2">
+                <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-outline-primary">
+                    <i class="fas fa-history me-1"></i>Операции клиента
+                </a>
+                <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-outline-primary">
+                    <i class="fas fa-file-import me-1"></i>Импорт файлов
+                </a>
+                <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-outline-primary">
+                    <i class="fas fa-file-export me-1"></i>Экспорт данных
+                </a>
+            </div>
+        </div>
+    </div>
 
-    <div class="tab-content" id="clientTabsContent">
-        <!-- Вкладка операций -->
-        <div class="tab-pane fade show active" id="operations" role="tabpanel" aria-labelledby="operations-tab">
-            <div class="alert alert-info" role="alert">
+    <!-- Последние операции клиента -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Последние операции</h5>
+                <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-sm btn-outline-primary">
+                    Все операции
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info" role="alert" th:if="${#lists.isEmpty(recentOperations)}">
                 <i class="fas fa-info-circle me-2"></i>У этого клиента пока нет файловых операций
             </div>
-            <!-- Здесь будет список операций -->
-        </div>
-
-        <!-- Вкладка импорта файлов -->
-        <div class="tab-pane fade" id="import" role="tabpanel" aria-labelledby="import-tab">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Импорт данных из файла</h5>
-                    <p class="card-text">Загрузите файл CSV или Excel для импорта данных.</p>
-
-                    <form action="#" method="post" enctype="multipart/form-data">
-                        <!-- Форма импорта файла будет здесь -->
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность импорта будет добавлена позже
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Вкладка экспорта данных -->
-        <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Экспорт данных в файл</h5>
-                    <p class="card-text">Выберите формат для экспорта данных клиента.</p>
-
-                    <form action="#" method="post">
-                        <!-- Форма экспорта будет здесь -->
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность экспорта будет добавлена позже
-                        </div>
-                    </form>
-                </div>
+            <div class="table-responsive" th:if="${!#lists.isEmpty(recentOperations)}">
+                <table class="table table-striped">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Тип операции</th>
+                        <th>Дата</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="operation : ${recentOperations}">
+                        <td th:text="${operation.id}">1</td>
+                        <td th:text="${operation.type}">Импорт</td>
+                        <td th:text="${#temporals.format(operation.createdAt, 'dd.MM.yyyy HH:mm')}">01.01.2023</td>
+                        <td>
+                                <span th:class="${'badge ' +
+                                    (operation.status == 'COMPLETED' ? 'status-success' :
+                                     (operation.status == 'ERROR' ? 'status-error' :
+                                      (operation.status == 'PROCESSING' ? 'status-processing' : 'status-pending')))}"
+                                      th:text="${operation.status}">
+                                    Статус
+                                </span>
+                        </td>
+                        <td>
+                            <a th:href="@{/files/operations/{id}(id=${operation.id})}" class="btn btn-sm btn-info">
+                                <i class="fas fa-eye me-1"></i>Детали
+                            </a>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -169,15 +168,11 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Активация вкладок Bootstrap
-        const triggerTabList = [].slice.call(document.querySelectorAll('#clientTabs button'));
-        triggerTabList.forEach(function(triggerEl) {
-            const tabTrigger = new bootstrap.Tab(triggerEl);
-            triggerEl.addEventListener('click', function(event) {
-                event.preventDefault();
-                tabTrigger.show();
-            });
-        });
+        // JavaScript для модального окна подтверждения удаления
+        const deleteModal = document.getElementById('deleteClientModal');
+        if (deleteModal) {
+            new bootstrap.Modal(deleteModal);
+        }
     });
 </script>
 </body>

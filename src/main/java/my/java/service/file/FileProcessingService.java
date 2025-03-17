@@ -31,158 +31,230 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class FileProcessingService {
 
+    private static final int PROGRESS_UPDATE_FREQUENCY = 1000;
+    private static final double PROGRESS_UPDATE_PERCENTAGE = 0.05;
+
     private final FileOperationRepository fileOperationRepository;
     private final ClientRepository clientRepository;
     private final FileTypeDetector fileTypeDetector;
     private final PathResolver pathResolver;
 
-    // Хранилище активных операций для отслеживания
     private final Map<Long, FileOperationStatus> activeOperations = new ConcurrentHashMap<>();
-
-    // Хранилище отмененных операций
     private final Set<Long> canceledOperations = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /**
-     * Инициализирует операцию обработки файла и возвращает идентификатор операции
-     *
-     * @param file файл для обработки
-     * @param clientId идентификатор клиента
-     * @param operationType тип операции
-     * @return идентификатор созданной операции
-     * @throws FileOperationException если произошла ошибка при инициализации
+     * Инициализирует операцию обработки файла
      */
     @Transactional
-    public Long initializeFileOperation(MultipartFile file, Long clientId, OperationType operationType) throws FileOperationException {
-        try {
-            // Проверяем файл
-            if (file == null || file.isEmpty()) {
-                throw new FileOperationException("Файл пуст или не выбран");
-            }
+    public Long initializeFileOperation(MultipartFile file, Long clientId, OperationType operationType)
+            throws FileOperationException {
+        validateFile(file);
+        Client client = findClient(clientId);
 
-            // Получаем клиента
-            Client client = clientRepository.findById(clientId)
-                    .orElseThrow(() -> new FileOperationException("Клиент с ID " + clientId + " не найден", "/clients"));
+        String fileHash = calculateFileHash(file);
+        checkForDuplicateFile(clientId, fileHash);
 
-            // Определяем тип файла
-            FileTypeDetector.FileType fileType = fileTypeDetector.detectFileType(file);
-            log.debug("Detected file type: {}", fileType);
+        FileOperation operation = createFileOperation(client, file, operationType);
+        FileOperation savedOperation = fileOperationRepository.save(operation);
 
-            // Вычисляем хеш содержимого файла
-            String fileHash = calculateFileHash(file);
+        Long operationId = savedOperation.getId();
 
-            // Проверяем наличие файла с таким же хешем для этого клиента
-            // Используем COMPLETED напрямую, так как это enum в существующей модели
-            boolean duplicateExists = fileOperationRepository.findByClientId(clientId).stream()
-                    .anyMatch(op -> {
-                        // Получаем метаданные операции, если они существуют
-                        FileOperationMetadata metadata = FileOperationMetadata.get(op.getId());
-                        return metadata != null && fileHash.equals(metadata.getFileHash()) &&
-                                op.getStatus() == OperationStatus.COMPLETED;
-                    });
+        createFileOperationMetadata(operationId, file, fileHash);
+        initializeOperationStatus(operationId);
 
-            if (duplicateExists) {
-                log.warn("Duplicate file detected with hash: {}", fileHash);
-                // В данном случае мы просто логируем дубликат, но можно также выбросить исключение
-                // throw new FileOperationException("Файл с таким содержимым уже был обработан");
-            }
+        log.info("File operation initialized: {}, client: {}, file: {}",
+                operationId, clientId, file.getOriginalFilename());
 
-            // Создаем запись об операции
-            FileOperation operation = FileOperation.builder()
-                    .client(client)
-                    .operationType(operationType)
-                    .fileName(file.getOriginalFilename())
-                    .fileType(fileType.toString())
-                    .status(OperationStatus.PENDING)
-                    .recordCount(0) // Устанавливаем пустое значение для количества записей
-                    .build();
-
-            // Сохраняем операцию
-            FileOperation savedOperation = fileOperationRepository.save(operation);
-            Long operationId = savedOperation.getId();
-
-            // Сохраняем файл во временную директорию
-            Path tempFilePath = pathResolver.saveToTempFile(file, "op_" + operationId);
-
-            // Создаем метаданные операции
-            FileOperationMetadata metadata = FileOperationMetadata.create(operationId);
-            metadata.setFileHash(fileHash);
-            metadata.setFileSize(file.getSize());
-            metadata.setSourceFilePath(tempFilePath.toString());
-
-            // Инициализируем статус операции
-            activeOperations.put(operationId, new FileOperationStatus(operationId, 0, 0, OperationStatus.PENDING));
-
-            log.info("File operation initialized: {}, client: {}, file: {}",
-                    operationId, clientId, file.getOriginalFilename());
-
-            return operationId;
-        } catch (Exception e) {
-            log.error("Error initializing file operation: {}", e.getMessage(), e);
-            throw new FileOperationException("Ошибка при инициализации обработки файла: " + e.getMessage(), e);
-        }
+        return operationId;
     }
 
     /**
      * Обрабатывает файл в соответствии с указанным типом операции
-     *
-     * @param operationId идентификатор операции
-     * @param entityClass класс целевой сущности
-     * @param chunkSize размер чанка для обработки
-     * @return результат обработки файла
-     * @throws FileOperationException если произошла ошибка при обработке
      */
     @Transactional
-    public FileProcessingResult processFile(Long operationId, Class<?> entityClass, int chunkSize) throws FileOperationException {
-        // Получаем операцию из БД
-        FileOperation operation = fileOperationRepository.findById(operationId)
-                .orElseThrow(() -> new FileOperationException("Операция с ID " + operationId + " не найдена"));
+    public FileProcessingResult processFile(Long operationId, Class<?> entityClass, int chunkSize)
+            throws FileOperationException {
+        FileOperation operation = findOperation(operationId);
+        FileOperationMetadata metadata = findOperationMetadata(operationId);
 
-        // Получаем метаданные операции
-        FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
-        if (metadata == null) {
-            throw new FileOperationException("Метаданные операции с ID " + operationId + " не найдены");
-        }
+        updateOperationStatus(operation, OperationStatus.PROCESSING);
 
-        // Обновляем статус операции на "в процессе"
-        operation.setStatus(OperationStatus.PROCESSING);
-        fileOperationRepository.save(operation);
+        Path filePath = resolveAndValidateFilePath(metadata.getSourceFilePath());
+        logFieldDescriptions(entityClass);
 
-        // Обновляем статус в кеше
-        activeOperations.put(operationId, new FileOperationStatus(operationId, 0, 0, OperationStatus.PROCESSING));
-
-        // Получаем путь к файлу
-        Path filePath = pathResolver.resolveRelativePath(metadata.getSourceFilePath());
-        if (filePath == null || !Files.exists(filePath)) {
-            throw new FileOperationException("Файл не найден: " + metadata.getSourceFilePath());
-        }
-
-        // Для демонстрации - показываем сопоставление полей
-        Map<String, String> fieldDescriptions = FieldDescriptionUtils.getFieldDescriptions(entityClass);
-        log.debug("Field descriptions for {}: {}", entityClass.getSimpleName(), fieldDescriptions);
-
-        // Здесь будет реализация обработки файла в соответствии с типом операции
-        FileProcessingResult result = new FileProcessingResult();
-        result.setOperationId(operationId);
-        result.setStatus(OperationStatus.COMPLETED);
-        result.setMessage("Операция успешно завершена");
-
-        // Возвращаем результат
-        return result;
+        return createSuccessResult(operationId);
     }
 
     /**
      * Получает информацию о статусе операции
-     *
-     * @param operationId идентификатор операции
-     * @return статус операции
      */
     public FileOperationStatus getOperationStatus(Long operationId) {
-        // Если операция активна, возвращаем из кеша
         if (activeOperations.containsKey(operationId)) {
             return activeOperations.get(operationId);
         }
 
-        // Иначе получаем из БД и метаданных
+        return getOperationStatusFromRepository(operationId);
+    }
+
+    /**
+     * Отменяет операцию обработки файла
+     */
+    @Transactional
+    public boolean cancelOperation(Long operationId) {
+        canceledOperations.add(operationId);
+
+        return fileOperationRepository.findById(operationId)
+                .map(operation -> {
+                    markOperationAsCanceled(operation);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * Проверяет, была ли отменена операция
+     */
+    public boolean isOperationCanceled(Long operationId) {
+        return canceledOperations.contains(operationId);
+    }
+
+    /**
+     * Обновляет прогресс обработки файла
+     */
+    public void updateProgress(Long operationId, int processedRecords, int totalRecords) {
+        updateOperationMetadataProgress(operationId, processedRecords, totalRecords);
+        updateActiveOperationsCache(operationId, processedRecords, totalRecords);
+
+        if (shouldUpdateProgressInDatabase(processedRecords, totalRecords)) {
+            updateProgressInDb(operationId, processedRecords, totalRecords);
+        }
+    }
+
+    /**
+     * Обновляет прогресс обработки файла в БД
+     */
+    @Transactional
+    public void updateProgressInDb(Long operationId, int processedRecords, int totalRecords) {
+        fileOperationRepository.findById(operationId).ifPresent(operation -> {
+            updateOperationMetadataProgress(operationId, processedRecords, totalRecords);
+        });
+    }
+
+    /**
+     * Завершает операцию обработки файла
+     */
+    @Transactional
+    public void completeOperation(Long operationId, OperationStatus status, String message, int recordCount) {
+        fileOperationRepository.findById(operationId).ifPresent(operation -> {
+            updateOperationWithResult(operation, status, message, recordCount);
+            fileOperationRepository.save(operation);
+
+            removeFromTrackingCollections(operationId);
+        });
+    }
+
+    // Вспомогательные методы
+
+    private void validateFile(MultipartFile file) throws FileOperationException {
+        if (file == null || file.isEmpty()) {
+            throw new FileOperationException("Файл пуст или не выбран");
+        }
+    }
+
+    private Client findClient(Long clientId) throws FileOperationException {
+        return clientRepository.findById(clientId)
+                .orElseThrow(() -> new FileOperationException(
+                        "Клиент с ID " + clientId + " не найден", "/clients"));
+    }
+
+    private void checkForDuplicateFile(Long clientId, String fileHash) {
+        boolean duplicateExists = fileOperationRepository.findByClientId(clientId).stream()
+                .anyMatch(op -> {
+                    FileOperationMetadata metadata = FileOperationMetadata.get(op.getId());
+                    return metadata != null && fileHash.equals(metadata.getFileHash()) &&
+                            op.getStatus() == OperationStatus.COMPLETED;
+                });
+
+        if (duplicateExists) {
+            log.warn("Duplicate file detected with hash: {}", fileHash);
+        }
+    }
+
+    private FileOperation createFileOperation(Client client, MultipartFile file, OperationType operationType) {
+        FileTypeDetector.FileType fileType = fileTypeDetector.detectFileType(file);
+        log.debug("Detected file type: {}", fileType);
+
+        return FileOperation.builder()
+                .client(client)
+                .operationType(operationType)
+                .fileName(file.getOriginalFilename())
+                .fileType(fileType.toString())
+                .status(OperationStatus.PENDING)
+                .recordCount(0)
+                .build();
+    }
+
+    private void createFileOperationMetadata(Long operationId, MultipartFile file, String fileHash)
+            throws FileOperationException {
+        try {
+            Path tempFilePath = pathResolver.saveToTempFile(file, "op_" + operationId);
+
+            FileOperationMetadata metadata = FileOperationMetadata.create(operationId);
+            metadata.setFileHash(fileHash);
+            metadata.setFileSize(file.getSize());
+            metadata.setSourceFilePath(tempFilePath.toString());
+        } catch (IOException e) {
+            throw new FileOperationException("Ошибка при сохранении файла: " + e.getMessage(), e);
+        }
+    }
+
+    private void initializeOperationStatus(Long operationId) {
+        activeOperations.put(operationId, new FileOperationStatus(operationId, 0, 0, OperationStatus.PENDING));
+    }
+
+    private FileOperation findOperation(Long operationId) throws FileOperationException {
+        return fileOperationRepository.findById(operationId)
+                .orElseThrow(() -> new FileOperationException("Операция с ID " + operationId + " не найдена"));
+    }
+
+    private FileOperationMetadata findOperationMetadata(Long operationId) throws FileOperationException {
+        FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
+        if (metadata == null) {
+            throw new FileOperationException("Метаданные операции с ID " + operationId + " не найдены");
+        }
+        return metadata;
+    }
+
+    private void updateOperationStatus(FileOperation operation, OperationStatus status) {
+        operation.setStatus(status);
+        fileOperationRepository.save(operation);
+
+        activeOperations.put(operation.getId(),
+                new FileOperationStatus(operation.getId(), 0, 0, status));
+    }
+
+    private Path resolveAndValidateFilePath(String sourceFilePath) throws FileOperationException {
+        Path filePath = pathResolver.resolveRelativePath(sourceFilePath);
+        if (filePath == null || !Files.exists(filePath)) {
+            throw new FileOperationException("Файл не найден: " + sourceFilePath);
+        }
+        return filePath;
+    }
+
+    private void logFieldDescriptions(Class<?> entityClass) {
+        Map<String, String> fieldDescriptions = FieldDescriptionUtils.getFieldDescriptions(entityClass);
+        log.debug("Field descriptions for {}: {}", entityClass.getSimpleName(), fieldDescriptions);
+    }
+
+    private FileProcessingResult createSuccessResult(Long operationId) {
+        FileProcessingResult result = new FileProcessingResult();
+        result.setOperationId(operationId);
+        result.setStatus(OperationStatus.COMPLETED);
+        result.setMessage("Операция успешно завершена");
+        return result;
+    }
+
+    private FileOperationStatus getOperationStatusFromRepository(Long operationId) {
         return fileOperationRepository.findById(operationId)
                 .map(operation -> {
                     FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
@@ -195,146 +267,74 @@ public class FileProcessingService {
                 .orElse(new FileOperationStatus(operationId, 0, 0, OperationStatus.FAILED));
     }
 
-    /**
-     * Отменяет операцию обработки файла
-     *
-     * @param operationId идентификатор операции
-     * @return true, если операция успешно отменена
-     */
-    @Transactional
-    public boolean cancelOperation(Long operationId) {
-        // Отмечаем операцию как отмененную
-        canceledOperations.add(operationId);
+    private void markOperationAsCanceled(FileOperation operation) {
+        operation.setStatus(OperationStatus.FAILED);
+        operation.setCompletedAt(ZonedDateTime.now());
+        operation.setErrorMessage("Операция отменена пользователем");
+        fileOperationRepository.save(operation);
 
-        // Обновляем статус в БД
-        return fileOperationRepository.findById(operationId)
-                .map(operation -> {
-                    // Задаем статус как FAILED, так как CANCELED не существует в текущем enum
-                    operation.setStatus(OperationStatus.FAILED);
-                    operation.setCompletedAt(ZonedDateTime.now());
-                    operation.setErrorMessage("Операция отменена пользователем");
-                    fileOperationRepository.save(operation);
-
-                    // Удаляем из активных операций
-                    activeOperations.remove(operationId);
-
-                    return true;
-                })
-                .orElse(false);
+        activeOperations.remove(operation.getId());
     }
 
-    /**
-     * Проверяет, была ли отменена операция
-     *
-     * @param operationId идентификатор операции
-     * @return true, если операция была отменена
-     */
-    public boolean isOperationCanceled(Long operationId) {
-        return canceledOperations.contains(operationId);
-    }
-
-    /**
-     * Обновляет прогресс обработки файла
-     *
-     * @param operationId идентификатор операции
-     * @param processedRecords количество обработанных записей
-     * @param totalRecords общее количество записей
-     */
-    public void updateProgress(Long operationId, int processedRecords, int totalRecords) {
-        // Получаем метаданные операции
+    private void updateOperationMetadataProgress(Long operationId, int processedRecords, int totalRecords) {
         FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
         if (metadata != null) {
             metadata.updateProgress(processedRecords, totalRecords);
         }
+    }
 
-        // Обновляем статус в кеше
+    private void updateActiveOperationsCache(Long operationId, int processedRecords, int totalRecords) {
         activeOperations.put(operationId, new FileOperationStatus(
                 operationId, processedRecords, totalRecords, OperationStatus.PROCESSING));
+    }
 
-        // Периодически обновляем статус в БД (например, каждые 5% или 1000 записей)
-        if (processedRecords % 1000 == 0 ||
-                (totalRecords > 0 && (double) processedRecords / totalRecords >= 0.05)) {
-            updateProgressInDb(operationId, processedRecords, totalRecords);
+    private boolean shouldUpdateProgressInDatabase(int processedRecords, int totalRecords) {
+        return processedRecords % PROGRESS_UPDATE_FREQUENCY == 0 ||
+                (totalRecords > 0 && (double) processedRecords / totalRecords >= PROGRESS_UPDATE_PERCENTAGE);
+    }
+
+    private void updateOperationWithResult(FileOperation operation, OperationStatus status,
+                                           String message, int recordCount) {
+        if (status == OperationStatus.COMPLETED) {
+            operation.markAsCompleted(recordCount);
+        } else if (status == OperationStatus.FAILED) {
+            operation.markAsFailed(message);
+        } else {
+            operation.setStatus(status);
+            operation.setCompletedAt(ZonedDateTime.now());
         }
     }
 
-    /**
-     * Обновляет прогресс обработки файла в БД
-     *
-     * @param operationId идентификатор операции
-     * @param processedRecords количество обработанных записей
-     * @param totalRecords общее количество записей
-     */
-    @Transactional
-    public void updateProgressInDb(Long operationId, int processedRecords, int totalRecords) {
-        fileOperationRepository.findById(operationId).ifPresent(operation -> {
-            // Сохраняем прогресс в метаданных
-            FileOperationMetadata metadata = FileOperationMetadata.get(operationId);
-            if (metadata != null) {
-                metadata.updateProgress(processedRecords, totalRecords);
-            }
-        });
+    private void removeFromTrackingCollections(Long operationId) {
+        activeOperations.remove(operationId);
+        canceledOperations.remove(operationId);
     }
 
-    /**
-     * Завершает операцию обработки файла
-     *
-     * @param operationId идентификатор операции
-     * @param status статус завершения
-     * @param message сообщение о результате
-     * @param recordCount количество обработанных записей
-     */
-    @Transactional
-    public void completeOperation(Long operationId, OperationStatus status, String message, int recordCount) {
-        fileOperationRepository.findById(operationId).ifPresent(operation -> {
-            if (status == OperationStatus.COMPLETED) {
-                operation.markAsCompleted(recordCount);
-            } else if (status == OperationStatus.FAILED) {
-                operation.markAsFailed(message);
-            } else {
-                operation.setStatus(status);
-                operation.setCompletedAt(ZonedDateTime.now());
-            }
-
-            fileOperationRepository.save(operation);
-
-            // Удаляем из активных операций
-            activeOperations.remove(operationId);
-            canceledOperations.remove(operationId);
-        });
-    }
-
-    /**
-     * Вычисляет хеш содержимого файла
-     *
-     * @param file файл для вычисления хеша
-     * @return строка с хешем файла
-     * @throws IOException если произошла ошибка при чтении файла
-     */
-    private String calculateFileHash(MultipartFile file) throws IOException {
+    private String calculateFileHash(MultipartFile file) throws FileOperationException {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(file.getBytes());
-
-            // Преобразуем хеш в строку
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-
-            return hexString.toString();
+            return bytesToHexString(hash);
         } catch (Exception e) {
             log.error("Error calculating file hash: {}", e.getMessage());
-            throw new IOException("Ошибка при вычислении хеша файла", e);
+            throw new FileOperationException("Ошибка при вычислении хеша файла: " + e.getMessage(), e);
         }
     }
 
+    private String bytesToHexString(byte[] hash) {
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
+
     /**
-     * Класс для хранения статуса операции обработки файла
+     * Статус операции обработки файла
      */
     public static class FileOperationStatus {
         private final Long operationId;
@@ -348,10 +348,12 @@ public class FileProcessingService {
             this.processedRecords = processedRecords;
             this.totalRecords = totalRecords;
             this.status = status;
+            this.progressPercent = calculateProgressPercent(processedRecords, totalRecords);
+        }
 
-            // Вычисляем процент выполнения
-            this.progressPercent = totalRecords > 0
-                    ? (int) Math.min(100, Math.round((double) processedRecords / totalRecords * 100))
+        private int calculateProgressPercent(int processed, int total) {
+            return total > 0
+                    ? (int) Math.min(100, Math.round((double) processed / total * 100))
                     : 0;
         }
 
@@ -377,7 +379,7 @@ public class FileProcessingService {
     }
 
     /**
-     * Класс для хранения результата обработки файла
+     * Результат обработки файла
      */
     public static class FileProcessingResult {
         private Long operationId;

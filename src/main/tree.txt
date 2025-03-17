@@ -1,0 +1,102 @@
+Структура папок
+Серийный номер тома: 2ACC-0DF3
+E:.
+|   tree.txt
+|   
++---java
+|   \---my
+|       \---java
+|           |   Main.java
+|           |   
+|           +---config
+|           |       AsyncConfig.java
+|           |       RequestIdFilter.java
+|           |       WebConfig.java
+|           |       
+|           +---controller
+|           |       ClientController.java
+|           |       FileOperationController.java
+|           |       MainController.java
+|           |       
+|           +---dto
+|           |       ClientDto.java
+|           |       FileOperationDto.java
+|           |       
+|           +---exception
+|           |       FileOperationException.java
+|           |       GlobalExceptionHandler.java
+|           |       
+|           +---model
+|           |       Client.java
+|           |       FileOperation.java
+|           |       
+|           +---repository
+|           |       ClientRepository.java
+|           |       FileOperationRepository.java
+|           |       
+|           +---service
+|           |   +---client
+|           |   |   |   ClientService.java
+|           |   |   |   
+|           |   |   \---impl
+|           |   |           ClientServiceImpl.java
+|           |   |           
+|           |   \---file
+|           |       |   AsyncFileProcessingService.java
+|           |       |   CsvFileReader.java
+|           |       |   ExcelFileReader.java
+|           |       |   FileOperationMetadata.java
+|           |       |   FileProcessingService.java
+|           |       |   FileReader.java
+|           |       |   FileReaderFactory.java
+|           |       |   FileTypeDetector.java
+|           |       |   
+|           |       \---strategy
+|           |               AbstractFileProcessingStrategy.java
+|           |               FileProcessingStrategy.java
+|           |               
+|           \---util
+|                   FieldDescriptionUtils.java
+|                   PathResolver.java
+|                   
+\---resources
+    |   application-dev.properties
+    |   application.properties
+    |   logback-spring.xml
+    |   
+    +---db
+    |   \---migration
+    +---static
+    |   +---css
+    |   |       styles.css
+    |   |       
+    |   \---js
+    |           main.js
+    |           
+    \---templates
+        |   index.html
+        |   
+        +---clients
+        |       details.html
+        |       form.html
+        |       list.html
+        |       
+        +---error
+        |       access-denied.html
+        |       file-error.html
+        |       general.html
+        |       not-found.html
+        |       
+        +---files
+        |       operation-details.html
+        |       upload.html
+        |       
+        +---layout
+        |       main.html
+        |       
+        +---statistics
+        |       index.html
+        |       
+        \---utilities
+                index.html
+                

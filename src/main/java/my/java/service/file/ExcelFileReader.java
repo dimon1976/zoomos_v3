@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -20,6 +20,10 @@ import java.util.*;
 @Service
 public class ExcelFileReader implements FileReader {
 
+    private static final int INITIAL_LIST_CAPACITY = 100;
+    private static final int FIRST_SHEET_INDEX = 0;
+    private static final int HEADER_ROW_INDEX = 0;
+
     private Workbook workbook;
     private List<String> headers;
     private Sheet activeSheet;
@@ -28,187 +32,71 @@ public class ExcelFileReader implements FileReader {
     private FileTypeDetector fileTypeDetector;
     private PathResolver pathResolver;
 
-    /**
-     * Конструктор по умолчанию
-     */
     public ExcelFileReader() {
     }
 
-    /**
-     * Конструктор с указанием зависимостей
-     *
-     * @param fileTypeDetector детектор типа файла
-     * @param pathResolver утилита для работы с путями
-     */
     @Autowired
     public ExcelFileReader(FileTypeDetector fileTypeDetector, PathResolver pathResolver) {
         this.fileTypeDetector = fileTypeDetector;
         this.pathResolver = pathResolver;
     }
 
-    /**
-     * Конструктор для чтения Excel-файла из Path
-     *
-     * @param filePath путь к файлу
-     * @param fileType тип Excel-файла
-     * @param fileTypeDetector детектор типа файла
-     * @param pathResolver утилита для работы с путями
-     * @throws IOException если произошла ошибка при чтении
-     */
-    public ExcelFileReader(Path filePath, FileType fileType, FileTypeDetector fileTypeDetector, PathResolver pathResolver) throws IOException {
+    public ExcelFileReader(Path filePath, FileType fileType, FileTypeDetector fileTypeDetector, PathResolver pathResolver)
+            throws IOException {
         this.fileTypeDetector = fileTypeDetector;
         this.pathResolver = pathResolver;
         initializeFromPath(filePath, fileType);
     }
 
-    /**
-     * Инициализирует чтение Excel-файла
-     *
-     * @param file Excel-файл для чтения
-     * @throws IOException если произошла ошибка при чтении
-     */
     @Override
     public void initialize(MultipartFile file) throws IOException {
-        if (fileTypeDetector == null) {
-            throw new IllegalStateException("FileTypeDetector must be set before initialization");
-        }
+        validateDependencies();
 
-        // Определяем тип Excel-файла
         FileType fileType = fileTypeDetector.detectFileType(file);
-
-        // Открываем книгу Excel
         workbook = fileTypeDetector.createWorkbook(file, fileType);
 
         initializeWorkbook();
     }
 
-    /**
-     * Инициализирует чтение Excel-файла из Path
-     *
-     * @param filePath путь к файлу
-     * @param fileType тип Excel-файла
-     * @throws IOException если произошла ошибка при чтении
-     */
     public void initializeFromPath(Path filePath, FileType fileType) throws IOException {
-        if (fileTypeDetector == null) {
-            throw new IllegalStateException("FileTypeDetector must be set before initialization");
-        }
+        validateDependencies();
 
-        // Открываем книгу Excel
         workbook = fileTypeDetector.createWorkbook(filePath, fileType);
 
         initializeWorkbook();
     }
 
-    /**
-     * Инициализирует книгу Excel
-     *
-     * @throws IOException если произошла ошибка при инициализации
-     */
-    private void initializeWorkbook() throws IOException {
-        // Выбираем активный лист (первый по умолчанию)
-        if (workbook.getNumberOfSheets() == 0) {
-            throw new IOException("Excel-файл не содержит листов");
-        }
-
-        activeSheet = workbook.getSheetAt(0);
-
-        // Читаем заголовки из первой строки
-        Row headerRow = activeSheet.getRow(0);
-        if (headerRow == null) {
-            throw new IOException("Отсутствует строка заголовков в Excel-файле");
-        }
-
-        // Определяем количество колонок
-        int lastCellNum = headerRow.getLastCellNum();
-        headers = new ArrayList<>(lastCellNum);
-
-        // Читаем заголовки
-        for (int i = 0; i < lastCellNum; i++) {
-            Cell cell = headerRow.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-            String headerValue = getCellValueAsString(cell).trim();
-            headers.add(headerValue);
-        }
-
-        // Определяем количество строк в файле
-        totalRows = activeSheet.getLastRowNum();
-
-        // Устанавливаем текущую позицию - после заголовка
-        currentRowIndex = 1;
-
-        log.debug("Excel file initialized. Sheets: {}, Rows: {}, Headers: {}",
-                workbook.getNumberOfSheets(), totalRows, headers);
-    }
-
-    /**
-     * Возвращает заголовки Excel-файла
-     *
-     * @return список заголовков
-     */
     @Override
     public List<String> getHeaders() {
         return headers;
     }
 
-    /**
-     * Читает следующую строку из Excel-файла
-     *
-     * @return Map, где ключи - заголовки, значения - данные
-     * @throws IOException если произошла ошибка при чтении
-     */
     @Override
     public Map<String, String> readNextRow() throws IOException {
-        if (currentRowIndex > totalRows) {
-            return null; // Конец файла
+        if (isEndOfFile()) {
+            return null;
         }
 
         Row row = activeSheet.getRow(currentRowIndex++);
         if (row == null) {
-            // Пропускаем пустые строки
-            return readNextRow();
+            return readNextRow(); // Пропускаем пустые строки
         }
 
-        Map<String, String> rowData = new LinkedHashMap<>();
-
-        // Проверяем, пуста ли вся строка
-        boolean hasData = false;
-        for (Cell cell : row) {
-            if (cell != null && cell.getCellType() != CellType.BLANK) {
-                hasData = true;
-                break;
-            }
+        if (isEmptyRow(row)) {
+            return readNextRow(); // Пропускаем строки без данных
         }
 
-        if (!hasData) {
-            // Если строка пустая, пропускаем ее
-            return readNextRow();
-        }
-
-        // Читаем данные строки
-        for (int i = 0; i < headers.size(); i++) {
-            Cell cell = row.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-            String value = getCellValueAsString(cell);
-            rowData.put(headers.get(i), value);
-        }
-
-        return rowData;
+        return convertRowToMap(row);
     }
 
-    /**
-     * Читает порцию строк (чанк) указанного размера
-     *
-     * @param chunkSize размер чанка
-     * @return список строк данных
-     * @throws IOException если произошла ошибка при чтении
-     */
     @Override
     public List<Map<String, String>> readChunk(int chunkSize) throws IOException {
         List<Map<String, String>> chunk = new ArrayList<>(chunkSize);
 
-        for (int i = 0; i < chunkSize; i++) {
+        for (int i = 0; i < chunkSize && hasMoreRows(); i++) {
             Map<String, String> row = readNextRow();
             if (row == null) {
-                break; // Достигнут конец файла
+                break;
             }
             chunk.add(row);
         }
@@ -216,12 +104,6 @@ public class ExcelFileReader implements FileReader {
         return chunk;
     }
 
-    /**
-     * Читает все строки из Excel-файла
-     *
-     * @return список всех строк данных
-     * @throws IOException если произошла ошибка при чтении
-     */
     @Override
     public List<Map<String, String>> readAll() throws IOException {
         List<Map<String, String>> allRows = new ArrayList<>();
@@ -234,11 +116,6 @@ public class ExcelFileReader implements FileReader {
         return allRows;
     }
 
-    /**
-     * Закрывает ресурсы, использованные при чтении Excel-файла
-     *
-     * @throws IOException если произошла ошибка при закрытии
-     */
     @Override
     public void close() throws IOException {
         if (workbook != null) {
@@ -246,42 +123,96 @@ public class ExcelFileReader implements FileReader {
         }
     }
 
-    /**
-     * Возвращает примерное количество строк в Excel-файле (без заголовка)
-     *
-     * @return количество строк данных
-     */
     @Override
     public long estimateRowCount() {
         return totalRows;
     }
 
-    /**
-     * Возвращает текущую позицию чтения (номер строки)
-     *
-     * @return номер текущей строки
-     */
     @Override
     public long getCurrentPosition() {
         return currentRowIndex - 1;
     }
 
-    /**
-     * Проверка, есть ли еще строки для чтения
-     *
-     * @return true, если есть еще строки
-     */
     @Override
     public boolean hasMoreRows() {
         return currentRowIndex <= totalRows;
     }
 
-    /**
-     * Возвращает значение ячейки Excel как строку
-     *
-     * @param cell ячейка Excel
-     * @return строковое представление значения ячейки
-     */
+    // Вспомогательные методы
+
+    private void validateDependencies() {
+        if (fileTypeDetector == null) {
+            throw new IllegalStateException("FileTypeDetector must be set before initialization");
+        }
+    }
+
+    private void initializeWorkbook() throws IOException {
+        validateWorkbookHasSheets();
+
+        activeSheet = workbook.getSheetAt(FIRST_SHEET_INDEX);
+
+        headers = readHeadersFromFirstRow();
+        totalRows = activeSheet.getLastRowNum();
+        currentRowIndex = HEADER_ROW_INDEX + 1; // Начинаем с первой строки данных
+
+        logInitializationDetails();
+    }
+
+    private void validateWorkbookHasSheets() throws IOException {
+        if (workbook.getNumberOfSheets() == 0) {
+            throw new IOException("Excel-файл не содержит листов");
+        }
+    }
+
+    private List<String> readHeadersFromFirstRow() throws IOException {
+        Row headerRow = activeSheet.getRow(HEADER_ROW_INDEX);
+
+        if (headerRow == null) {
+            throw new IOException("Отсутствует строка заголовков в Excel-файле");
+        }
+
+        int columnCount = headerRow.getLastCellNum();
+        List<String> headerList = new ArrayList<>(columnCount);
+
+        for (int i = 0; i < columnCount; i++) {
+            Cell cell = headerRow.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            String headerValue = getCellValueAsString(cell).trim();
+            headerList.add(headerValue);
+        }
+
+        return headerList;
+    }
+
+    private void logInitializationDetails() {
+        log.debug("Excel file initialized. Sheets: {}, Rows: {}, Headers: {}",
+                workbook.getNumberOfSheets(), totalRows, headers);
+    }
+
+    private boolean isEndOfFile() {
+        return currentRowIndex > totalRows;
+    }
+
+    private boolean isEmptyRow(Row row) {
+        for (Cell cell : row) {
+            if (cell != null && cell.getCellType() != CellType.BLANK) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Map<String, String> convertRowToMap(Row row) {
+        Map<String, String> rowData = new LinkedHashMap<>(headers.size());
+
+        for (int i = 0; i < headers.size(); i++) {
+            Cell cell = row.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+            String value = getCellValueAsString(cell);
+            rowData.put(headers.get(i), value);
+        }
+
+        return rowData;
+    }
+
     private String getCellValueAsString(Cell cell) {
         if (cell == null) {
             return "";
@@ -291,43 +222,49 @@ public class ExcelFileReader implements FileReader {
             case STRING:
                 return cell.getStringCellValue();
             case NUMERIC:
-                if (DateUtil.isCellDateFormatted(cell)) {
-                    // Форматируем дату
-                    DataFormatter formatter = new DataFormatter();
-                    return formatter.formatCellValue(cell);
-                } else {
-                    // Избегаем научной нотации для чисел
-                    double value = cell.getNumericCellValue();
-                    if (value == Math.floor(value)) {
-                        return String.format("%.0f", value);
-                    } else {
-                        return String.valueOf(value);
-                    }
-                }
+                return formatNumericCell(cell);
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
-                try {
-                    // Пытаемся получить строковый результат формулы
-                    return cell.getStringCellValue();
-                } catch (Exception e) {
-                    try {
-                        // Пытаемся получить числовой результат формулы
-                        double value = cell.getNumericCellValue();
-                        if (value == Math.floor(value)) {
-                            return String.format("%.0f", value);
-                        } else {
-                            return String.valueOf(value);
-                        }
-                    } catch (Exception ex) {
-                        // Возвращаем текст формулы, если не удалось получить результат
-                        return cell.getCellFormula();
-                    }
-                }
+                return getFormulaResult(cell);
             case BLANK:
-                return "";
             default:
                 return "";
+        }
+    }
+
+    private String formatNumericCell(Cell cell) {
+        if (DateUtil.isCellDateFormatted(cell)) {
+            return formatDateCell(cell);
+        } else {
+            return formatNumberCell(cell);
+        }
+    }
+
+    private String formatDateCell(Cell cell) {
+        DataFormatter formatter = new DataFormatter();
+        return formatter.formatCellValue(cell);
+    }
+
+    private String formatNumberCell(Cell cell) {
+        double value = cell.getNumericCellValue();
+        // Если число целое, не показываем десятичную часть
+        if (value == Math.floor(value)) {
+            return String.format("%.0f", value);
+        } else {
+            return String.valueOf(value);
+        }
+    }
+
+    private String getFormulaResult(Cell cell) {
+        try {
+            return cell.getStringCellValue();
+        } catch (Exception e) {
+            try {
+                return formatNumberCell(cell);
+            } catch (Exception ex) {
+                return cell.getCellFormula();
+            }
         }
     }
 }

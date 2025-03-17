@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ${client.name + ' - Операции'},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Операции'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${client.name + ' - Операции'}">Клиент - Операции</title>
+    <style>
+        .badge-operation {
+            font-size: 85%;
+        }
+        .status-pending {
+            background-color: #ffc107;
+        }
+        .status-processing {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .status-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-error {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Основная информация -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="card-title" th:text="${client.name}">Имя клиента</h4>
+                <div>
+                    <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-sm btn-outline-primary me-2">
+                        <i class="fas fa-file-import me-1"></i>Импорт файлов
+                    </a>
+                    <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-file-export me-1"></i>Экспорт данных
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры операций -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Фильтры операций</h5>
+        </div>
+        <div class="card-body">
+            <form th:action="@{/clients/{id}/operations(id=${client.id})}" method="get">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="startDate" class="form-label">Дата с:</label>
+                        <input type="date" class="form-control" id="startDate" name="startDate"
+                               th:value="${param.startDate}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="endDate" class="form-label">Дата по:</label>
+                        <input type="date" class="form-control" id="endDate" name="endDate"
+                               th:value="${param.endDate}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="type" class="form-label">Тип операции:</label>
+                        <select class="form-select" id="type" name="type">
+                            <option value="">Все типы</option>
+                            <option value="IMPORT" th:selected="${param.type == 'IMPORT'}">Импорт</option>
+                            <option value="EXPORT" th:selected="${param.type == 'EXPORT'}">Экспорт</option>
+                            <option value="PROCESSING" th:selected="${param.type == 'PROCESSING'}">Обработка</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Статус:</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">Все статусы</option>
+                            <option value="PENDING" th:selected="${param.status == 'PENDING'}">Ожидание</option>
+                            <option value="PROCESSING" th:selected="${param.status == 'PROCESSING'}">В процессе</option>
+                            <option value="COMPLETED" th:selected="${param.status == 'COMPLETED'}">Завершено</option>
+                            <option value="ERROR" th:selected="${param.status == 'ERROR'}">Ошибка</option>
+                        </select>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="fas fa-search me-1"></i>Применить фильтры
+                        </button>
+                        <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times me-1"></i>Сбросить фильтры
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Список операций -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Список операций</h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info" role="alert" th:if="${#lists.isEmpty(operations)}">
+                <i class="fas fa-info-circle me-2"></i>У этого клиента пока нет файловых операций
+            </div>
+            <div class="table-responsive" th:if="${!#lists.isEmpty(operations)}">
+                <table class="table table-striped">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Тип операции</th>
+                        <th>Файл</th>
+                        <th>Дата создания</th>
+                        <th>Дата обновления</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="operation : ${operations}">
+                        <td th:text="${operation.id}">1</td>
+                        <td th:text="${operation.type}">Импорт</td>
+                        <td th:text="${operation.fileName}">file.csv</td>
+                        <td th:text="${#temporals.format(operation.createdAt, 'dd.MM.yyyy HH:mm')}">01.01.2023</td>
+                        <td th:text="${#temporals.format(operation.updatedAt, 'dd.MM.yyyy HH:mm')}">01.01.2023</td>
+                        <td>
+                                <span th:class="${'badge ' +
+                                    (operation.status == 'COMPLETED' ? 'status-success' :
+                                     (operation.status == 'ERROR' ? 'status-error' :
+                                      (operation.status == 'PROCESSING' ? 'status-processing' : 'status-pending')))}"
+                                      th:text="${operation.status}">
+                                    Статус
+                                </span>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <a th:href="@{/files/operations/{id}(id=${operation.id})}" class="btn btn-sm btn-info">
+                                    <i class="fas fa-eye me-1"></i>Детали
+                                </a>
+                                <a th:if="${operation.status == 'COMPLETED'}"
+                                   th:href="@{/files/operations/{id}/download(id=${operation.id})}"
+                                   class="btn btn-sm btn-success">
+                                    <i class="fas fa-download me-1"></i>Скачать
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Пагинация -->
+            <nav th:if="${totalPages > 1}" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item" th:classappend="${currentPage == 0} ? 'disabled'">
+                        <a class="page-link" th:href="@{/clients/{id}/operations(id=${client.id}, page=0, size=${size}, startDate=${param.startDate}, endDate=${param.endDate}, type=${param.type}, status=${param.status})}">
+                            Первая
+                        </a>
+                    </li>
+                    <li class="page-item" th:classappend="${currentPage == 0} ? 'disabled'">
+                        <a class="page-link" th:href="@{/clients/{id}/operations(id=${client.id}, page=${currentPage - 1}, size=${size}, startDate=${param.startDate}, endDate=${param.endDate}, type=${param.type}, status=${param.status})}">
+                            &laquo;
+                        </a>
+                    </li>
+                    <li class="page-item" th:each="i : ${#numbers.sequence(0, totalPages - 1)}"
+                        th:if="${i >= currentPage - 2 and i <= currentPage + 2}"
+                        th:classappend="${i == currentPage} ? 'active'">
+                        <a class="page-link" th:href="@{/clients/{id}/operations(id=${client.id}, page=${i}, size=${size}, startDate=${param.startDate}, endDate=${param.endDate}, type=${param.type}, status=${param.status})}">
+                            <span th:text="${i + 1}">1</span>
+                        </a>
+                    </li>
+                    <li class="page-item" th:classappend="${currentPage == totalPages - 1} ? 'disabled'">
+                        <a class="page-link" th:href="@{/clients/{id}/operations(id=${client.id}, page=${currentPage + 1}, size=${size}, startDate=${param.startDate}, endDate=${param.endDate}, type=${param.type}, status=${param.status})}">
+                            &raquo;
+                        </a>
+                    </li>
+                    <li class="page-item" th:classappend="${currentPage == totalPages - 1} ? 'disabled'">
+                        <a class="page-link" th:href="@{/clients/{id}/operations(id=${client.id}, page=${totalPages - 1}, size=${size}, startDate=${param.startDate}, endDate=${param.endDate}, type=${param.type}, status=${param.status})}">
+                            Последняя
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // JavaScript для инициализации datepicker или других компонентов
+        console.log('Страница операций клиента загружена');
+    });
+</script>
+</body>
+</html>

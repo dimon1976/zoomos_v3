@@ -1,14 +1,12 @@
 package my.java.repository;
 
 import my.java.model.entity.MarketData;
-import my.java.model.entity.Product;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -19,11 +17,6 @@ import java.util.Set;
 public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
 
     /**
-     * Находит все рыночные данные по ID продукта.
-     */
-    List<MarketData> findByProductId(Long productId);
-
-    /**
      * Находит все рыночные данные по ID клиента.
      */
     List<MarketData> findByClientId(Long clientId);
@@ -31,7 +24,7 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
     /**
      * Находит все рыночные данные для указанного продукта.
      */
-    List<MarketData> findByProduct(Product product);
+    List<MarketData> findByProductId(Long productId);
 
     /**
      * Находит все рыночные данные по региону.
@@ -46,12 +39,12 @@ public interface MarketDataRepository extends JpaRepository<MarketData, Long> {
     /**
      * Находит все рыночные данные по региону и ID продукта.
      */
-    Optional<List<MarketData>> findByRegionAndProductId(String region, Long productId);
+    List<MarketData> findByRegionAndProductId(String region, Long productId);
 
     /**
      * Находит все рыночные данные по конкуренту и ID продукта.
      */
-    Optional<List<MarketData>> findByCompetitorNameAndProductId(String competitorName, Long productId);
+    List<MarketData> findByCompetitorNameAndProductId(String competitorName, Long productId);
 
     /**
      * Возвращает список всех уникальных регионов.

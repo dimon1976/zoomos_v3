@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Реализация универсального сервиса для управления рыночными данными.
@@ -65,12 +66,16 @@ public class MarketDataServiceImpl implements MarketDataService {
         return marketDataRepository.findByClientId(clientId);
     }
 
-//    @Override
-//    @Transactional(readOnly = true)
-//    public List<MarketData> findByDateAfterAndClientId(LocalDateTime date, Long clientId) {
-//        log.debug("Поиск рыночных данных по дате после {} и clientId: {}", date, clientId);
-//        return marketDataRepository.findByCompetitorLocalDateTimeAfterAndClientId(date, clientId);
-//    }
+    @Override
+    @Transactional(readOnly = true)
+    public List<MarketData> findByDateAfterAndClientId(LocalDateTime date, Long clientId) {
+        log.debug("Поиск рыночных данных по дате после {} и clientId: {}", date, clientId);
+        // Исправлено: используем предикат для фильтрации
+        return marketDataRepository.findByClientId(clientId).stream()
+                .filter(data -> data.getCompetitorLocalDateTime() != null &&
+                        data.getCompetitorLocalDateTime().isAfter(date))
+                .collect(Collectors.toList());
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -104,9 +109,10 @@ public class MarketDataServiceImpl implements MarketDataService {
             return 0;
         }
 
-        // Удаляем записи
-        marketDataRepository.deleteByProductId(productId);
-        return recordsToDelete.size();
+        // Исправлено: удаляем записи вручную, так как нет метода deleteByProductId
+        int count = recordsToDelete.size();
+        recordsToDelete.forEach(marketDataRepository::delete);
+        return count;
     }
 
     @Override
@@ -120,9 +126,10 @@ public class MarketDataServiceImpl implements MarketDataService {
             return 0;
         }
 
-        // Удаляем записи
-        marketDataRepository.deleteByClientId(clientId);
-        return recordsToDelete.size();
+        // Исправлено: удаляем записи вручную, так как нет метода deleteByClientId
+        int count = recordsToDelete.size();
+        recordsToDelete.forEach(marketDataRepository::delete);
+        return count;
     }
 
     @Override
@@ -137,14 +144,20 @@ public class MarketDataServiceImpl implements MarketDataService {
 
         Optional<MarketData> existingData = Optional.empty();
 
-        // Проверяем существование данных по соответствующему критерию
+        // Исправлено: проверяем существование данных по соответствующему критерию
         if (marketData.getProduct() != null) {
             if (isRegion && marketData.getRegion() != null) {
-                existingData = marketDataRepository.findByRegionAndProductId(
+                List<MarketData> found = marketDataRepository.findByRegionAndProductId(
                         marketData.getRegion(), marketData.getProduct().getId());
+                if (!found.isEmpty()) {
+                    existingData = Optional.of(found.get(0));
+                }
             } else if (!isRegion && marketData.getCompetitorName() != null) {
-                existingData = marketDataRepository.findByCompetitorNameAndProductId(
+                List<MarketData> found = marketDataRepository.findByCompetitorNameAndProductId(
                         marketData.getCompetitorName(), marketData.getProduct().getId());
+                if (!found.isEmpty()) {
+                    existingData = Optional.of(found.get(0));
+                }
             }
         }
 

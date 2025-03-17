@@ -1,14 +1,11 @@
-// src/main/java/my/java/service/file/entity/EntitySaverFactoryImpl.java
 package my.java.service.file.entity;
 
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
-import my.java.service.competitor.CompetitorDataService;
+import my.java.service.market.MarketDataService;
 import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * Реализация фабрики для получения компонентов, сохраняющих различные типы сущностей.
+ * Обновлена для работы с объединенной сущностью MarketData.
+ */
 @Component
 @Slf4j
 public class EntitySaverFactoryImpl implements EntitySaverFactory {
@@ -26,8 +27,7 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
     @Autowired
     public EntitySaverFactoryImpl(
             ProductService productService,
-            RegionDataService regionDataService,
-            CompetitorDataService competitorDataService) {
+            MarketDataService marketDataService) {
 
         // Регистрируем обработчики для стандартных типов сущностей
         registerSaver("product", entities -> {
@@ -38,21 +38,18 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
             return productService.saveProducts(products);
         });
 
-        registerSaver("regiondata", entities -> {
-            List<RegionData> regionDataList = entities.stream()
-                    .filter(e -> e instanceof RegionData)
-                    .map(e -> (RegionData) e)
+        // Единый обработчик для маркетинговых данных
+        registerSaver("marketdata", entities -> {
+            List<MarketData> marketDataList = entities.stream()
+                    .filter(e -> e instanceof MarketData)
+                    .map(e -> (MarketData) e)
                     .toList();
-            return regionDataService.saveRegionDataList(regionDataList);
+            return marketDataService.saveMarketDataList(marketDataList);
         });
 
-        registerSaver("competitordata", entities -> {
-            List<CompetitorData> competitorDataList = entities.stream()
-                    .filter(e -> e instanceof CompetitorData)
-                    .map(e -> (CompetitorData) e)
-                    .toList();
-            return competitorDataService.saveCompetitorDataList(competitorDataList);
-        });
+        // Добавляем алиасы для обратной совместимости
+        registerSaver("regiondata", savers.get("marketdata"));
+        registerSaver("competitordata", savers.get("marketdata"));
     }
 
     @Override

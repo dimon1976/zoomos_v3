@@ -6,12 +6,10 @@ import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
 import my.java.repository.FileOperationRepository;
-import my.java.service.competitor.CompetitorDataService;
 import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.mapping.FieldMappingService;
 import my.java.service.file.processor.FileProcessor;
@@ -20,8 +18,8 @@ import my.java.service.file.repository.RelatedEntitiesRepository;
 import my.java.service.file.strategy.FileProcessingStrategy;
 import my.java.service.file.tracker.ImportProgressTracker;
 import my.java.service.file.transformer.ValueTransformerFactory;
+import my.java.service.market.MarketDataService;
 import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
 import my.java.util.PathResolver;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -52,8 +50,7 @@ public class FileImportServiceImpl implements FileImportService {
     private final FieldMappingService fieldMappingService;
     private final ValueTransformerFactory transformerFactory;
     private final ProductService productService;
-    private final RegionDataService regionDataService;
-    private final CompetitorDataService competitorDataService;
+    private final MarketDataService marketDataService;
     private final RelatedEntitiesRepository relatedEntitiesRepository;
     private final EntitySetBuilderFactory entitySetBuilderFactory;
     private final ImportProgressTracker importProgressTracker;
@@ -67,8 +64,7 @@ public class FileImportServiceImpl implements FileImportService {
             FieldMappingService fieldMappingService,
             ValueTransformerFactory transformerFactory,
             ProductService productService,
-            RegionDataService regionDataService,
-            CompetitorDataService competitorDataService,
+            MarketDataService marketDataService,
             @Qualifier("fileProcessingExecutor") TaskExecutor fileProcessingExecutor,
             List<FileProcessingStrategy> processingStrategies,
             RelatedEntitiesRepository relatedEntitiesRepository,
@@ -80,8 +76,8 @@ public class FileImportServiceImpl implements FileImportService {
         this.fieldMappingService = fieldMappingService;
         this.transformerFactory = transformerFactory;
         this.productService = productService;
-        this.regionDataService = regionDataService;
-        this.competitorDataService = competitorDataService;
+        this.marketDataService = marketDataService;
+
         this.fileProcessingExecutor = fileProcessingExecutor;
         this.processingStrategies = processingStrategies;
         this.relatedEntitiesRepository = relatedEntitiesRepository;
@@ -430,11 +426,11 @@ public class FileImportServiceImpl implements FileImportService {
                 product.setTransformerFactory(transformerFactory);
                 return product;
             case "regiondata":
-                RegionData regionData = new RegionData();
+                MarketData regionData = new MarketData();
                 regionData.setTransformerFactory(transformerFactory);
                 return regionData;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
+                MarketData competitorData = new MarketData();
                 competitorData.setTransformerFactory(transformerFactory);
                 return competitorData;
             default:
@@ -628,20 +624,20 @@ public class FileImportServiceImpl implements FileImportService {
                 break;
 
             case "regiondata":
-                List<RegionData> regionDataList = entities.stream()
-                        .filter(e -> e instanceof RegionData)
-                        .map(e -> (RegionData) e)
+                List<MarketData> regionDataList = entities.stream()
+                        .filter(e -> e instanceof MarketData)
+                        .map(e -> (MarketData) e)
                         .collect(Collectors.toList());
-                savedCount = regionDataService.saveRegionDataList(regionDataList);
+                savedCount = marketDataService.saveMarketDataList(regionDataList);
                 log.info("Сохранено {} данных регионов", savedCount);
                 break;
 
             case "competitordata":
-                List<CompetitorData> competitorDataList = entities.stream()
-                        .filter(e -> e instanceof CompetitorData)
-                        .map(e -> (CompetitorData) e)
+                List<MarketData> competitorDataList = entities.stream()
+                        .filter(e -> e instanceof MarketData)
+                        .map(e -> (MarketData) e)
                         .collect(Collectors.toList());
-                savedCount = competitorDataService.saveCompetitorDataList(competitorDataList);
+                savedCount = marketDataService.saveMarketDataList(competitorDataList);
                 log.info("Сохранено {} данных конкурентов", savedCount);
                 break;
 

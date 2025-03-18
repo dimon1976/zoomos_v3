@@ -36,6 +36,33 @@ class ImportProgressTracker {
     }
 
     /**
+     * Обработка события закрытия страницы - отключение от WebSocket
+     */
+    setupPageUnloadHandler() {
+        // Обработка закрытия страницы
+        window.addEventListener('beforeunload', () => {
+            console.log('Страница закрывается, отключаемся от WebSocket');
+            this.disconnect();
+        });
+
+        // Обработка потери видимости страницы
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                console.log('Страница скрыта, отключаемся от WebSocket');
+                this.disconnect();
+            }
+        });
+
+        // Обработка ошибок в WebSocket соединении
+        this.stompClient.debug = (message) => {
+            if (message.includes('Lost connection') || message.includes('error')) {
+                console.warn('Ошибка WebSocket соединения:', message);
+                this.disconnect();
+            }
+        };
+    }
+
+    /**
      * Подключение к WebSocket для отслеживания прогресса
      */
     connect() {
@@ -44,7 +71,8 @@ class ImportProgressTracker {
         this.stompClient = Stomp.over(socket);
 
         // Отключаем логи STOMP
-        this.stompClient.debug = () => {};
+        this.stompClient.debug = () => {
+        };
 
         this.stompClient.connect({},
             this._onConnect.bind(this),
@@ -52,6 +80,11 @@ class ImportProgressTracker {
         );
     }
 
+    /**
+     * Обработчик успешного подключения
+     * @param {string} frame - Информация о фрейме подключения
+     * @private
+     */
     /**
      * Обработчик успешного подключения
      * @param {string} frame - Информация о фрейме подключения
@@ -69,6 +102,9 @@ class ImportProgressTracker {
 
         // Запускаем таймер обновления времени
         this._startTimer();
+
+        // Настраиваем обработчик закрытия страницы
+        this.setupPageUnloadHandler();
 
         // Вызываем пользовательский обработчик подключения
         if (typeof this.options.onConnect === 'function') {
@@ -92,18 +128,26 @@ class ImportProgressTracker {
      * Отключение от WebSocket
      */
     disconnect() {
-        if (this.subscription) {
-            this.subscription.unsubscribe();
-        }
+        try {
+            if (this.subscription) {
+                this.subscription.unsubscribe();
+                this.subscription = null;
+            }
 
-        if (this.stompClient && this.connected) {
-            this.stompClient.disconnect();
-            this.connected = false;
+            if (this.stompClient && this.connected) {
+                this.stompClient.disconnect(() => {
+                    console.log('Успешно отключено от WebSocket');
+                }, {});
+                this.connected = false;
+            }
+
+            // Останавливаем таймер
+            this._stopTimer();
+
             console.log('Отключено от WebSocket');
+        } catch (e) {
+            console.error('Ошибка при отключении от WebSocket:', e);
         }
-
-        // Останавливаем таймер
-        this._stopTimer();
     }
 
     /**
@@ -264,7 +308,7 @@ class ImportProgressTracker {
         logEntry.className = 'log-entry';
 
         // Определяем класс и сообщение
-        const { logClass, logMessage } = this._getLogClassAndMessage(update);
+        const {logClass, logMessage} = this._getLogClassAndMessage(update);
 
         logEntry.innerHTML = `
             <span class="log-time">${timeStr}</span>
@@ -298,7 +342,7 @@ class ImportProgressTracker {
             logMessage = `Обработано ${update.processedRecords} из ${update.totalRecords} записей (${update.progress}%)`;
         }
 
-        return { logClass, logMessage };
+        return {logClass, logMessage};
     }
 
     /**
@@ -345,7 +389,8 @@ class ImportProgressTracker {
 /**
  * Инициализация отслеживания прогресса при загрузке страницы
  */
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
+
     const operationIdElement = document.getElementById('operationId');
     if (operationIdElement) {
         const operationId = operationIdElement.value;
@@ -371,6 +416,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 onError: (error) => {
                     console.error('Ошибка отслеживания прогресса импорта:', error);
                     showConnectionError();
+
+                    // Инициализируем запасной метод для получения статуса
+                    initStatusPolling(operationId);
                 }
             });
 
@@ -382,9 +430,83 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Инициализируем обработчик кнопки отмены импорта
             initCancelButton(operationId);
+
+            // Инициализируем запасной метод даже если WebSocket работает
+            initStatusPolling(operationId);
         }
     }
 });
+
+// Добавим функцию для периодической проверки статуса импорта через REST API
+function initStatusPolling(operationId) {
+    // Устанавливаем интервал проверки (каждые 5 секунд)
+    const interval = setInterval(() => {
+        if (!window.importProgressTracker || !window.importProgressTracker.connected) {
+            fetch(`/import/api/status/${operationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Обновляем интерфейс на основе полученных данных
+                    updateProgressUI(data);
+
+                    // Если импорт завершен, останавливаем опрос
+                    if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                        clearInterval(interval);
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при получении статуса импорта:', error);
+                });
+        }
+    }, 5000);
+
+    // Сохраняем ID интервала для возможной очистки
+    window.statusPollingInterval = interval;
+}
+
+// Функция для обновления UI на основе данных о статусе
+function updateProgressUI(data) {
+    const progressBar = document.querySelector('#progressBar');
+    const progressText = document.querySelector('#progressText');
+    const statusElement = document.querySelector('#importStatus');
+
+    if (progressBar && data.processingProgress !== undefined) {
+        progressBar.style.width = data.processingProgress + '%';
+        progressBar.setAttribute('aria-valuenow', data.processingProgress);
+        progressBar.textContent = data.processingProgress + '%';
+    }
+
+    if (progressText && data.processedRecords !== undefined) {
+        progressText.textContent = `Обработано ${data.processedRecords} из ${data.totalRecords} записей (${data.processingProgress}%)`;
+    }
+
+    if (statusElement) {
+        if (data.status === 'COMPLETED') {
+            statusElement.textContent = 'Завершено';
+            statusElement.className = 'badge bg-success';
+        } else if (data.status === 'FAILED') {
+            statusElement.textContent = 'Ошибка';
+            statusElement.className = 'badge bg-danger';
+        } else {
+            statusElement.textContent = 'Импорт в процессе';
+            statusElement.className = 'badge bg-primary';
+        }
+    }
+}
+
+// Установим глобальный обработчик ошибок WebSocket
+window.onerror = function(message, source, lineno, colno, error) {
+    if (message.includes('WebSocket') || (error && error.message && error.message.includes('WebSocket'))) {
+        console.error('Ошибка WebSocket:', message);
+
+        // Если есть активный трекер, отключаем его
+        if (window.importProgressTracker && window.importProgressTracker.connected) {
+            window.importProgressTracker.disconnect();
+        }
+
+        return true; // Предотвращаем всплытие ошибки
+    }
+    return false;
+};
 
 /**
  * Инициализирует обработчик кнопки отмены импорта
@@ -393,7 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function initCancelButton(operationId) {
     const cancelImportBtn = document.getElementById('cancelImportBtn');
     if (cancelImportBtn) {
-        cancelImportBtn.addEventListener('click', function() {
+        cancelImportBtn.addEventListener('click', function () {
             if (confirm('Вы уверены, что хотите отменить импорт? Это действие нельзя отменить.')) {
                 cancelImport(operationId);
             }

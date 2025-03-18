@@ -516,11 +516,6 @@
     const clientId = /*[[${client.id}]]*/ 1;
     // Получаем текущий тип сущности из селектора
     let entityType = 'product'; // Значение по умолчанию
-    document.addEventListener('DOMContentLoaded', function() {
-        entityType = document.getElementById('entityTypeSelect')?.value || 'product';
-        console.log(`Инициализация с clientId=${clientId}, entityType=${entityType}`);
-    });
-
 
     // Создаем резервные данные на случай, если с сервера ничего не пришло
     const fallbackMetadata = {
@@ -578,10 +573,19 @@
     const entityFieldsMetadata = (serverEntityFieldsMetadata && Object.keys(serverEntityFieldsMetadata).length > 0) ?
         serverEntityFieldsMetadata : fallbackMetadata;
 
-    console.log('DEBUG - Метаданные полей:', entityFieldsMetadata);
-    console.log('DEBUG - Типы сущностей:', Object.keys(entityFieldsMetadata));
-
     document.addEventListener('DOMContentLoaded', function () {
+        console.log('=== Debug Information ===');
+        console.log('Server EntityFieldsMetadata:', serverEntityFieldsMetadata);
+        console.log('Fallback EntityFieldsMetadata:', fallbackMetadata);
+        console.log('Actual EntityFieldsMetadata used:', entityFieldsMetadata);
+        console.log('Supported Entity Types:', supportedEntityTypes);
+        console.log('Client ID:', clientId);
+
+        // Получаем текущий тип сущности из селектора
+        entityType = document.getElementById('entityTypeSelect')?.value || 'product';
+        console.log('Initial Entity Type:', entityType);
+        console.log('========================');
+
         // Инициализация файла в форме
         initFileInput();
 
@@ -594,15 +598,25 @@
         // Обработка флажка сохранения схемы
         initSaveMappingCheckbox();
 
-        // Загружаем начальный тип сущности и его поля
-        const initialEntityType = document.getElementById('entityTypeSelect')?.value || 'product';
-        entityType = initialEntityType; // Устанавливаем глобальную переменную
+        // Инициализация выделения вкладки настроек
+        highlightOptionsTab();
 
         // Загрузка полей сущности при инициализации
-        loadEntityFields('product');
+        loadEntityFields(entityType);
 
-        // Заполнение сопоставления полей, если выбрана схема
-        checkForAutomaticMapping();
+        // Загрузка маппингов для начального типа сущности
+        loadMappingsForType(entityType);
+
+        // Переходим на вкладку с образцом данных для проверки
+        setTimeout(function () {
+            // Выбираем вкладку "Образец данных" для проверки отображения
+            const sampleTab = document.getElementById('sample-tab');
+            if (sampleTab) {
+                // Проверим, есть ли в sampleData записи
+                const sampleRows = document.querySelectorAll('#sample tbody tr');
+                console.log(`Найдено ${sampleRows.length} строк с образцами данных`);
+            }
+        }, 500);
     });
 
     // Инициализация файла в форме
@@ -614,237 +628,26 @@
         const fileNameElement = document.querySelector('[name="fileName"]');
         if (fileNameElement) {
             const fileName = fileNameElement.value;
-
-            // Нужно передать тот же файл обратно при отправке формы
-            // В реальном приложении здесь будет код для восстановления файла и установки его в форму
+            console.log('Имя файла:', fileName);
         }
     }
 
-    // Инициализация обработчиков для селекторов схем
-    function initMappingSelectors() {
-        const mappingCards = document.querySelectorAll('.mapping-card');
-        const mappingSelectors = document.querySelectorAll('.mapping-selector');
-
-        // Обработка клика по карточке схемы
-        mappingCards.forEach(card => {
-            card.addEventListener('click', function () {
-                const mappingId = this.dataset.mappingId;
-                const radio = document.getElementById('mapping_' + mappingId);
-
-                // Выбираем соответствующий радиобаттон
-                if (radio) {
-                    radio.checked = true;
-
-                    // Обновляем стили карточек
-                    updateMappingCardStyles();
-
-                    // Если выбрана существующая схема, загружаем её данные
-                    if (mappingId !== 'new') {
-                        loadMappingData(mappingId);
-                    }
-                }
-            });
-        });
-
-        // Обработка изменения радиобаттона
-        mappingSelectors.forEach(selector => {
-            selector.addEventListener('change', function () {
-                updateMappingCardStyles();
-
-                const mappingId = this.value;
-                if (mappingId !== 'new') {
-                    loadMappingData(mappingId);
-                }
-            });
-        });
-
-        // Обновляем стили при загрузке страницы
-        updateMappingCardStyles();
-    }
-
-    // Обновление стилей карточек схем
-    function updateMappingCardStyles() {
-        const mappingCards = document.querySelectorAll('.mapping-card');
-
-        mappingCards.forEach(card => {
-            const mappingId = card.dataset.mappingId;
-            const radio = document.getElementById('mapping_' + mappingId);
-
-            if (radio && radio.checked) {
-                card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
-            }
-        });
-    }
-
-    // Загрузка данных схемы сопоставления
-    function loadMappingData(mappingId) {
-        console.log(`Загрузка данных маппинга ID: ${mappingId}, клиент: ${clientId}, тип: ${entityType}`);
-
-        // Правильный URL для получения данных маппинга - обращаемся к API endpoint
-        fetch(`/import/api/mappings/${clientId}/${entityType}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Ошибка при получении маппингов: ' + response.status);
-                }
-                return response.json();
-            })
-            .then(mappings => {
-                // Находим нужный маппинг по ID
-                const selectedMapping = mappings.find(m => m.id == mappingId);
-                if (selectedMapping && selectedMapping.field_mapping) {
-                    console.log('Найден маппинг:', selectedMapping);
-                    fillFieldSelectors(selectedMapping.field_mapping);
-                } else {
-                    console.warn('Маппинг не найден или не содержит данных маппинга полей');
-                }
-            })
-            .catch(error => {
-                console.error('Ошибка при загрузке данных маппинга:', error);
-            });
-    }
-
-    // Инициализация выбора типа сущности
+    // Обработка изменения типа сущности
     function initEntityTypeSelector() {
         const entityTypeSelect = document.getElementById('entityTypeSelect');
 
         if (entityTypeSelect) {
             entityTypeSelect.addEventListener('change', function () {
-                const newEntityType = this.value;
-                // Сохраняем новый тип сущности в глобальной переменной
-                entityType = newEntityType;
+                // Обновляем глобальную переменную с типом сущности
+                entityType = this.value;
+                console.log(`Выбран новый тип сущности: ${entityType}`);
 
-                // Загружаем поля сущности для нового типа
-                loadEntityFields(newEntityType);
+                // Загружаем поля для нового типа сущности
+                loadEntityFields(entityType);
 
                 // Загружаем маппинги для нового типа сущности
-                loadMappingsForEntityType(newEntityType);
+                loadMappingsForType(entityType);
             });
-        }
-    }
-
-    /**
-     * Загрузка маппингов для выбранного типа сущности
-     * @param {string} entityType - Тип сущности
-     */
-    function loadMappingsForEntityType(entityType) {
-        console.log(`Загрузка маппингов для типа сущности: ${entityType}, клиент: ${clientId}`);
-
-        // Получаем контейнер для отображения маппингов
-        const mappingsContainer = document.querySelector('.row:has(.mapping-card)');
-        if (!mappingsContainer) {
-            console.error('Контейнер маппингов не найден');
-            return;
-        }
-
-        // Показываем индикатор загрузки
-        const loadingIndicator = document.createElement('div');
-        loadingIndicator.className = 'col-12 text-center my-3';
-        loadingIndicator.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div>';
-        mappingsContainer.appendChild(loadingIndicator);
-
-        // Запрашиваем доступные маппинги с сервера
-        fetch(`/import/api/mappings/${clientId}/${entityType}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Ошибка при получении маппингов: ' + response.status);
-                }
-                return response.json();
-            })
-            .then(mappings => {
-                console.log(`Получено ${mappings.length} маппингов для типа ${entityType}`);
-                updateMappingsView(mappings);
-            })
-            .catch(error => {
-                console.error('Ошибка при загрузке маппингов:', error);
-                // Показываем ошибку пользователю
-                mappingsContainer.innerHTML = `
-                <div class="col-12">
-                    <div class="alert alert-danger">
-                        Ошибка при загрузке схем маппинга: ${error.message}
-                    </div>
-                </div>
-            `;
-            })
-            .finally(() => {
-                // Удаляем индикатор загрузки
-                if (loadingIndicator && loadingIndicator.parentNode) {
-                    loadingIndicator.parentNode.removeChild(loadingIndicator);
-                }
-            });
-    }
-
-    /**
-     * Обновляет DOM с маппингами на основе полученных данных
-     * @param {Array} mappings - Массив доступных маппингов
-     */
-    function updateMappingsView(mappings) {
-        const mappingsContainer = document.querySelector('.row:has(.mapping-card)');
-        if (!mappingsContainer) return;
-
-        // Запоминаем выбранную схему
-        const selectedMappingId = document.querySelector('input[name="mappingId"]:checked')?.value;
-
-        // Очищаем текущее содержимое, кроме "Создать новую схему"
-        const createNewCard = mappingsContainer.querySelector('.mapping-card.create-new').closest('.col-md-6');
-        mappingsContainer.innerHTML = '';
-
-        // Добавляем полученные маппинги
-        if (mappings && mappings.length > 0) {
-            mappings.forEach(mapping => {
-                const mappingCard = document.createElement('div');
-                mappingCard.className = 'col-md-6 mb-3';
-                mappingCard.innerHTML = `
-                <div class="mapping-card" data-mapping-id="${mapping.id}">
-                    <div class="mapping-header">
-                        <div class="mapping-title">${mapping.name}</div>
-                        <div class="mapping-radio">
-                            <input type="radio" id="mapping_${mapping.id}" name="mappingId"
-                                   value="${mapping.id}" class="form-check-input mapping-selector"
-                                   ${selectedMappingId == mapping.id ? 'checked' : ''}/>
-                        </div>
-                    </div>
-                    <div class="mapping-description">${mapping.description || 'Без описания'}</div>
-                    <div class="mapping-details">
-                        <small>Полей: ${mapping.fields_count}</small>
-                        <small class="ms-2">
-                            <span class="badge ${mapping.client_id == clientId ? 'bg-primary' : 'bg-secondary'}">
-                                ${mapping.client_id == clientId ? 'Персональный' : 'Общий'}
-                            </span>
-                        </small>
-                    </div>
-                </div>
-            `;
-                mappingsContainer.appendChild(mappingCard);
-            });
-        } else {
-            // Если нет доступных маппингов
-            const noMappingsInfo = document.createElement('div');
-            noMappingsInfo.className = 'col-md-6 mb-3';
-            noMappingsInfo.innerHTML = `
-            <div class="alert alert-info">
-                Для типа "${entityType}" нет сохраненных схем маппинга. Создайте новую схему.
-            </div>
-        `;
-            mappingsContainer.appendChild(noMappingsInfo);
-        }
-
-        // Добавляем карточку "Создать новую схему"
-        mappingsContainer.appendChild(createNewCard);
-
-        // Переинициализируем обработчики событий
-        initMappingSelectors();
-
-        // Проверяем, есть ли выбранная схема маппинга в новом списке
-        const stillExists = mappings.some(m => m.id == selectedMappingId);
-        if (!stillExists && selectedMappingId && selectedMappingId !== "new") {
-            // Если выбранная схема не существует для нового типа, выбираем "Создать новую схему"
-            const newMappingRadio = document.getElementById('mapping_new');
-            if (newMappingRadio) {
-                newMappingRadio.checked = true;
-                updateMappingCardStyles();
-            }
         }
     }
 
@@ -880,6 +683,7 @@
 
         // Заполняем все селекторы полей
         const fieldSelectors = document.querySelectorAll('.entity-field-selector');
+        console.log(`Найдено ${fieldSelectors.length} селекторов полей`);
 
         fieldSelectors.forEach(selector => {
             // Сохраняем текущее значение
@@ -912,9 +716,494 @@
                 }
             }
         });
+    }
 
-        // После загрузки полей проверяем, можно ли автоматически сопоставить их
-        suggestFieldMapping();
+    // Инициализация обработчиков для селекторов схем
+    function initMappingSelectors() {
+        const mappingCards = document.querySelectorAll('.mapping-card');
+        const mappingSelectors = document.querySelectorAll('.mapping-selector');
+
+        console.log(`Инициализация ${mappingCards.length} карточек маппинга и ${mappingSelectors.length} селекторов`);
+
+        // Обработка клика по карточке схемы
+        mappingCards.forEach(card => {
+            card.addEventListener('click', function () {
+                const mappingId = this.dataset.mappingId;
+                console.log(`Клик по карточке маппинга ${mappingId}`);
+
+                const radio = document.getElementById('mapping_' + mappingId);
+
+                // Выбираем соответствующий радиобаттон
+                if (radio) {
+                    radio.checked = true;
+
+                    // Обновляем стили карточек
+                    updateMappingCardStyles();
+
+                    // Если выбрана существующая схема, загружаем её данные
+                    if (mappingId !== 'new') {
+                        loadMappingData(mappingId);
+
+                        // Показываем вкладку параметров как заполненную
+                        const optionsTab = document.getElementById('options-tab');
+                        if (optionsTab) {
+                            optionsTab.classList.add('text-primary');
+                            optionsTab.setAttribute('data-filled', 'true');
+                        }
+                    } else {
+                        // Если выбрана "Создать новую схему", предлагаем автоматическое сопоставление
+                        suggestFieldMapping();
+
+                        // Сбрасываем параметры импорта
+                        resetImportParams();
+
+                        // Снимаем отметку с вкладки параметров
+                        const optionsTab = document.getElementById('options-tab');
+                        if (optionsTab) {
+                            optionsTab.classList.remove('text-primary');
+                            optionsTab.removeAttribute('data-filled');
+                        }
+                    }
+                }
+            });
+        });
+
+        // Обработка изменения радиобаттона
+        mappingSelectors.forEach(selector => {
+            selector.addEventListener('change', function () {
+                const mappingId = this.value;
+                console.log(`Выбор маппинга через радиокнопку: ${mappingId}`);
+
+                updateMappingCardStyles();
+
+                if (mappingId !== 'new') {
+                    loadMappingData(mappingId);
+
+                    // Показываем вкладку параметров
+                    const optionsTab = document.getElementById('options-tab');
+                    if (optionsTab) {
+                        optionsTab.classList.add('text-primary');
+                        optionsTab.setAttribute('data-filled', 'true');
+                    }
+                } else {
+                    // Если выбрана "Создать новую схему", предлагаем автоматическое сопоставление
+                    suggestFieldMapping();
+
+                    // Сбрасываем параметры импорта
+                    resetImportParams();
+
+                    // Снимаем отметку с вкладки параметров
+                    const optionsTab = document.getElementById('options-tab');
+                    if (optionsTab) {
+                        optionsTab.classList.remove('text-primary');
+                        optionsTab.removeAttribute('data-filled');
+                    }
+                }
+            });
+        });
+
+        // Обновляем стили при загрузке страницы
+        updateMappingCardStyles();
+    }
+
+    // Обновление стилей карточек схем
+    function updateMappingCardStyles() {
+        const mappingCards = document.querySelectorAll('.mapping-card');
+
+        mappingCards.forEach(card => {
+            const mappingId = card.dataset.mappingId;
+            const radio = document.getElementById('mapping_' + mappingId);
+
+            if (radio && radio.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+    }
+
+    // Загрузка маппингов для типа сущности
+    function loadMappingsForType(newEntityType) {
+        console.log(`Загрузка маппингов для типа: ${newEntityType}`);
+
+        fetch(`/import/api/mappings/${clientId}/${newEntityType}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка при получении маппингов: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(mappings => {
+                console.log(`Получено ${mappings.length} маппингов для типа ${newEntityType}`);
+
+                // Находим контейнер для карточек маппинга
+                const mappingsRow = document.querySelector('.row:has(.mapping-card)');
+                if (!mappingsRow) {
+                    console.error('Контейнер с маппингами не найден');
+                    return;
+                }
+
+                // Запоминаем карточку "Создать новую схему"
+                const createNewCard = document.querySelector('.mapping-card.create-new');
+                const createNewCardParent = createNewCard ? createNewCard.closest('.col-md-6') : null;
+
+                // Удаляем все существующие карточки, кроме "Создать новую схему"
+                mappingsRow.querySelectorAll('.col-md-6').forEach(col => {
+                    const card = col.querySelector('.mapping-card');
+                    if (card && !card.classList.contains('create-new')) {
+                        col.remove();
+                    }
+                });
+
+                // Добавляем полученные маппинги
+                mappings.forEach(mapping => {
+                    const mappingCol = document.createElement('div');
+                    mappingCol.className = 'col-md-6 mb-3';
+                    mappingCol.innerHTML = `
+                    <div class="mapping-card" data-mapping-id="${mapping.id}">
+                        <div class="mapping-header">
+                            <div class="mapping-title">${mapping.name}</div>
+                            <div class="mapping-radio">
+                                <input type="radio" id="mapping_${mapping.id}" name="mappingId"
+                                       value="${mapping.id}" class="form-check-input mapping-selector"/>
+                            </div>
+                        </div>
+                        <div class="mapping-description">${mapping.description || ''}</div>
+                        <div class="mapping-details">
+                            <small>Полей: ${mapping.fields_count}</small>
+                            <small class="ms-2">
+                                <span class="badge ${mapping.client_id == clientId ? 'bg-primary' : 'bg-secondary'}">
+                                    ${mapping.client_id == clientId ? 'Персональный' : 'Общий'}
+                                </span>
+                            </small>
+                        </div>
+                    </div>
+                `;
+
+                    // Вставляем перед "Создать новую схему"
+                    if (createNewCardParent) {
+                        mappingsRow.insertBefore(mappingCol, createNewCardParent);
+                    } else {
+                        mappingsRow.appendChild(mappingCol);
+                    }
+                });
+
+                // Переинициализируем обработчики
+                initMappingSelectors();
+
+                // По умолчанию выбираем первый маппинг или "Создать новую схему"
+                if (mappings.length > 0) {
+                    const firstMappingRadio = document.getElementById(`mapping_${mappings[0].id}`);
+                    if (firstMappingRadio) {
+                        firstMappingRadio.checked = true;
+                        updateMappingCardStyles();
+                        loadMappingData(mappings[0].id);
+                    }
+                } else {
+                    const newMappingRadio = document.getElementById('mapping_new');
+                    if (newMappingRadio) {
+                        newMappingRadio.checked = true;
+                        updateMappingCardStyles();
+                        suggestFieldMapping();
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при загрузке маппингов:', error);
+            });
+    }
+
+    // Загрузка данных схемы сопоставления
+    function loadMappingData(mappingId) {
+        console.log(`Загрузка данных маппинга ID: ${mappingId}, клиент: ${clientId}, тип: ${entityType}`);
+
+        // Показываем индикатор загрузки
+        const mappingTable = document.getElementById('mappingTableContainer');
+        if (mappingTable) {
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading-indicator';
+            loadingIndicator.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div>';
+            mappingTable.appendChild(loadingIndicator);
+        }
+
+        // Запрашиваем данные маппинга
+        fetch(`/import/api/mappings/${clientId}/${entityType}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка при получении маппингов: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(mappings => {
+                // Находим нужный маппинг по ID
+                const selectedMapping = mappings.find(m => m.id == mappingId);
+
+                if (selectedMapping) {
+                    console.log('Найден маппинг:', selectedMapping);
+
+                    // Проверяем формат данных маппинга
+                    let fieldMapping = null;
+
+                    if (selectedMapping.field_mapping) {
+                        // Если поле field_mapping уже является объектом
+                        if (typeof selectedMapping.field_mapping === 'object') {
+                            fieldMapping = selectedMapping.field_mapping;
+                        }
+                        // Если field_mapping - строка JSON
+                        else if (typeof selectedMapping.field_mapping === 'string') {
+                            try {
+                                fieldMapping = JSON.parse(selectedMapping.field_mapping);
+                            } catch (e) {
+                                console.error('Ошибка при разборе JSON field_mapping:', e);
+                            }
+                        }
+                    }
+
+                    // Если есть поле mappings, используем его
+                    if (!fieldMapping && selectedMapping.mappings) {
+                        fieldMapping = selectedMapping.mappings;
+                    }
+
+                    // Если есть поле mapping_data, используем его
+                    if (!fieldMapping && selectedMapping.mapping_data) {
+                        fieldMapping = selectedMapping.mapping_data;
+                    }
+
+                    console.log('Данные маппинга полей после обработки:', fieldMapping);
+
+                    if (fieldMapping) {
+                        // Добавим задержку, чтобы убедиться, что все селекторы загружены
+                        setTimeout(() => {
+                            enhancedFillFieldSelectors(fieldMapping);
+                        }, 300);
+                    } else {
+                        console.warn('Не удалось найти данные маппинга полей в ответе от сервера');
+                    }
+
+                    // Заполняем параметры импорта
+                    if (selectedMapping.import_params) {
+                        fillImportParams(selectedMapping.import_params);
+                    }
+                } else {
+                    console.warn(`Маппинг с ID ${mappingId} не найден среди ${mappings.length} маппингов`);
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка при загрузке данных маппинга:', error);
+            })
+            .finally(() => {
+                // Удаляем индикатор загрузки
+                const loadingIndicator = document.querySelector('.loading-indicator');
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                }
+            });
+    }
+
+    function enhancedFillFieldSelectors(mapping) {
+        console.log('Расширенное заполнение полей маппинга:', mapping);
+
+        if (!mapping || Object.keys(mapping).length === 0) {
+            console.warn('Пустые данные маппинга');
+            return;
+        }
+
+        // Получаем все селекторы полей
+        const fieldSelectors = document.querySelectorAll('.entity-field-selector');
+        console.log(`Найдено ${fieldSelectors.length} селекторов полей`);
+
+        if (fieldSelectors.length === 0) {
+            console.error('Не найдены селекторы полей для заполнения!');
+            return;
+        }
+
+        let filledCount = 0;
+
+        // Выводим все селекторы для отладки
+        fieldSelectors.forEach((selector, index) => {
+            const row = selector.closest('tr');
+            const sourceCell = row ? row.querySelector('td:first-child') : null;
+            const sourceField = sourceCell ? sourceCell.textContent.trim() : `Unknown${index}`;
+
+            console.log(`Селектор #${index}: поле="${sourceField}", options=${selector.options.length}`);
+        });
+
+        // Обходим все селекторы и пытаемся заполнить их
+        fieldSelectors.forEach(selector => {
+            // Получаем строку селектора
+            const row = selector.closest('tr');
+            if (!row) {
+                console.warn('Не удалось найти строку для селектора');
+                return;
+            }
+
+            // Получаем исходное поле из первой ячейки строки
+            const sourceCell = row.querySelector('td:first-child');
+            if (!sourceCell) {
+                console.warn('Не удалось найти ячейку с исходным полем');
+                return;
+            }
+
+            const sourceField = sourceCell.textContent.trim();
+            console.log(`Обработка селектора для поля "${sourceField}"`);
+
+            // Проверяем все возможные варианты ключей в маппинге
+            let targetField = mapping[sourceField]; // Прямое совпадение
+
+            // Если прямого совпадения нет, пробуем найти без учета регистра
+            if (!targetField) {
+                const lowerSourceField = sourceField.toLowerCase();
+                for (const [key, value] of Object.entries(mapping)) {
+                    if (key.toLowerCase() === lowerSourceField) {
+                        targetField = value;
+                        console.log(`Найдено совпадение без учета регистра: ${key} -> ${value}`);
+                        break;
+                    }
+                }
+            }
+
+            // Если нашли целевое поле, устанавливаем его в селекторе
+            if (targetField) {
+                console.log(`Для поля "${sourceField}" найдено значение "${targetField}"`);
+
+                // Выводим список всех опций селектора
+                let optionsLog = 'Доступные опции: ';
+                for (let i = 0; i < selector.options.length; i++) {
+                    optionsLog += `[${i}: ${selector.options[i].value}] `;
+                }
+                console.log(optionsLog);
+
+                // Устанавливаем значение селектора
+                let found = false;
+                for (let i = 0; i < selector.options.length; i++) {
+                    if (selector.options[i].value === targetField) {
+                        console.log(`Устанавливаем индекс ${i} для поля "${sourceField}"`);
+                        selector.selectedIndex = i;
+                        found = true;
+                        filledCount++;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    console.warn(`Значение "${targetField}" не найдено в опциях селектора для поля "${sourceField}"`);
+                }
+            } else {
+                console.log(`Для поля "${sourceField}" не найдено соответствие в маппинге`);
+            }
+        });
+
+        console.log(`Заполнено ${filledCount} из ${fieldSelectors.length} селекторов полей`);
+    }
+
+    // Заполнение селекторов полей на основе маппинга
+    function fillFieldSelectors(mapping) {
+        console.log('Заполнение селекторов полей с маппингом:', mapping);
+
+        if (!mapping) return;
+
+        // Получаем все селекторы полей
+        const fieldSelectors = document.querySelectorAll('.entity-field-selector');
+        let filledCount = 0;
+
+        fieldSelectors.forEach(selector => {
+            // Получаем имя поля из файла (из ячейки в той же строке)
+            const sourceField = selector.closest('tr').querySelector('td:first-child').textContent.trim();
+
+            // Проверяем наличие поля в маппинге
+            let targetField = mapping[sourceField];
+
+            // Если прямое сопоставление не найдено, ищем без учета регистра
+            if (!targetField) {
+                for (const [key, value] of Object.entries(mapping)) {
+                    if (key.toLowerCase() === sourceField.toLowerCase()) {
+                        targetField = value;
+                        break;
+                    }
+                }
+            }
+
+            if (targetField) {
+                console.log(`Для поля "${sourceField}" найдено сопоставление: "${targetField}"`);
+
+                // Устанавливаем значение в селекторе
+                for (let i = 0; i < selector.options.length; i++) {
+                    if (selector.options[i].value === targetField) {
+                        selector.selectedIndex = i;
+                        filledCount++;
+                        break;
+                    }
+                }
+            }
+        });
+
+        console.log(`Заполнено ${filledCount} из ${fieldSelectors.length} селекторов полей`);
+    }
+
+    // Заполнение параметров импорта
+    function fillImportParams(params) {
+        console.log('Заполнение параметров импорта:', params);
+
+        if (!params) return;
+
+        // Заполняем селекторы
+        if (params.processingStrategy) {
+            setSelectValue('processingStrategy', params.processingStrategy);
+        }
+
+        if (params.batchSize) {
+            setSelectValue('batchSize', params.batchSize);
+        }
+
+        if (params.errorHandling) {
+            setSelectValue('errorHandling', params.errorHandling);
+        }
+
+        if (params.duplicateHandling) {
+            setSelectValue('duplicateHandling', params.duplicateHandling);
+        }
+
+        // Заполняем чекбоксы
+        setCheckboxValue('validateData', params.validateData);
+        setCheckboxValue('trimWhitespace', params.trimWhitespace);
+        setCheckboxValue('generateReport', params.generateReport);
+        setCheckboxValue('notifyOnComplete', params.notifyOnComplete);
+    }
+
+    // Сбрасывает параметры импорта к значениям по умолчанию
+    function resetImportParams() {
+        // Сбрасываем селекторы к первым опциям
+        document.getElementById('processingStrategy').selectedIndex = 0;
+        document.getElementById('batchSize').selectedIndex = 1; // 500 записей по умолчанию
+        document.getElementById('errorHandling').selectedIndex = 1; // Пропускать ошибки по умолчанию
+        document.getElementById('duplicateHandling').selectedIndex = 0; // Пропускать дубликаты по умолчанию
+
+        // Устанавливаем чекбоксы в значения по умолчанию
+        document.getElementById('validateData').checked = true;
+        document.getElementById('trimWhitespace').checked = true;
+        document.getElementById('generateReport').checked = true;
+        document.getElementById('notifyOnComplete').checked = true;
+    }
+
+    // Вспомогательная функция для установки значения селектора
+    function setSelectValue(id, value) {
+        const select = document.getElementById(id);
+        if (!select) return;
+
+        for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === String(value)) {
+                select.selectedIndex = i;
+                break;
+            }
+        }
+    }
+
+    // Вспомогательная функция для установки значения чекбокса
+    function setCheckboxValue(id, value) {
+        const checkbox = document.getElementById(id);
+        if (!checkbox) return;
+
+        checkbox.checked = value === true || value === 'true' || value === '1';
     }
 
     // Инициализация флажка сохранения схемы
@@ -924,100 +1213,64 @@
 
         if (saveMapping && saveMappingOptions) {
             saveMapping.addEventListener('change', function () {
-                if (this.checked) {
-                    saveMappingOptions.style.display = 'block';
-                } else {
-                    saveMappingOptions.style.display = 'none';
-                }
+                saveMappingOptions.style.display = this.checked ? 'block' : 'none';
             });
         }
     }
 
-    // Заполнение селекторов полей на основе существующей схемы
-    function fillFieldSelectors(mapping) {
-        if (!mapping) return;
-
-        const fieldSelectors = document.querySelectorAll('.entity-field-selector');
-
-        fieldSelectors.forEach(selector => {
-            // Получаем имя поля из файла
-            const sourceField = selector.closest('tr').querySelector('td:first-child').textContent;
-
-            // Ищем соответствующее поле сущности в маппинге
-            const targetField = mapping[sourceField];
-
-            if (targetField) {
-                // Устанавливаем значение селектора
-                for (let i = 0; i < selector.options.length; i++) {
-                    if (selector.options[i].value === targetField) {
-                        selector.selectedIndex = i;
-                        break;
-                    }
-                }
-            }
-        });
-    }
-
-    // Проверка, есть ли автоматически выбранная схема
-    function checkForAutomaticMapping() {
-        console.log('Проверка доступных маппингов...');
-
-        // Выбор первой радиокнопки существующего маппинга если они есть
-        const existingMappings = document.querySelectorAll('.mapping-card:not(.create-new)');
-
-        if (existingMappings.length > 0) {
-            console.log(`Найдено ${existingMappings.length} сохраненных маппингов`);
-            const firstMappingCard = existingMappings[0];
-            const firstMappingId = firstMappingCard.dataset.mappingId;
-            const radio = document.getElementById('mapping_' + firstMappingId);
-
-            if (radio) {
-                console.log(`Выбираем первый маппинг с ID: ${firstMappingId}`);
-                radio.checked = true;
-                updateMappingCardStyles();
-                loadMappingData(firstMappingId);
-                return;
-            }
-        } else {
-            console.log('Сохраненных маппингов не найдено, выбираем "Создать новый"');
+    // Выделяет вкладку настроек импорта
+    function highlightOptionsTab() {
+        // Добавляем стиль для отображения заполненных параметров
+        const style = document.createElement('style');
+        style.textContent = `
+        .nav-link[data-filled="true"] {
+            font-weight: bold;
+            position: relative;
         }
-
-        // Иначе выбираем "новый маппинг"
-        const newMappingRadio = document.getElementById('mapping_new');
-        if (newMappingRadio) {
-            newMappingRadio.checked = true;
-            updateMappingCardStyles();
-            suggestFieldMapping();
+        .nav-link[data-filled="true"]::after {
+            content: '✓';
+            position: absolute;
+            top: 0;
+            right: 5px;
+            color: #28a745;
+            font-size: 14px;
         }
+    `;
+        document.head.appendChild(style);
     }
 
     // Предложение автоматического сопоставления полей
     function suggestFieldMapping() {
         const fieldSelectors = document.querySelectorAll('.entity-field-selector');
+        console.log(`Попытка автоматического сопоставления для ${fieldSelectors.length} полей`);
 
         fieldSelectors.forEach(selector => {
             // Получаем имя поля из файла
-            const sourceFieldCell = selector.closest('tr').querySelector('td:first-child');
-            const sourceField = sourceFieldCell.textContent.trim();
+            const sourceField = selector.closest('tr').querySelector('td:first-child').textContent.trim();
+            const sourceFieldLower = sourceField.toLowerCase();
 
-            // Проверяем каждую опцию селектора
+            // Очищаем текущее значение
+            selector.selectedIndex = 0;
+
+            // Проверяем каждую опцию селектора для поиска совпадения
             for (let i = 1; i < selector.options.length; i++) {
                 const option = selector.options[i];
                 const optionText = option.text.toLowerCase();
                 const optionValue = option.value.toLowerCase();
-                const sourceFieldLower = sourceField.toLowerCase();
 
-                // Ищем совпадение по имени
+                // Точное совпадение
                 if (optionText === sourceFieldLower || optionValue === sourceFieldLower) {
                     selector.selectedIndex = i;
-                    return;
+                    console.log(`Точное совпадение для "${sourceField}": ${option.text}`);
+                    break;
                 }
 
-                // Ищем частичное совпадение
+                // Частичное совпадение
                 if (optionText.includes(sourceFieldLower) || sourceFieldLower.includes(optionText) ||
                     optionValue.includes(sourceFieldLower) || sourceFieldLower.includes(optionValue)) {
                     selector.selectedIndex = i;
-                    return;
+                    console.log(`Частичное совпадение для "${sourceField}": ${option.text}`);
+                    break;
                 }
             }
         });
@@ -1025,15 +1278,13 @@
 
     // Функция для отображения группированной таблицы маппинга
     function showRelatedEntitiesMappingTable() {
-        console.log('Вызов showRelatedEntitiesMappingTable');
+        console.log('Отображение таблицы для связанных сущностей');
 
         const mappingTableBody = document.getElementById('mappingTableBody');
-        const headers = Array.from(mappingTableBody.querySelectorAll('tr td:first-child')).map(td => td.textContent);
+        const headers = Array.from(mappingTableBody.querySelectorAll('tr td:first-child')).map(td => td.textContent.trim());
 
         // Получаем метаданные для связанных сущностей
         const productWithRelated = entityFieldsMetadata['product_with_related'];
-
-        console.log('Структура product_with_related:', productWithRelated);
 
         if (!productWithRelated) {
             console.error('Метаданные для product_with_related не найдены!');
@@ -1099,15 +1350,15 @@
 
         document.getElementById('mappingTableContainer').insertBefore(mappingInfo, document.querySelector('#mappingTableContainer .table-scroll'));
 
-        // Пробуем рекомендовать сопоставления на основе имени поля
+        // Предлагаем автоматическое сопоставление полей
         autoSuggestRelatedFieldMappings(headers);
     }
 
-    // Обновленная функция для автоматического сопоставления полей
+    // Автоматическое сопоставление полей для связанных сущностей
     function autoSuggestRelatedFieldMappings(headers) {
-        console.log('Автоматическое сопоставление полей для headers:', headers);
+        console.log('Автоматическое сопоставление полей для связанных сущностей:', headers);
 
-        // Создаем обратный маппинг (имя поля в файле -> имя поля сущности)
+        // Создаем обратный маппинг (имя поля -> имя поля сущности)
         const reverseMapping = {};
 
         // Добавляем маппинги из всех типов сущностей
@@ -1120,40 +1371,70 @@
             }
         });
 
-        console.log('Обратный маппинг:', reverseMapping);
-
         // Применяем сопоставление
         headers.forEach(header => {
             const selector = document.querySelector(`select[name="mapping[${header}]"]`);
-            if (selector) {
-                const lowerHeader = header.toLowerCase();
+            if (!selector) return;
 
-                // Проверяем точное совпадение
-                if (reverseMapping[lowerHeader]) {
+            const headerLower = header.toLowerCase();
+
+            // Проверяем точное совпадение
+            if (reverseMapping[headerLower]) {
+                for (let i = 0; i < selector.options.length; i++) {
+                    if (selector.options[i].value === reverseMapping[headerLower]) {
+                        selector.selectedIndex = i;
+                        break;
+                    }
+                }
+                return;
+            }
+
+            // Проверяем частичное совпадение
+            for (const [key, value] of Object.entries(reverseMapping)) {
+                if (key.includes(headerLower) || headerLower.includes(key)) {
                     for (let i = 0; i < selector.options.length; i++) {
-                        if (selector.options[i].value === reverseMapping[lowerHeader]) {
+                        if (selector.options[i].value === value) {
                             selector.selectedIndex = i;
                             break;
                         }
                     }
                     return;
                 }
-
-                // Проверяем частичное совпадение
-                for (const [key, value] of Object.entries(reverseMapping)) {
-                    if (key.includes(lowerHeader) || lowerHeader.includes(key)) {
-                        for (let i = 0; i < selector.options.length; i++) {
-                            if (selector.options[i].value === value) {
-                                selector.selectedIndex = i;
-                                break;
-                            }
-                        }
-                        return;
-                    }
-                }
             }
         });
     }
+
+    // Проверка настройки отображения образца данных
+    setTimeout(function () {
+        const sampleTab = document.getElementById('sample-tab');
+        if (sampleTab) {
+            const sampleTable = document.querySelector('#sample .table');
+            if (sampleTable) {
+                const rows = sampleTable.querySelectorAll('tbody tr');
+                console.log(`Найдено ${rows.length} строк в таблице образца данных`);
+
+                if (rows.length === 0) {
+                    console.warn('Таблица образца данных пуста!');
+
+                    // Проверяем, есть ли данные в анализе
+                    const analysisData = /*[[${analysis.sampleData}]]*/ [];
+                    console.log('Данные образца из анализа:', analysisData);
+
+                    // Если есть проблема с таблицей, добавляем сообщение
+                    const container = document.querySelector('#sample .card-body');
+                    if (container) {
+                        container.insertAdjacentHTML('beforeend', `
+                        <div class="alert alert-warning mt-3">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Внимание!</strong> Обнаружена проблема с отображением образца данных.
+                            Рекомендуется проверить формат данных в анализе.
+                        </div>
+                    `);
+                    }
+                }
+            }
+        }
+    }, 1000);
 </script>
 </body>
 </html>

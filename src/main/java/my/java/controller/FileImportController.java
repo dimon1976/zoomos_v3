@@ -165,7 +165,7 @@ public class FileImportController {
     }
 
     private String getEntityTypeFromAnalysis(Map<String, Object> analysis) {
-        return analysis.containsKey("entityType") ? (String) analysis.get("entityType") : "product";
+        return analysis.containsKey("entityType") ? (String) analysis.get("entityType") : "product_with_related";
     }
 
 

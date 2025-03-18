@@ -594,6 +594,10 @@
         // Обработка флажка сохранения схемы
         initSaveMappingCheckbox();
 
+        // Загружаем начальный тип сущности и его поля
+        const initialEntityType = document.getElementById('entityTypeSelect')?.value || 'product';
+        entityType = initialEntityType; // Устанавливаем глобальную переменную
+
         // Загрузка полей сущности при инициализации
         loadEntityFields('product');
 
@@ -707,9 +711,140 @@
 
         if (entityTypeSelect) {
             entityTypeSelect.addEventListener('change', function () {
-                const entityType = this.value;
-                loadEntityFields(entityType);
+                const newEntityType = this.value;
+                // Сохраняем новый тип сущности в глобальной переменной
+                entityType = newEntityType;
+
+                // Загружаем поля сущности для нового типа
+                loadEntityFields(newEntityType);
+
+                // Загружаем маппинги для нового типа сущности
+                loadMappingsForEntityType(newEntityType);
             });
+        }
+    }
+
+    /**
+     * Загрузка маппингов для выбранного типа сущности
+     * @param {string} entityType - Тип сущности
+     */
+    function loadMappingsForEntityType(entityType) {
+        console.log(`Загрузка маппингов для типа сущности: ${entityType}, клиент: ${clientId}`);
+
+        // Получаем контейнер для отображения маппингов
+        const mappingsContainer = document.querySelector('.row:has(.mapping-card)');
+        if (!mappingsContainer) {
+            console.error('Контейнер маппингов не найден');
+            return;
+        }
+
+        // Показываем индикатор загрузки
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'col-12 text-center my-3';
+        loadingIndicator.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div>';
+        mappingsContainer.appendChild(loadingIndicator);
+
+        // Запрашиваем доступные маппинги с сервера
+        fetch(`/import/api/mappings/${clientId}/${entityType}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка при получении маппингов: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(mappings => {
+                console.log(`Получено ${mappings.length} маппингов для типа ${entityType}`);
+                updateMappingsView(mappings);
+            })
+            .catch(error => {
+                console.error('Ошибка при загрузке маппингов:', error);
+                // Показываем ошибку пользователю
+                mappingsContainer.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        Ошибка при загрузке схем маппинга: ${error.message}
+                    </div>
+                </div>
+            `;
+            })
+            .finally(() => {
+                // Удаляем индикатор загрузки
+                if (loadingIndicator && loadingIndicator.parentNode) {
+                    loadingIndicator.parentNode.removeChild(loadingIndicator);
+                }
+            });
+    }
+
+    /**
+     * Обновляет DOM с маппингами на основе полученных данных
+     * @param {Array} mappings - Массив доступных маппингов
+     */
+    function updateMappingsView(mappings) {
+        const mappingsContainer = document.querySelector('.row:has(.mapping-card)');
+        if (!mappingsContainer) return;
+
+        // Запоминаем выбранную схему
+        const selectedMappingId = document.querySelector('input[name="mappingId"]:checked')?.value;
+
+        // Очищаем текущее содержимое, кроме "Создать новую схему"
+        const createNewCard = mappingsContainer.querySelector('.mapping-card.create-new').closest('.col-md-6');
+        mappingsContainer.innerHTML = '';
+
+        // Добавляем полученные маппинги
+        if (mappings && mappings.length > 0) {
+            mappings.forEach(mapping => {
+                const mappingCard = document.createElement('div');
+                mappingCard.className = 'col-md-6 mb-3';
+                mappingCard.innerHTML = `
+                <div class="mapping-card" data-mapping-id="${mapping.id}">
+                    <div class="mapping-header">
+                        <div class="mapping-title">${mapping.name}</div>
+                        <div class="mapping-radio">
+                            <input type="radio" id="mapping_${mapping.id}" name="mappingId"
+                                   value="${mapping.id}" class="form-check-input mapping-selector"
+                                   ${selectedMappingId == mapping.id ? 'checked' : ''}/>
+                        </div>
+                    </div>
+                    <div class="mapping-description">${mapping.description || 'Без описания'}</div>
+                    <div class="mapping-details">
+                        <small>Полей: ${mapping.fields_count}</small>
+                        <small class="ms-2">
+                            <span class="badge ${mapping.client_id == clientId ? 'bg-primary' : 'bg-secondary'}">
+                                ${mapping.client_id == clientId ? 'Персональный' : 'Общий'}
+                            </span>
+                        </small>
+                    </div>
+                </div>
+            `;
+                mappingsContainer.appendChild(mappingCard);
+            });
+        } else {
+            // Если нет доступных маппингов
+            const noMappingsInfo = document.createElement('div');
+            noMappingsInfo.className = 'col-md-6 mb-3';
+            noMappingsInfo.innerHTML = `
+            <div class="alert alert-info">
+                Для типа "${entityType}" нет сохраненных схем маппинга. Создайте новую схему.
+            </div>
+        `;
+            mappingsContainer.appendChild(noMappingsInfo);
+        }
+
+        // Добавляем карточку "Создать новую схему"
+        mappingsContainer.appendChild(createNewCard);
+
+        // Переинициализируем обработчики событий
+        initMappingSelectors();
+
+        // Проверяем, есть ли выбранная схема маппинга в новом списке
+        const stillExists = mappings.some(m => m.id == selectedMappingId);
+        if (!stillExists && selectedMappingId && selectedMappingId !== "new") {
+            // Если выбранная схема не существует для нового типа, выбираем "Создать новую схему"
+            const newMappingRadio = document.getElementById('mapping_new');
+            if (newMappingRadio) {
+                newMappingRadio.checked = true;
+                updateMappingCardStyles();
+            }
         }
     }
 

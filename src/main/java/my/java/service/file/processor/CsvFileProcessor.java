@@ -352,6 +352,10 @@ public class CsvFileProcessor extends AbstractFileProcessor {
         params.put("headerRow", "Номер строки заголовка (с 0, по умолчанию: 0)");
         params.put("skipEmptyRows", "Пропускать пустые строки (по умолчанию: true)");
         params.put("trimWhitespace", "Удалять пробельные символы (по умолчанию: true)");
+        params.put("validateData", "Валидировать данные (по умолчанию: true)");
+        params.put("batchSize", "Размер пакета для обработки (по умолчанию: 100)");
+        params.put("processingStrategy", "Стратегия обработки (по умолчанию: default)");
+        params.put("errorHandling", "Метод обработки ошибок (по умолчанию: skip)");
 
         return params;
     }

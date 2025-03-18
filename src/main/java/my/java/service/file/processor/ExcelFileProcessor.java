@@ -323,6 +323,10 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
         params.put("trimWhitespace", "Удалять пробельные символы (по умолчанию: true)");
         params.put("ignoreEmptyRows", "Игнорировать пустые строки (по умолчанию: true)");
         params.put("dateFormat", "Формат даты для преобразования (по умолчанию: dd.MM.yyyy)");
+        params.put("validateData", "Валидировать данные (по умолчанию: true)");
+        params.put("batchSize", "Размер пакета для обработки (по умолчанию: 100)");
+        params.put("processingStrategy", "Стратегия обработки (по умолчанию: default)");
+        params.put("errorHandling", "Метод обработки ошибок (по умолчанию: skip)");
 
         return params;
     }

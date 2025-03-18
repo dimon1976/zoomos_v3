@@ -117,12 +117,12 @@ E:.
 |           |   |       ProductService.java
 |           |   |       ProductServiceImpl.java
 |           |   |       
-|           |   +---region
-|           |   |       RegionDataService.java
-|           |   |       RegionDataServiceImpl.java
-|           |   |       
-|           |   \---stats
+|           |   \---region
+|           |           RegionDataService.java
+|           |           RegionDataServiceImpl.java
+|           |           
 |           \---util
+|                   ApplicationContextProvider.java
 |                   PathResolver.java
 |                   
 \---resources
@@ -133,15 +133,20 @@ E:.
     +---db
     |   \---migration
     |           V1__Base_Schema.sql
+    |           V2__Add_Import_Params_Columns.sql
     |           
     +---static
     |   +---css
     |   |       styles.css
     |   |       
     |   \---js
-    |           import-progress.js
-    |           main.js
-    |           
+    |       |   import-progress.js
+    |       |   main.js
+    |       |   
+    |       \---lib
+    |               sockjs.min.js
+    |               stomp.min.js
+    |               
     \---templates
         |   index.html
         |   

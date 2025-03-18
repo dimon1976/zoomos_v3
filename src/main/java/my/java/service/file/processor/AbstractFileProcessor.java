@@ -10,6 +10,7 @@ import my.java.service.file.builder.EntitySetBuilder;
 import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.tracker.ImportProgressTracker;
 import my.java.service.file.transformer.ValueTransformerFactory;
+import my.java.service.file.util.ImportParametersUtil;
 import my.java.util.ApplicationContextProvider;
 import my.java.util.PathResolver;
 import org.springframework.context.ApplicationContext;
@@ -75,6 +76,10 @@ public abstract class AbstractFileProcessor implements FileProcessor {
                 throw new FileOperationException("Строитель не может быть null");
             }
 
+            // Получаем параметр валидации данных
+            boolean validateData = ImportParametersUtil.getBooleanParam(params, "validateData", false);
+            log.debug("Применяется валидация данных: {}", validateData);
+
             // Вызываем метод для внутренней валидации файла
             validateFileInternal(filePath);
             log.info("Начало обработки файла строителем: {}, тип сущности: {}, клиент: {}",
@@ -113,11 +118,13 @@ public abstract class AbstractFileProcessor implements FileProcessor {
                         continue;
                     }
 
-                    // Валидируем строитель
-                    String validationError = builder.validate();
-                    if (validationError != null) {
-                        errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
-                        continue;
+                    // Валидируем строитель только если требуется
+                    if (validateData) {
+                        String validationError = builder.validate();
+                        if (validationError != null) {
+                            errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
+                            continue;
+                        }
                     }
 
                     // Строим сущности
@@ -267,32 +274,42 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             return;
         }
 
-        // Установка размера пакета, если указан
+        // Логируем важные параметры
+        boolean validateData = ImportParametersUtil.getBooleanParam(params, "validateData", true);
+        log.debug("Установлен режим валидации данных: {}", validateData);
+
+        boolean trimWhitespace = ImportParametersUtil.getBooleanParam(params, "trimWhitespace", true);
+        log.debug("Установлен режим удаления пробелов: {}", trimWhitespace);
+
+        // Обработка существующих параметров
         if (params.containsKey("batchSize")) {
             try {
                 int batchSize = Integer.parseInt(params.get("batchSize"));
-//                operation.setBatchSize(batchSize);
+                // Закомментировано, так как метод отсутствует в классе FileOperation
+                // operation.setBatchSize(batchSize);
                 log.debug("Установлен размер пакета: {}", batchSize);
             } catch (NumberFormatException e) {
                 log.warn("Неверный формат размера пакета: {}", params.get("batchSize"));
             }
         }
 
-        // Добавление других метаданных
         if (params.containsKey("processingStrategy")) {
-//            operation.setProcessingStrategy(params.get("processingStrategy"));
+            // Закомментировано, так как метод отсутствует в классе FileOperation
+            // operation.setProcessingStrategy(params.get("processingStrategy"));
             log.debug("Установлена стратегия обработки: {}", params.get("processingStrategy"));
         }
 
         if (params.containsKey("errorHandling")) {
-//            operation.setErrorHandling(params.get("errorHandling"));
+            // Закомментировано, так как метод отсутствует в классе FileOperation
+            // operation.setErrorHandling(params.get("errorHandling"));
             log.debug("Установлен метод обработки ошибок: {}", params.get("errorHandling"));
         }
 
         // Сохраняем все параметры в метаданных операции
-        Map<String, String> metadata = new HashMap<>(params);
-//        operation.setMetadata(metadata);
-        log.debug("Сохранены метаданные операции: {}", metadata);
+        // Закомментировано до реализации соответствующего метода в FileOperation
+        // operation.setMetadata(ImportParametersUtil.copyParams(params));
+
+        log.debug("Сохранены метаданные операции: {}", params);
     }
 
     /**
@@ -375,6 +392,17 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             Map<String, String> fieldMapping,
             FileOperation operation) {
 
+        // Получаем параметры из операции, если доступно
+        Map<String, String> params = new HashMap<>();
+        // Добавляем проверку, чтобы получить метаданные операции, когда будет реализован метод getMetadata
+        // if (operation != null && operation.getMetadata() != null) {
+        //     params.putAll(operation.getMetadata());
+        // }
+
+        // Получаем параметр валидации данных
+        boolean validateData = ImportParametersUtil.getBooleanParam(params, "validateData", true);
+        log.debug("Применяется валидация данных в convertToEntities: {}", validateData);
+
         List<ImportableEntity> entities = new ArrayList<>();
         int totalRecords = rawData.size();
         int processedRecords = 0;
@@ -410,11 +438,13 @@ public abstract class AbstractFileProcessor implements FileProcessor {
                     continue;
                 }
 
-                // Валидируем сущность
-                String validationError = entity.validate();
-                if (validationError != null) {
-                    errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
-                    continue;
+                // Валидируем сущность только если требуется
+                if (validateData) {
+                    String validationError = entity.validate();
+                    if (validationError != null) {
+                        errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
+                        continue;
+                    }
                 }
 
                 // Добавляем сущность в результат

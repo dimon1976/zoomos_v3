@@ -2,13 +2,11 @@ package my.java.service.file.repository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
-import my.java.service.competitor.CompetitorDataService;
+import my.java.service.market.MarketDataService;
 import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +23,8 @@ import java.util.stream.Collectors;
 public class RelatedEntitiesRepository {
 
     private final ProductService productService;
-    private final RegionDataService regionDataService;
-    private final CompetitorDataService competitorDataService;
+    private final MarketDataService marketDataService;
+
 
     /**
      * Сохраняет группу связанных сущностей в БД.
@@ -69,12 +67,12 @@ public class RelatedEntitiesRepository {
             log.debug("Сохранено {} продуктов", savedProducts.size());
 
             // Обрабатываем связанные регионы
-            List<RegionData> regionDataList = groupedEntities.getOrDefault(RegionData.class, new ArrayList<>()).stream()
-                    .map(e -> (RegionData) e)
+            List<MarketData> regionDataList = groupedEntities.getOrDefault(MarketData.class, new ArrayList<>()).stream()
+                    .map(e -> (MarketData) e)
                     .collect(Collectors.toList());
 
             // Ищем соответствующий продукт для каждого региона
-            for (RegionData regionData : regionDataList) {
+            for (MarketData regionData : regionDataList) {
                 Product originalProduct = regionData.getProduct();
                 if (originalProduct != null) {
                     // Находим сохраненный продукт
@@ -91,17 +89,17 @@ public class RelatedEntitiesRepository {
 
             // Сохраняем регионы
             if (!regionDataList.isEmpty()) {
-                savedCount += regionDataService.saveRegionDataList(regionDataList);
+                savedCount += marketDataService.saveMarketDataList(regionDataList);
                 log.debug("Сохранено {} данных регионов", regionDataList.size());
             }
 
             // Обрабатываем связанных конкурентов
-            List<CompetitorData> competitorDataList = groupedEntities.getOrDefault(CompetitorData.class, new ArrayList<>()).stream()
-                    .map(e -> (CompetitorData) e)
+            List<MarketData> competitorDataList = groupedEntities.getOrDefault(MarketData.class, new ArrayList<>()).stream()
+                    .map(e -> (MarketData) e)
                     .collect(Collectors.toList());
 
             // Ищем соответствующий продукт для каждого конкурента
-            for (CompetitorData competitorData : competitorDataList) {
+            for (MarketData competitorData : competitorDataList) {
                 Product originalProduct = competitorData.getProduct();
                 if (originalProduct != null) {
                     // Находим сохраненный продукт
@@ -118,26 +116,26 @@ public class RelatedEntitiesRepository {
 
             // Сохраняем конкурентов
             if (!competitorDataList.isEmpty()) {
-                savedCount += competitorDataService.saveCompetitorDataList(competitorDataList);
+                savedCount += marketDataService.saveMarketDataList(competitorDataList);
                 log.debug("Сохранено {} данных конкурентов", competitorDataList.size());
             }
         } else {
             // Если нет продуктов, сохраняем регионы и конкурентов отдельно
-            List<RegionData> regionDataList = groupedEntities.getOrDefault(RegionData.class, new ArrayList<>()).stream()
-                    .map(e -> (RegionData) e)
+            List<MarketData> regionDataList = groupedEntities.getOrDefault(MarketData.class, new ArrayList<>()).stream()
+                    .map(e -> (MarketData) e)
                     .collect(Collectors.toList());
 
             if (!regionDataList.isEmpty()) {
-                savedCount += regionDataService.saveRegionDataList(regionDataList);
+                savedCount += marketDataService.saveMarketDataList(regionDataList);
                 log.debug("Сохранено {} данных регионов", regionDataList.size());
             }
 
-            List<CompetitorData> competitorDataList = groupedEntities.getOrDefault(CompetitorData.class, new ArrayList<>()).stream()
-                    .map(e -> (CompetitorData) e)
+            List<MarketData> competitorDataList = groupedEntities.getOrDefault(MarketData.class, new ArrayList<>()).stream()
+                    .map(e -> (MarketData) e)
                     .collect(Collectors.toList());
 
             if (!competitorDataList.isEmpty()) {
-                savedCount += competitorDataService.saveCompetitorDataList(competitorDataList);
+                savedCount += marketDataService.saveMarketDataList(competitorDataList);
                 log.debug("Сохранено {} данных конкурентов", competitorDataList.size());
             }
         }

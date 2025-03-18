@@ -1,10 +1,9 @@
 package my.java.service.file.builder;
 
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
 import my.java.model.enums.DataSourceType;
 import my.java.service.file.metadata.EntityFieldService;
 import my.java.service.file.transformer.ValueTransformerFactory;
@@ -13,6 +12,7 @@ import java.util.*;
 
 /**
  * Строитель для создания продукта вместе со связанными данными о регионах и конкурентах.
+ * Обновлен для работы с объединенной сущностью MarketData.
  */
 @Slf4j
 public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
@@ -21,16 +21,14 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     private final EntityFieldService entityFieldService;
 
     private Product product;
-    private RegionData regionData;
-    private CompetitorData competitorData;
+    private List<MarketData> marketDataList;
 
     private Long clientId;
     private Long fileId;
 
     // Динамические маппинги, которые могут быть переопределены
     private Map<String, String> productFieldMapping;
-    private Map<String, String> regionFieldMapping;
-    private Map<String, String> competitorFieldMapping;
+    private Map<String, String> marketDataFieldMapping;
 
     // Маппинг между заголовками файла и полями сущностей
     private Map<String, String> fileHeaderToEntityField;
@@ -41,8 +39,11 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
 
         // Инициализируем маппинги из сервиса
         this.productFieldMapping = entityFieldService.getFieldMappings("product");
-        this.regionFieldMapping = entityFieldService.getFieldMappings("regiondata");
-        this.competitorFieldMapping = entityFieldService.getFieldMappings("competitordata");
+
+        // Объединяем маппинги из regiondata и competitordata
+        this.marketDataFieldMapping = new HashMap<>();
+        this.marketDataFieldMapping.putAll(entityFieldService.getFieldMappings("regiondata"));
+        this.marketDataFieldMapping.putAll(entityFieldService.getFieldMappings("competitordata"));
 
         // Инициализируем пустой маппинг заголовков файла
         this.fileHeaderToEntityField = new HashMap<>();
@@ -53,11 +54,10 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     @Override
     public boolean applyRow(Map<String, String> row) {
         boolean hasProductData = applyProductData(row);
-        boolean hasRegionData = applyRegionData(row);
-        boolean hasCompetitorData = applyCompetitorData(row);
+        boolean hasMarketData = applyMarketData(row);
 
         // Возвращаем true, если хотя бы одна сущность была заполнена
-        return hasProductData || hasRegionData || hasCompetitorData;
+        return hasProductData || hasMarketData;
     }
 
     private boolean applyProductData(Map<String, String> row) {
@@ -107,42 +107,26 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         return hasData;
     }
 
-    private boolean applyRegionData(Map<String, String> row) {
-        boolean hasData = false;
+    private boolean applyMarketData(Map<String, String> row) {
+        // Проверяем наличие данных для региона или конкурента
+        boolean hasRegionData = hasRegionData(row);
+        boolean hasCompetitorData = hasCompetitorData(row);
 
-        // Проверяем, есть ли данные для региона на основе маппинга заголовков
-        for (Map.Entry<String, String> entry : row.entrySet()) {
-            String fileHeader = entry.getKey();
-            String value = entry.getValue();
-
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            String entityField = fileHeaderToEntityField.get(fileHeader);
-            if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
-                hasData = true;
-                break;
-            }
-        }
-
-        if (!hasData) {
+        if (!hasRegionData && !hasCompetitorData) {
             return false;
         }
 
-        // Создаем регион, если еще не создан
-        if (regionData == null) {
-            regionData = new RegionData();
-            regionData.setTransformerFactory(transformerFactory);
-        }
+        // Создаем экземпляр MarketData
+        MarketData marketData = new MarketData();
+        marketData.setTransformerFactory(transformerFactory);
 
         // Применяем клиентский ID
         if (clientId != null) {
-            regionData.setClientId(clientId);
+            marketData.setClientId(clientId);
         }
 
-        // Заполняем поля региона
-        Map<String, String> regionDataMap = new HashMap<>();
+        // Заполняем поля маркетинговых данных
+        Map<String, String> marketDataMap = new HashMap<>();
         for (Map.Entry<String, String> entry : row.entrySet()) {
             String fileHeader = entry.getKey();
             String value = entry.getValue();
@@ -153,22 +137,41 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
             }
 
             String entityField = fileHeaderToEntityField.get(fileHeader);
-            if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
-                regionDataMap.put(entityField, value);
+            if (entityField != null &&
+                    (entityField.equals("region") ||
+                            entityField.equals("regionAddress") ||
+                            entityField.startsWith("competitor"))) {
+                marketDataMap.put(entityField, value);
             }
         }
 
-        if (!regionDataMap.isEmpty()) {
-            regionData.fillFromMap(regionDataMap);
+        if (!marketDataMap.isEmpty()) {
+            marketData.fillFromMap(marketDataMap);
+            marketDataList.add(marketData);
+            return true;
         }
 
-        return !regionDataMap.isEmpty();
+        return false;
     }
 
-    private boolean applyCompetitorData(Map<String, String> row) {
-        boolean hasData = false;
+    private boolean hasRegionData(Map<String, String> row) {
+        for (Map.Entry<String, String> entry : row.entrySet()) {
+            String fileHeader = entry.getKey();
+            String value = entry.getValue();
 
-        // Проверяем, есть ли данные для конкурента на основе маппинга заголовков
+            if (value == null || value.trim().isEmpty()) {
+                continue;
+            }
+
+            String entityField = fileHeaderToEntityField.get(fileHeader);
+            if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasCompetitorData(Map<String, String> row) {
         for (Map.Entry<String, String> entry : row.entrySet()) {
             String fileHeader = entry.getKey();
             String value = entry.getValue();
@@ -179,48 +182,10 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
 
             String entityField = fileHeaderToEntityField.get(fileHeader);
             if (entityField != null && entityField.startsWith("competitor")) {
-                hasData = true;
-                break;
+                return true;
             }
         }
-
-        if (!hasData) {
-            return false;
-        }
-
-        // Создаем данные о конкуренте, если еще не созданы
-        if (competitorData == null) {
-            competitorData = new CompetitorData();
-            competitorData.setTransformerFactory(transformerFactory);
-        }
-
-        // Применяем клиентский ID
-        if (clientId != null) {
-            competitorData.setClientId(clientId);
-        }
-
-        // Заполняем поля конкурента
-        Map<String, String> competitorDataMap = new HashMap<>();
-        for (Map.Entry<String, String> entry : row.entrySet()) {
-            String fileHeader = entry.getKey();
-            String value = entry.getValue();
-
-            // Пропускаем пустые значения
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            String entityField = fileHeaderToEntityField.get(fileHeader);
-            if (entityField != null && entityField.startsWith("competitor")) {
-                competitorDataMap.put(entityField, value);
-            }
-        }
-
-        if (!competitorDataMap.isEmpty()) {
-            competitorData.fillFromMap(competitorDataMap);
-        }
-
-        return !competitorDataMap.isEmpty();
+        return false;
     }
 
     /**
@@ -282,15 +247,10 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         if (product != null) {
             entities.add(product);
 
-            // Устанавливаем связи, если есть регион или конкурент
-            if (regionData != null) {
-                regionData.setProduct(product);
-                entities.add(regionData);
-            }
-
-            if (competitorData != null) {
-                competitorData.setProduct(product);
-                entities.add(competitorData);
+            // Устанавливаем связи с маркетинговыми данными
+            for (MarketData marketData : marketDataList) {
+                marketData.setProduct(product);
+                entities.add(marketData);
             }
         }
 
@@ -309,19 +269,11 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
             return "Отсутствуют данные о продукте";
         }
 
-        // Проверяем регион, если он есть
-        if (regionData != null) {
-            String regionValidation = regionData.validate();
-            if (regionValidation != null) {
-                return regionValidation;
-            }
-        }
-
-        // Проверяем данные о конкуренте, если они есть
-        if (competitorData != null) {
-            String competitorValidation = competitorData.validate();
-            if (competitorValidation != null) {
-                return competitorValidation;
+        // Проверяем маркетинговые данные
+        for (MarketData marketData : marketDataList) {
+            String marketDataValidation = marketData.validate();
+            if (marketDataValidation != null) {
+                return marketDataValidation;
             }
         }
 
@@ -331,7 +283,6 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     @Override
     public void reset() {
         product = null;
-        regionData = null;
-        competitorData = null;
+        marketDataList = new ArrayList<>();
     }
 }

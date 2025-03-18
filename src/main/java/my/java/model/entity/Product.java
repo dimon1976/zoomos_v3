@@ -4,19 +4,18 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import my.java.model.enums.DataSourceType;
-import my.java.service.file.transformer.ValueTransformer;
-import my.java.service.file.transformer.ValueTransformerFactory;
 
 import java.util.*;
 
 /**
- * Сущность, представляющая товар в системе.
+ * Модифицированная сущность, представляющая товар в системе.
+ * Наследуется от AbstractImportableEntity для переиспользования общего кода.
  */
 @Setter
 @Getter
 @Entity
 @Table(name = "products")
-public class Product implements ImportableEntity {
+public class Product extends AbstractImportableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -55,11 +54,9 @@ public class Product implements ImportableEntity {
     private String productAdditional4;
     private String productAdditional5;
 
+    // Единый список для рыночных данных (заменяет отдельные списки RegionData и CompetitorData)
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RegionData> regionDataList = new ArrayList<>();
-
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<CompetitorData> competitorDataList = new ArrayList<>();
+    private List<MarketData> marketDataList = new ArrayList<>();
 
     // Статическая карта сопоставления заголовков файла с полями сущности
     private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
@@ -84,74 +81,6 @@ public class Product implements ImportableEntity {
         FIELD_MAPPINGS.put("Дополнительное поле 5", "productAdditional5");
     }
 
-    // Транзитивные поля, не сохраняемые в БД
-    @Transient
-    private ValueTransformerFactory transformerFactory;
-
-    /**
-     * Устанавливает фабрику трансформеров для преобразования строковых значений.
-     *
-     * @param transformerFactory фабрика трансформеров
-     */
-    public void setTransformerFactory(ValueTransformerFactory transformerFactory) {
-        this.transformerFactory = transformerFactory;
-    }
-
-    /**
-     * Заполняет поля сущности из карты с данными.
-     *
-     * @param data карта, где ключ - имя поля (или заголовок файла), значение - строковое значение
-     * @return true, если заполнение прошло успешно
-     */
-    @Override
-    public boolean fillFromMap(Map<String, String> data) {
-        if (transformerFactory == null) {
-            throw new IllegalStateException("TransformerFactory не установлен");
-        }
-
-        boolean success = true;
-
-        for (Map.Entry<String, String> entry : data.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue();
-
-            // Пропускаем пустые значения
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            // Проверяем, является ли ключ именем поля напрямую
-            boolean isFieldName = false;
-            for (String fieldName : FIELD_MAPPINGS.values()) {
-                if (fieldName.equals(key)) {
-                    success &= setFieldValue(key, value);
-                    isFieldName = true;
-                    break;
-                }
-            }
-
-            // Если ключ не является именем поля, пробуем найти соответствие в маппинге
-            if (!isFieldName) {
-                String fieldName = FIELD_MAPPINGS.get(key);
-                if (fieldName == null) {
-                    // Пробуем без учета регистра
-                    for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-                        if (mapping.getKey().equalsIgnoreCase(key)) {
-                            fieldName = mapping.getValue();
-                            break;
-                        }
-                    }
-                }
-
-                if (fieldName != null) {
-                    success &= setFieldValue(fieldName, value);
-                }
-            }
-        }
-
-        return success;
-    }
-
     /**
      * Устанавливает значение поля по его имени.
      *
@@ -159,7 +88,8 @@ public class Product implements ImportableEntity {
      * @param value строковое значение
      * @return true, если значение успешно установлено
      */
-    private boolean setFieldValue(String fieldName, String value) {
+    @Override
+    protected boolean setFieldValue(String fieldName, String value) {
         try {
             switch (fieldName) {
                 case "productId":
@@ -243,25 +173,18 @@ public class Product implements ImportableEntity {
     }
 
     /**
-     * Вспомогательные методы для установки отношений
+     * Вспомогательный метод для работы с рыночными данными
      */
-    public void addRegionData(RegionData regionData) {
-        regionDataList.add(regionData);
-        regionData.setProduct(this);
+    public void addMarketData(MarketData marketData) {
+        marketDataList.add(marketData);
+        marketData.setProduct(this);
     }
 
-    public void removeRegionData(RegionData regionData) {
-        regionDataList.remove(regionData);
-        regionData.setProduct(null);
-    }
-
-    public void addCompetitorData(CompetitorData competitorData) {
-        competitorDataList.add(competitorData);
-        competitorData.setProduct(this);
-    }
-
-    public void removeCompetitorData(CompetitorData competitorData) {
-        competitorDataList.remove(competitorData);
-        competitorData.setProduct(null);
+    /**
+     * Вспомогательный метод для работы с рыночными данными
+     */
+    public void removeMarketData(MarketData marketData) {
+        marketDataList.remove(marketData);
+        marketData.setProduct(null);
     }
 }

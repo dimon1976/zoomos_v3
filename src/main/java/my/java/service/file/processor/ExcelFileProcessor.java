@@ -2,15 +2,14 @@ package my.java.service.file.processor;
 
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
+import my.java.repository.FileOperationRepository;
 import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -52,8 +51,9 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     public ExcelFileProcessor(
             PathResolver pathResolver,
             ValueTransformerFactory transformerFactory,
-            EntitySetBuilderFactory entitySetBuilderFactory) {
-        super(pathResolver, transformerFactory, entitySetBuilderFactory);
+            EntitySetBuilderFactory entitySetBuilderFactory,
+            FileOperationRepository fileOperationRepository) {
+        super(pathResolver, transformerFactory, entitySetBuilderFactory, fileOperationRepository);
     }
 
     @Override
@@ -174,11 +174,11 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
                 product.setTransformerFactory(transformerFactory);
                 return product;
             case "regiondata":
-                RegionData regionData = new RegionData();
+                MarketData regionData = new MarketData();
                 regionData.setTransformerFactory(transformerFactory);
                 return regionData;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
+                MarketData competitorData = new MarketData();
                 competitorData.setTransformerFactory(transformerFactory);
                 return competitorData;
             default:

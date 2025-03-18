@@ -31,6 +31,10 @@ public class FileOperationDto {
     private Integer processingProgress;
     private Integer processedRecords;
     private Integer totalRecords;
+    private Integer batchSize;
+    private String processingStrategy;
+    private String errorHandling;
+    private String duplicateHandling;
 
     // Вспомогательные методы для форматирования дат
     public String getFormattedStartedAt() {

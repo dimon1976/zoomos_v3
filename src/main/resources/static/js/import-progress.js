@@ -39,6 +39,7 @@ class ImportProgressTracker {
      * Подключение к WebSocket для отслеживания прогресса
      */
     connect() {
+        console.log("Попытка подключения к WebSocket", this.options.url);
         const socket = new SockJS(this.options.url);
         this.stompClient = Stomp.over(socket);
 
@@ -57,7 +58,7 @@ class ImportProgressTracker {
      * @private
      */
     _onConnect(frame) {
-        console.log('Подключено к WebSocket:', frame);
+        console.log("WebSocket соединение установлено", frame);
         this.connected = true;
 
         // Подписываемся на обновления прогресса

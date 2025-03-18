@@ -7,10 +7,10 @@ import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvException;
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
-import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.MarketData;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
+import my.java.repository.FileOperationRepository;
 import my.java.service.file.builder.EntitySetBuilderFactory;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
@@ -55,8 +55,9 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     public CsvFileProcessor(
             PathResolver pathResolver,
             ValueTransformerFactory transformerFactory,
-            EntitySetBuilderFactory entitySetBuilderFactory) {
-        super(pathResolver, transformerFactory, entitySetBuilderFactory);
+            EntitySetBuilderFactory entitySetBuilderFactory,
+            FileOperationRepository fileOperationRepository) {
+        super(pathResolver, transformerFactory, entitySetBuilderFactory, fileOperationRepository);
     }
 
     @Override
@@ -213,11 +214,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                 product.setTransformerFactory(transformerFactory);
                 return product;
             case "regiondata":
-                RegionData regionData = new RegionData();
+                MarketData regionData = new MarketData();
                 regionData.setTransformerFactory(transformerFactory);
                 return regionData;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
+                MarketData competitorData = new MarketData();
                 competitorData.setTransformerFactory(transformerFactory);
                 return competitorData;
             default:
@@ -240,9 +241,14 @@ public class CsvFileProcessor extends AbstractFileProcessor {
             // Определяем заголовки
             String[] headers = determineHeaders(filePath, options);
             result.put("headers", headers);
+            log.debug("Обнаружены заголовки: {}", Arrays.toString(headers));
 
             // Получаем образец данных
             List<Map<String, String>> sampleData = getSampleData(filePath, options, headers);
+            log.debug("Получен образец данных размером: {}", sampleData.size());
+            if (!sampleData.isEmpty()) {
+                log.debug("Первая строка образца: {}", sampleData.get(0));
+            }
             result.put("sampleData", sampleData);
 
             // Оцениваем количество строк
@@ -254,7 +260,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
             result.put("columnTypes", columnTypes);
 
         } catch (Exception e) {
-            log.error("Ошибка при анализе CSV файла: {}", e.getMessage());
+            log.error("Ошибка при анализе CSV файла: {}", e.getMessage(), e);
             result.put("error", e.getMessage());
         }
 
@@ -729,7 +735,6 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      */
     private List<Map<String, String>> getSampleData(Path filePath, FileReadingOptions options, String[] headers)
             throws IOException {
-
         if (headers == null || headers.length == 0) {
             throw new FileOperationException("Не удалось определить заголовки");
         }
@@ -742,6 +747,9 @@ public class CsvFileProcessor extends AbstractFileProcessor {
         List<Map<String, String>> sampleData = new ArrayList<>();
         int sampleRows = 10; // Количество строк в образце
 
+        log.debug("Чтение образца данных из файла: {}, заголовки: {}, количество строк: {}",
+                filePath, Arrays.toString(headers), sampleRows);
+
         try (Reader reader = Files.newBufferedReader(filePath, options.getCharset());
              CSVReader csvReader = new CSVReaderBuilder(reader)
                      .withCSVParser(parser)
@@ -749,7 +757,9 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                      .build()) {
 
             String[] record;
+            int rowCount = 0;
             while ((record = csvReader.readNext()) != null && sampleData.size() < sampleRows) {
+                rowCount++;
                 if (options.isSkipEmptyRows() && isEmptyRecord(record)) {
                     continue;
                 }
@@ -769,11 +779,13 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                 }
 
                 sampleData.add(row);
+                log.debug("Добавлена строка в образец: строка {}, данные: {}", rowCount, row);
             }
 
+            log.info("Получено {} строк для образца данных из {} прочитанных", sampleData.size(), rowCount);
             return sampleData;
         } catch (CsvException e) {
-            log.error("Ошибка при получении образца данных: {}", e.getMessage());
+            log.error("Ошибка при получении образца данных: {}", e.getMessage(), e);
             throw new IOException("Ошибка при получении образца данных: " + e.getMessage(), e);
         }
     }

@@ -3,20 +3,23 @@ package my.java.model.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import my.java.service.file.transformer.ValueTransformerFactory;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Сущность, представляющая данные о конкуренте.
+ * Объединенная сущность, представляющая региональные данные и данные о конкурентах.
+ * Заменяет отдельные классы RegionData и CompetitorData.
  */
 @Setter
 @Getter
 @Entity
-@Table(name = "competitor_data")
-public class CompetitorData implements ImportableEntity {
+@Table(name = "market_data", indexes = {
+        @Index(name = "idx_market_region", columnList = "region"),
+        @Index(name = "idx_market_competitor", columnList = "competitor_name")
+})
+public class MarketData extends AbstractImportableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,6 +27,18 @@ public class CompetitorData implements ImportableEntity {
 
     private Long clientId;
 
+    // Связь с продуктом
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id")
+    private Product product;
+
+    // Данные региона
+    private String region;
+
+    @Column(length = 400)
+    private String regionAddress;
+
+    // Данные конкурента
     @Column(length = 400)
     private String competitorName;
 
@@ -50,15 +65,15 @@ public class CompetitorData implements ImportableEntity {
     @Column(length = 1200)
     private String competitorWebCacheUrl;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id")
-    private Product product;
-
-    // Статическая карта сопоставления заголовков файла с полями сущности
+    // Объединенная статическая карта сопоставления заголовков файла с полями сущности
     private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
 
     static {
-        // Инициализация маппинга заголовков и полей
+        // Инициализация из RegionData
+        FIELD_MAPPINGS.put("Город", "region");
+        FIELD_MAPPINGS.put("Адрес", "regionAddress");
+
+        // Инициализация из CompetitorData
         FIELD_MAPPINGS.put("Сайт", "competitorName");
         FIELD_MAPPINGS.put("Цена конкурента", "competitorPrice");
         FIELD_MAPPINGS.put("Акционная цена", "competitorPromotionalPrice");
@@ -75,84 +90,24 @@ public class CompetitorData implements ImportableEntity {
         FIELD_MAPPINGS.put("Скриншот", "competitorWebCacheUrl");
     }
 
-    // Транзитивные поля, не сохраняемые в БД
-    @Transient
-    private ValueTransformerFactory transformerFactory;
-
-    /**
-     * Устанавливает фабрику трансформеров для преобразования строковых значений.
-     *
-     * @param transformerFactory фабрика трансформеров
-     */
-    public void setTransformerFactory(ValueTransformerFactory transformerFactory) {
-        this.transformerFactory = transformerFactory;
-    }
-
-    /**
-     * Заполняет поля сущности из карты с данными.
-     *
-     * @param data карта, где ключ - имя поля (или заголовок файла), значение - строковое значение
-     * @return true, если заполнение прошло успешно
-     */
     @Override
-    public boolean fillFromMap(Map<String, String> data) {
-        if (transformerFactory == null) {
-            throw new IllegalStateException("TransformerFactory не установлен");
-        }
-
-        boolean success = true;
-
-        for (Map.Entry<String, String> entry : data.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue();
-
-            // Пропускаем пустые значения
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            // Проверяем, является ли ключ именем поля напрямую
-            boolean isFieldName = false;
-            for (String fieldName : FIELD_MAPPINGS.values()) {
-                if (fieldName.equals(key)) {
-                    success &= setFieldValue(key, value);
-                    isFieldName = true;
-                    break;
-                }
-            }
-
-            // Если ключ не является именем поля, пробуем найти соответствие в маппинге
-            if (!isFieldName) {
-                String fieldName = FIELD_MAPPINGS.get(key);
-                if (fieldName == null) {
-                    // Пробуем без учета регистра
-                    for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-                        if (mapping.getKey().equalsIgnoreCase(key)) {
-                            fieldName = mapping.getValue();
-                            break;
-                        }
-                    }
-                }
-
-                if (fieldName != null) {
-                    success &= setFieldValue(fieldName, value);
-                }
-            }
-        }
-
-        return success;
+    public Map<String, String> getFieldMappings() {
+        return new HashMap<>(FIELD_MAPPINGS);
     }
 
-    /**
-     * Устанавливает значение поля по его имени.
-     *
-     * @param fieldName имя поля
-     * @param value строковое значение
-     * @return true, если значение успешно установлено
-     */
-    private boolean setFieldValue(String fieldName, String value) {
+    @Override
+    protected boolean setFieldValue(String fieldName, String value) {
         try {
             switch (fieldName) {
+                // Поля из RegionData
+                case "region":
+                    this.region = value;
+                    break;
+                case "regionAddress":
+                    this.regionAddress = value;
+                    break;
+
+                // Поля из CompetitorData
                 case "competitorName":
                     this.competitorName = value;
                     break;
@@ -205,25 +160,21 @@ public class CompetitorData implements ImportableEntity {
     }
 
     /**
-     * Возвращает карту соответствия заголовков файла и полей сущности.
-     *
-     * @return карта, где ключ - заголовок файла, значение - имя поля в сущности
-     */
-    @Override
-    public Map<String, String> getFieldMappings() {
-        return new HashMap<>(FIELD_MAPPINGS);
-    }
-
-    /**
      * Валидирует заполненную сущность.
+     * Объединяет логику валидации из RegionData и CompetitorData.
      *
      * @return null, если валидация прошла успешно, иначе - сообщение об ошибке
      */
     @Override
     public String validate() {
-        if (competitorName == null || competitorName.trim().isEmpty()) {
-            return "Не указано название сайта конкурента";
+        // Проверяем наличие либо региона, либо конкурента для валидности записи
+        boolean hasRegionData = region != null && !region.trim().isEmpty();
+        boolean hasCompetitorData = competitorName != null && !competitorName.trim().isEmpty();
+
+        if (!hasRegionData && !hasCompetitorData) {
+            return "Должен быть указан хотя бы регион или конкурент";
         }
+
         return null;
     }
 }

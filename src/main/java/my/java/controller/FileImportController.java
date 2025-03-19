@@ -496,6 +496,23 @@ public class FileImportController {
         }
     }
 
+    /**
+     * Получает детали маппинга по ID
+     */
+    @GetMapping("/api/mapping-details/{mappingId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, String>> getMappingDetails(@PathVariable Long mappingId) {
+        log.debug("Запрос на получение деталей маппинга по ID: {}", mappingId);
+        Map<String, String> mappingDetails = fieldMappingService.getMappingById(mappingId);
+
+        if (mappingDetails.isEmpty()) {
+            log.warn("Детали маппинга с ID {} не найдены", mappingId);
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(mappingDetails);
+    }
+
     @GetMapping("/api/entity-fields/{entityType}")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getEntityFieldsMetadata(@PathVariable String entityType) {

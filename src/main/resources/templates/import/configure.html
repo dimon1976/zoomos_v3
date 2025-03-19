@@ -777,6 +777,7 @@
                 updateMappingCardStyles();
 
                 if (mappingId !== 'new') {
+                    console.log(`Запрос данных маппинга для ID: ${mappingId}`);
                     loadMappingData(mappingId);
 
                     // Показываем вкладку параметров
@@ -786,6 +787,7 @@
                         optionsTab.setAttribute('data-filled', 'true');
                     }
                 } else {
+                    console.log("Создание новой схемы — сброс полей");
                     // Если выбрана "Создать новую схему", предлагаем автоматическое сопоставление
                     suggestFieldMapping();
 
@@ -918,90 +920,58 @@
         console.log(`Загрузка данных маппинга ID: ${mappingId}, клиент: ${clientId}, тип: ${entityType}`);
 
         // Показываем индикатор загрузки
-        const mappingTable = document.getElementById('mappingTableContainer');
-        if (mappingTable) {
-            const loadingIndicator = document.createElement('div');
-            loadingIndicator.className = 'loading-indicator';
-            loadingIndicator.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div>';
-            mappingTable.appendChild(loadingIndicator);
-        }
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'loading-indicator position-fixed';
+        loadingIndicator.style.top = '50%';
+        loadingIndicator.style.left = '50%';
+        loadingIndicator.style.transform = 'translate(-50%, -50%)';
+        loadingIndicator.style.zIndex = '1050';
+        loadingIndicator.innerHTML = `
+        <div class="bg-white p-3 rounded shadow-sm text-center">
+            <div class="spinner-border text-primary mb-2" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <div>Загрузка данных маппинга...</div>
+        </div>
+    `;
+        document.body.appendChild(loadingIndicator);
 
-        // Запрашиваем данные маппинга
-        fetch(`/import/api/mappings/${clientId}/${entityType}`)
+        // Запрашиваем детали маппинга напрямую
+        fetch(`/import/api/mapping-details/${mappingId}`)
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Ошибка при получении маппингов: ' + response.status);
+                    throw new Error('Ошибка при получении деталей маппинга: ' + response.status);
                 }
                 return response.json();
             })
-            .then(mappings => {
-                // Находим нужный маппинг по ID
-                const selectedMapping = mappings.find(m => m.id == mappingId);
+            .then(mappingDetails => {
+                console.log('Получены детали маппинга:', mappingDetails);
 
-                if (selectedMapping) {
-                    console.log('Найден маппинг:', selectedMapping);
+                // Заполняем селекторы полей после задержки для обеспечения загрузки DOM
+                setTimeout(() => {
+                    enhancedFillFieldSelectors(mappingDetails);
 
-                    // Проверяем формат данных маппинга
-                    let fieldMapping = null;
-
-                    if (selectedMapping.field_mapping) {
-                        // Если поле field_mapping уже является объектом
-                        if (typeof selectedMapping.field_mapping === 'object') {
-                            fieldMapping = selectedMapping.field_mapping;
-                        }
-                        // Если field_mapping - строка JSON
-                        else if (typeof selectedMapping.field_mapping === 'string') {
-                            try {
-                                fieldMapping = JSON.parse(selectedMapping.field_mapping);
-                            } catch (e) {
-                                console.error('Ошибка при разборе JSON field_mapping:', e);
-                            }
-                        }
+                    // Удаляем индикатор загрузки
+                    if (loadingIndicator.parentNode) {
+                        loadingIndicator.parentNode.removeChild(loadingIndicator);
                     }
-
-                    // Если есть поле mappings, используем его
-                    if (!fieldMapping && selectedMapping.mappings) {
-                        fieldMapping = selectedMapping.mappings;
-                    }
-
-                    // Если есть поле mapping_data, используем его
-                    if (!fieldMapping && selectedMapping.mapping_data) {
-                        fieldMapping = selectedMapping.mapping_data;
-                    }
-
-                    console.log('Данные маппинга полей после обработки:', fieldMapping);
-
-                    if (fieldMapping) {
-                        // Добавим задержку, чтобы убедиться, что все селекторы загружены
-                        setTimeout(() => {
-                            enhancedFillFieldSelectors(fieldMapping);
-                        }, 300);
-                    } else {
-                        console.warn('Не удалось найти данные маппинга полей в ответе от сервера');
-                    }
-
-                    // Заполняем параметры импорта
-                    if (selectedMapping.import_params) {
-                        fillImportParams(selectedMapping.import_params);
-                    }
-                } else {
-                    console.warn(`Маппинг с ID ${mappingId} не найден среди ${mappings.length} маппингов`);
-                }
+                }, 300);
             })
             .catch(error => {
-                console.error('Ошибка при загрузке данных маппинга:', error);
-            })
-            .finally(() => {
-                // Удаляем индикатор загрузки
-                const loadingIndicator = document.querySelector('.loading-indicator');
-                if (loadingIndicator) {
-                    loadingIndicator.remove();
+                console.error('Ошибка при загрузке деталей маппинга:', error);
+
+                // Удаляем индикатор загрузки в случае ошибки
+                if (loadingIndicator.parentNode) {
+                    loadingIndicator.parentNode.removeChild(loadingIndicator);
                 }
+
+                // Показываем сообщение об ошибке
+                alert(`Ошибка при загрузке деталей маппинга: ${error.message}`);
             });
     }
 
     function enhancedFillFieldSelectors(mapping) {
-        console.log('Расширенное заполнение полей маппинга:', mapping);
+        console.log('Улучшенное заполнение селекторов полей:', mapping);
 
         if (!mapping || Object.keys(mapping).length === 0) {
             console.warn('Пустые данные маппинга');
@@ -1012,163 +982,73 @@
         const fieldSelectors = document.querySelectorAll('.entity-field-selector');
         console.log(`Найдено ${fieldSelectors.length} селекторов полей`);
 
-        if (fieldSelectors.length === 0) {
-            console.error('Не найдены селекторы полей для заполнения!');
-            return;
-        }
-
         let filledCount = 0;
 
-        // Выводим все селекторы для отладки
-        fieldSelectors.forEach((selector, index) => {
-            const row = selector.closest('tr');
-            const sourceCell = row ? row.querySelector('td:first-child') : null;
-            const sourceField = sourceCell ? sourceCell.textContent.trim() : `Unknown${index}`;
-
-            console.log(`Селектор #${index}: поле="${sourceField}", options=${selector.options.length}`);
-        });
-
-        // Обходим все селекторы и пытаемся заполнить их
         fieldSelectors.forEach(selector => {
-            // Получаем строку селектора
             const row = selector.closest('tr');
-            if (!row) {
-                console.warn('Не удалось найти строку для селектора');
-                return;
-            }
+            if (!row) return;
 
-            // Получаем исходное поле из первой ячейки строки
             const sourceCell = row.querySelector('td:first-child');
-            if (!sourceCell) {
-                console.warn('Не удалось найти ячейку с исходным полем');
-                return;
-            }
+            if (!sourceCell) return;
 
             const sourceField = sourceCell.textContent.trim();
-            console.log(`Обработка селектора для поля "${sourceField}"`);
 
-            // Проверяем все возможные варианты ключей в маппинге
-            let targetField = mapping[sourceField]; // Прямое совпадение
-
-            // Если прямого совпадения нет, пробуем найти без учета регистра
-            if (!targetField) {
-                const lowerSourceField = sourceField.toLowerCase();
-                for (const [key, value] of Object.entries(mapping)) {
-                    if (key.toLowerCase() === lowerSourceField) {
-                        targetField = value;
-                        console.log(`Найдено совпадение без учета регистра: ${key} -> ${value}`);
-                        break;
-                    }
-                }
-            }
-
-            // Если нашли целевое поле, устанавливаем его в селекторе
-            if (targetField) {
-                console.log(`Для поля "${sourceField}" найдено значение "${targetField}"`);
-
-                // Выводим список всех опций селектора
-                let optionsLog = 'Доступные опции: ';
-                for (let i = 0; i < selector.options.length; i++) {
-                    optionsLog += `[${i}: ${selector.options[i].value}] `;
-                }
-                console.log(optionsLog);
-
-                // Устанавливаем значение селектора
-                let found = false;
-                for (let i = 0; i < selector.options.length; i++) {
-                    if (selector.options[i].value === targetField) {
-                        console.log(`Устанавливаем индекс ${i} для поля "${sourceField}"`);
-                        selector.selectedIndex = i;
-                        found = true;
-                        filledCount++;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    console.warn(`Значение "${targetField}" не найдено в опциях селектора для поля "${sourceField}"`);
-                }
-            } else {
-                console.log(`Для поля "${sourceField}" не найдено соответствие в маппинге`);
-            }
-        });
-
-        console.log(`Заполнено ${filledCount} из ${fieldSelectors.length} селекторов полей`);
-    }
-
-    // Заполнение селекторов полей на основе маппинга
-    function fillFieldSelectors(mapping) {
-        console.log('Заполнение селекторов полей с маппингом:', mapping);
-
-        if (!mapping) return;
-
-        // Получаем все селекторы полей
-        const fieldSelectors = document.querySelectorAll('.entity-field-selector');
-        let filledCount = 0;
-
-        fieldSelectors.forEach(selector => {
-            // Получаем имя поля из файла (из ячейки в той же строке)
-            const sourceField = selector.closest('tr').querySelector('td:first-child').textContent.trim();
-
-            // Проверяем наличие поля в маппинге
+            // Ищем соответствие в маппинге
             let targetField = mapping[sourceField];
 
-            // Если прямое сопоставление не найдено, ищем без учета регистра
+            // Если не нашли прямого соответствия, ищем без учета регистра
             if (!targetField) {
+                const sourceLower = sourceField.toLowerCase();
                 for (const [key, value] of Object.entries(mapping)) {
-                    if (key.toLowerCase() === sourceField.toLowerCase()) {
+                    if (key.toLowerCase() === sourceLower) {
                         targetField = value;
                         break;
                     }
                 }
             }
 
+            // Если нашли соответствие, устанавливаем значение в селекторе
             if (targetField) {
-                console.log(`Для поля "${sourceField}" найдено сопоставление: "${targetField}"`);
+                console.log(`Для поля "${sourceField}" найдено соответствие: "${targetField}"`);
 
-                // Устанавливаем значение в селекторе
                 for (let i = 0; i < selector.options.length; i++) {
                     if (selector.options[i].value === targetField) {
                         selector.selectedIndex = i;
                         filledCount++;
+
+                        // Выделяем строку, чтобы показать пользователю, что поле заполнено
+                        row.style.backgroundColor = '#f8f9fa';
+                        setTimeout(() => { row.style.backgroundColor = ''; }, 300);
                         break;
                     }
                 }
             }
         });
 
-        console.log(`Заполнено ${filledCount} из ${fieldSelectors.length} селекторов полей`);
+        console.log(`Заполнено ${filledCount} из ${fieldSelectors.length} полей`);
+
+        // Визуальное уведомление о результате
+        const notification = document.createElement('div');
+        notification.className = 'position-fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.zIndex = '1050';
+        notification.innerHTML = `
+        <div class="alert alert-success alert-dismissible fade show shadow-sm">
+            <strong>Успешно!</strong> Заполнено ${filledCount} из ${fieldSelectors.length} полей маппинга.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
     }
 
-    // Заполнение параметров импорта
-    function fillImportParams(params) {
-        console.log('Заполнение параметров импорта:', params);
 
-        if (!params) return;
-
-        // Заполняем селекторы
-        if (params.processingStrategy) {
-            setSelectValue('processingStrategy', params.processingStrategy);
-        }
-
-        if (params.batchSize) {
-            setSelectValue('batchSize', params.batchSize);
-        }
-
-        if (params.errorHandling) {
-            setSelectValue('errorHandling', params.errorHandling);
-        }
-
-        if (params.duplicateHandling) {
-            setSelectValue('duplicateHandling', params.duplicateHandling);
-        }
-
-        // Заполняем чекбоксы
-        setCheckboxValue('validateData', params.validateData);
-        setCheckboxValue('trimWhitespace', params.trimWhitespace);
-        setCheckboxValue('generateReport', params.generateReport);
-        setCheckboxValue('notifyOnComplete', params.notifyOnComplete);
-    }
 
     // Сбрасывает параметры импорта к значениям по умолчанию
     function resetImportParams() {
@@ -1196,14 +1076,6 @@
                 break;
             }
         }
-    }
-
-    // Вспомогательная функция для установки значения чекбокса
-    function setCheckboxValue(id, value) {
-        const checkbox = document.getElementById(id);
-        if (!checkbox) return;
-
-        checkbox.checked = value === true || value === 'true' || value === '1';
     }
 
     // Инициализация флажка сохранения схемы

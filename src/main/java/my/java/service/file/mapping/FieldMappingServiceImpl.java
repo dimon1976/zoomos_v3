@@ -1,5 +1,6 @@
 package my.java.service.file.mapping;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
@@ -19,6 +20,7 @@ import java.util.*;
 public class FieldMappingServiceImpl implements FieldMappingService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
     @Override
     public Map<String, String> getMappingById(Long mappingId) {
@@ -47,6 +49,44 @@ public class FieldMappingServiceImpl implements FieldMappingService {
         } catch (Exception e) {
             log.error("Ошибка при получении маппинга полей по ID {}: {}", mappingId, e.getMessage());
             return Collections.emptyMap();
+        }
+    }
+
+    @Override
+    public Map<String, Object> getMappingInfo(Long mappingId) {
+        String sql = "SELECT id, name, description, client_id, entity_type FROM field_mappings WHERE id = ?";
+        try {
+            return jdbcTemplate.queryForMap(sql, mappingId);
+        } catch (Exception e) {
+            log.error("Ошибка при получении информации о маппинге с ID {}: {}", mappingId, e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
+    @Override
+    @Transactional
+    public boolean saveImportSettings(Long mappingId, Map<String, Object> settings) {
+        try {
+            // Преобразуем настройки в JSON
+            String settingsJson = objectMapper.writeValueAsString(settings);
+
+            // Проверяем, есть ли уже настройки для этого маппинга
+            String checkSql = "SELECT COUNT(*) FROM field_mappings WHERE id = ?";
+            int count = jdbcTemplate.queryForObject(checkSql, Integer.class, mappingId);
+
+            if (count == 0) {
+                log.warn("Маппинг с ID {} не найден при попытке сохранения настроек", mappingId);
+                return false;
+            }
+
+            // Обновляем настройки импорта
+            String updateSql = "UPDATE field_mappings SET import_params = ?, updated_at = now() WHERE id = ?";
+            int updated = jdbcTemplate.update(updateSql, settingsJson, mappingId);
+
+            return updated > 0;
+        } catch (Exception e) {
+            log.error("Ошибка при сохранении настроек импорта для маппинга {}: {}", mappingId, e.getMessage(), e);
+            return false;
         }
     }
 

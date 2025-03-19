@@ -72,5 +72,7 @@ public interface FieldMappingService {
      * @return метаданные о полях
      */
     Map<String, Object> getEntityFieldsMetadata(String entityType);
+    Map<String, Object> getMappingInfo(Long mappingId);
+    boolean saveImportSettings(Long mappingId, Map<String, Object> settings);
 }
 

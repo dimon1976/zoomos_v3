@@ -322,7 +322,61 @@
                                     </tbody>
                                 </table>
                             </div>
+                            <!-- Блок настроек редактирования/сохранения схемы маппинга -->
+                            <div class="card mt-4">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Сохранение схемы сопоставления</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="updateCurrentMapping">
+                                            <label class="form-check-label" for="updateCurrentMapping">
+                                                Обновить текущую схему маппинга
+                                            </label>
+                                        </div>
+                                        <small class="text-muted" id="selectedMappingName">Схема не выбрана</small>
+                                    </div>
 
+                                    <div id="newMappingForm">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="mappingName" class="form-label">Название схемы</label>
+                                                    <input type="text" class="form-control" id="mappingName" name="mappingName"
+                                                           placeholder="Например: Импорт товаров из 1С">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="mappingDescription" class="form-label">Описание (опционально)</label>
+                                                    <input type="text" class="form-control" id="mappingDescription" name="mappingDescription"
+                                                           placeholder="Краткое описание схемы">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="includeImportSettings" name="includeImportSettings" checked>
+                                        <label class="form-check-label" for="includeImportSettings">
+                                            Включить настройки импорта в схему
+                                        </label>
+                                        <small class="form-text text-muted d-block">
+                                            Сохраняет настройки с вкладки "Настройки импорта" вместе со схемой маппинга
+                                        </small>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between mt-3">
+                                        <button type="button" class="btn btn-outline-danger" id="deleteMappingBtn" onclick="deleteCurrentMapping()">
+                                            <i class="fas fa-trash me-1"></i> Удалить схему
+                                        </button>
+                                        <button type="button" class="btn btn-primary" id="saveMappingBtn" onclick="saveOrUpdateMapping()">
+                                            <i class="fas fa-save me-1"></i> <span id="saveBtnText">Сохранить новую схему</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                             <!-- Сохранение схемы сопоставления -->
                             <div class="mt-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="saveMapping" name="saveMapping"
@@ -508,6 +562,355 @@
 </section>
 
 <script th:inline="javascript">
+    /**
+     * Глобальная переменная для хранения ID текущей выбранной схемы
+     */
+    let currentMappingId = null;
+
+    /**
+     * Обновляет информацию о текущей выбранной схеме
+     * @param {string} mappingId - ID схемы маппинга
+     * @param {string} mappingName - Название схемы маппинга
+     */
+    function updateSelectedMappingInfo(mappingId, mappingName) {
+        currentMappingId = mappingId;
+
+        const updateCheckbox = document.getElementById('updateCurrentMapping');
+        const selectedMappingNameElement = document.getElementById('selectedMappingName');
+        const newMappingForm = document.getElementById('newMappingForm');
+        const saveBtnTextElement = document.getElementById('saveBtnText');
+        const deleteMappingBtn = document.getElementById('deleteMappingBtn');
+
+        if (mappingId && mappingId !== 'new') {
+            // Выбрана существующая схема
+            updateCheckbox.disabled = false;
+            selectedMappingNameElement.textContent = `Выбрана схема: ${mappingName}`;
+
+            // Заполняем поля формы текущими значениями
+            fetch(`/import/api/mappings/${clientId}/${entityType}`)
+                .then(response => response.json())
+                .then(mappings => {
+                    const mapping = mappings.find(m => m.id == mappingId);
+                    if (mapping) {
+                        document.getElementById('mappingName').value = mapping.name || '';
+                        document.getElementById('mappingDescription').value = mapping.description || '';
+                    }
+                });
+
+            // Показываем или скрываем элементы в зависимости от статуса чекбокса
+            if (updateCheckbox.checked) {
+                newMappingForm.style.display = 'none';
+                saveBtnTextElement.textContent = 'Обновить схему';
+                deleteMappingBtn.style.display = 'block';
+            } else {
+                newMappingForm.style.display = 'block';
+                saveBtnTextElement.textContent = 'Сохранить новую схему';
+                deleteMappingBtn.style.display = 'none';
+            }
+        } else {
+            // Выбрана "Создать новую схему" или ничего не выбрано
+            updateCheckbox.disabled = true;
+            updateCheckbox.checked = false;
+            selectedMappingNameElement.textContent = 'Создание новой схемы';
+            newMappingForm.style.display = 'block';
+            saveBtnTextElement.textContent = 'Сохранить новую схему';
+            deleteMappingBtn.style.display = 'none';
+        }
+    }
+
+    /**
+     * Инициализирует обработчик изменения чекбокса обновления схемы
+     */
+    function initUpdateCheckbox() {
+        const updateCheckbox = document.getElementById('updateCurrentMapping');
+        const newMappingForm = document.getElementById('newMappingForm');
+        const saveBtnTextElement = document.getElementById('saveBtnText');
+        const deleteMappingBtn = document.getElementById('deleteMappingBtn');
+
+        updateCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                newMappingForm.style.display = 'none';
+                saveBtnTextElement.textContent = 'Обновить схему';
+                deleteMappingBtn.style.display = 'block';
+            } else {
+                newMappingForm.style.display = 'block';
+                saveBtnTextElement.textContent = 'Сохранить новую схему';
+                deleteMappingBtn.style.display = 'none';
+            }
+        });
+    }
+
+    /**
+     * Сохраняет или обновляет схему маппинга с учетом настроек импорта
+     */
+    function saveOrUpdateMapping() {
+        // Получаем текущее состояние сопоставления полей
+        const fieldMapping = getCurrentFieldMapping();
+
+        // Проверяем, есть ли сопоставления
+        if (Object.keys(fieldMapping).length === 0) {
+            alert('Пожалуйста, задайте хотя бы одно сопоставление полей');
+            return;
+        }
+
+        // Проверяем, нужно ли обновить существующую схему
+        const updateCurrentCheckbox = document.getElementById('updateCurrentMapping');
+        const isUpdateExisting = updateCurrentCheckbox.checked && currentMappingId && currentMappingId !== 'new';
+
+        // Проверяем, нужно ли включить настройки импорта
+        const includeImportSettings = document.getElementById('includeImportSettings').checked;
+
+        // Если создаем новую схему, проверяем название
+        let mappingName, mappingDescription;
+
+        if (!isUpdateExisting) {
+            mappingName = document.getElementById('mappingName').value.trim();
+            mappingDescription = document.getElementById('mappingDescription').value.trim();
+
+            if (!mappingName) {
+                alert('Название схемы обязательно');
+                return;
+            }
+        }
+
+        // Собираем данные маппинга
+        const mappingData = {
+            fieldMapping: fieldMapping
+        };
+
+        // Если создаем новую схему, добавляем имя и описание
+        if (!isUpdateExisting) {
+            mappingData.name = mappingName;
+            mappingData.description = mappingDescription;
+        }
+
+        // Если нужно включить настройки импорта, собираем их
+        if (includeImportSettings) {
+            mappingData.importSettings = getImportSettings();
+        }
+
+        // Показываем индикатор загрузки
+        const loadingOverlay = showLoadingOverlay(isUpdateExisting ? 'Обновление схемы...' : 'Сохранение схемы...');
+
+        if (isUpdateExisting) {
+            // Обновляем существующую схему
+            updateMappingOnServer(currentMappingId, mappingData, loadingOverlay);
+        } else {
+            // Создаем новую схему
+            createNewMappingOnServer(mappingData, loadingOverlay);
+        }
+    }
+
+    /**
+     * Получает текущее сопоставление полей из таблицы
+     * @returns {Object} Объект с маппингом полей
+     */
+    function getCurrentFieldMapping() {
+        const fieldMapping = {};
+        const fieldSelectors = document.querySelectorAll('.entity-field-selector');
+
+        fieldSelectors.forEach(selector => {
+            if (selector.value && selector.value !== '') {
+                const sourceField = selector.closest('tr').querySelector('td:first-child').textContent.trim();
+                fieldMapping[sourceField] = selector.value;
+            }
+        });
+
+        return fieldMapping;
+    }
+
+    /**
+     * Получает текущие настройки импорта
+     * @returns {Object} Объект с настройками импорта
+     */
+    function getImportSettings() {
+        return {
+            processingStrategy: document.getElementById('processingStrategy').value,
+            batchSize: document.getElementById('batchSize').value,
+            errorHandling: document.getElementById('errorHandling').value,
+            duplicateHandling: document.getElementById('duplicateHandling').value,
+            validateData: document.getElementById('validateData').checked,
+            trimWhitespace: document.getElementById('trimWhitespace').checked,
+            generateReport: document.getElementById('generateReport').checked,
+            notifyOnComplete: document.getElementById('notifyOnComplete').checked
+        };
+    }
+
+    /**
+     * Создает новую схему маппинга на сервере
+     * @param {Object} mappingData - Данные маппинга
+     * @param {HTMLElement} loadingOverlay - Элемент индикатора загрузки
+     */
+    function createNewMappingOnServer(mappingData, loadingOverlay) {
+        fetch(`/import/api/mapping/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                clientId: clientId,
+                entityType: entityType,
+                name: mappingData.name,
+                description: mappingData.description || '',
+                fieldMapping: mappingData.fieldMapping,
+                importSettings: mappingData.importSettings
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                if (data.success) {
+                    showToast('Успех', 'Схема маппинга успешно сохранена', 'success');
+
+                    // Обновляем список маппингов и выбираем новую схему
+                    loadMappingsForType(entityType).then(() => {
+                        if (data.mappingId) {
+                            selectMappingById(data.mappingId);
+                        }
+                    });
+                } else {
+                    showToast('Ошибка', data.message || 'Не удалось сохранить схему', 'error');
+                }
+            })
+            .catch(error => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                console.error('Ошибка при сохранении схемы:', error);
+                showToast('Ошибка', 'Ошибка при сохранении схемы', 'error');
+            });
+    }
+
+    /**
+     * Обновляет существующую схему маппинга на сервере
+     * @param {string} mappingId - ID схемы маппинга
+     * @param {Object} mappingData - Данные маппинга
+     * @param {HTMLElement} loadingOverlay - Элемент индикатора загрузки
+     */
+    function updateMappingOnServer(mappingId, mappingData, loadingOverlay) {
+        fetch(`/import/api/mapping/${mappingId}/update`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(mappingData)
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                if (data.success) {
+                    showToast('Успех', 'Схема маппинга успешно обновлена', 'success');
+
+                    // Обновляем список маппингов
+                    loadMappingsForType(entityType);
+                } else {
+                    showToast('Ошибка', data.message || 'Не удалось обновить схему', 'error');
+                }
+            })
+            .catch(error => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                console.error('Ошибка при обновлении схемы:', error);
+                showToast('Ошибка', 'Ошибка при обновлении схемы', 'error');
+            });
+    }
+
+    /**
+     * Удаляет текущую схему маппинга
+     */
+    function deleteCurrentMapping() {
+        if (!currentMappingId || currentMappingId === 'new') {
+            showToast('Предупреждение', 'Нет выбранной схемы для удаления', 'warning');
+            return;
+        }
+
+        if (!confirm('Вы уверены, что хотите удалить эту схему маппинга?')) {
+            return;
+        }
+
+        // Показываем индикатор загрузки
+        const loadingOverlay = showLoadingOverlay('Удаление схемы...');
+
+        fetch(`/import/api/mapping/${currentMappingId}`, {
+            method: 'DELETE'
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                if (data.success) {
+                    showToast('Успех', 'Схема маппинга удалена', 'success');
+
+                    // Сбрасываем текущий ID маппинга
+                    currentMappingId = null;
+
+                    // Обновляем список маппингов
+                    loadMappingsForType(entityType).then(() => {
+                        // Выбираем "Создать новую схему"
+                        selectMappingById('new');
+                    });
+                } else {
+                    showToast('Ошибка', data.message || 'Не удалось удалить схему', 'error');
+                }
+            })
+            .catch(error => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                console.error('Ошибка при удалении схемы:', error);
+                showToast('Ошибка', 'Ошибка при удалении схемы', 'error');
+            });
+    }
+
+    /**
+     * Выбирает схему маппинга по ID
+     * @param {string} mappingId - ID схемы маппинга
+     */
+    function selectMappingById(mappingId) {
+        const radio = document.getElementById(`mapping_${mappingId}`);
+        if (radio) {
+            radio.checked = true;
+
+            // Эмулируем клик по карточке
+            const mappingCard = document.querySelector(`.mapping-card[data-mapping-id="${mappingId}"]`);
+            if (mappingCard) {
+                mappingCard.click();
+            } else {
+                // Если карточка не найдена, обновляем стили вручную
+                updateMappingCardStyles();
+
+                // Обработка выбора "Создать новую схему"
+                if (mappingId === 'new') {
+                    suggestFieldMapping();
+                    resetImportParams();
+                    updateSelectedMappingInfo('new', 'Новая схема');
+                }
+            }
+        }
+    }
+
+
+
+
+
     // Получаем метаданные полей из контроллера с резервными данными
     const serverEntityFieldsMetadata = /*[[${entityFieldsMetadata}]]*/ {};
     const supportedEntityTypes = /*[[${supportedEntityTypes}]]*/ [];
@@ -574,13 +977,6 @@
         serverEntityFieldsMetadata : fallbackMetadata;
 
     document.addEventListener('DOMContentLoaded', function () {
-        console.log('=== Debug Information ===');
-        console.log('Server EntityFieldsMetadata:', serverEntityFieldsMetadata);
-        console.log('Fallback EntityFieldsMetadata:', fallbackMetadata);
-        console.log('Actual EntityFieldsMetadata used:', entityFieldsMetadata);
-        console.log('Supported Entity Types:', supportedEntityTypes);
-        console.log('Client ID:', clientId);
-
         // Получаем текущий тип сущности из селектора
         entityType = document.getElementById('entityTypeSelect')?.value || 'product';
         console.log('Initial Entity Type:', entityType);
@@ -606,6 +1002,15 @@
 
         // Загрузка маппингов для начального типа сущности
         loadMappingsForType(entityType);
+
+        // Инициализация обработчика чекбокса обновления
+        initUpdateCheckbox();
+
+        // Инициализация кнопки удаления
+        const deleteMappingBtn = document.getElementById('deleteMappingBtn');
+        if (deleteMappingBtn) {
+            deleteMappingBtn.style.display = 'none'; // По умолчанию скрыта
+        }
 
         // Переходим на вкладку с образцом данных для проверки
         setTimeout(function () {
@@ -729,7 +1134,8 @@
         mappingCards.forEach(card => {
             card.addEventListener('click', function () {
                 const mappingId = this.dataset.mappingId;
-                console.log(`Клик по карточке маппинга ${mappingId}`);
+                const mappingName = this.querySelector('.mapping-title')?.textContent || 'Схема маппинга';
+                console.log(`Клик по карточке маппинга ${mappingId}: ${mappingName}`);
 
                 const radio = document.getElementById('mapping_' + mappingId);
 
@@ -740,8 +1146,15 @@
                     // Обновляем стили карточек
                     updateMappingCardStyles();
 
+                    // Обновляем информацию о выбранной схеме
+                    updateSelectedMappingInfo(mappingId, mappingName);
+
                     // Если выбрана существующая схема, загружаем её данные
                     if (mappingId !== 'new') {
+                        // Показываем индикатор загрузки
+                        showLoadingOverlay('Загрузка схемы маппинга...');
+
+                        // Загружаем данные маппинга
                         loadMappingData(mappingId);
 
                         // Показываем вкладку параметров как заполненную
@@ -749,19 +1162,6 @@
                         if (optionsTab) {
                             optionsTab.classList.add('text-primary');
                             optionsTab.setAttribute('data-filled', 'true');
-                        }
-                    } else {
-                        // Если выбрана "Создать новую схему", предлагаем автоматическое сопоставление
-                        suggestFieldMapping();
-
-                        // Сбрасываем параметры импорта
-                        resetImportParams();
-
-                        // Снимаем отметку с вкладки параметров
-                        const optionsTab = document.getElementById('options-tab');
-                        if (optionsTab) {
-                            optionsTab.classList.remove('text-primary');
-                            optionsTab.removeAttribute('data-filled');
                         }
                     }
                 }
@@ -917,58 +1317,85 @@
 
     // Загрузка данных схемы сопоставления
     function loadMappingData(mappingId) {
-        console.log(`Загрузка данных маппинга ID: ${mappingId}, клиент: ${clientId}, тип: ${entityType}`);
+        console.log(`Загрузка данных маппинга ID: ${mappingId}`);
 
-        // Показываем индикатор загрузки
-        const loadingIndicator = document.createElement('div');
-        loadingIndicator.className = 'loading-indicator position-fixed';
-        loadingIndicator.style.top = '50%';
-        loadingIndicator.style.left = '50%';
-        loadingIndicator.style.transform = 'translate(-50%, -50%)';
-        loadingIndicator.style.zIndex = '1050';
-        loadingIndicator.innerHTML = `
-        <div class="bg-white p-3 rounded shadow-sm text-center">
-            <div class="spinner-border text-primary mb-2" role="status">
-                <span class="visually-hidden">Загрузка...</span>
-            </div>
-            <div>Загрузка данных маппинга...</div>
-        </div>
-    `;
-        document.body.appendChild(loadingIndicator);
+        // Упрощенный индикатор загрузки
+        const loadingOverlay = showLoadingOverlay('Загрузка схемы маппинга...');
 
-        // Запрашиваем детали маппинга напрямую
+        // Запрашиваем детали маппинга
         fetch(`/import/api/mapping-details/${mappingId}`)
             .then(response => {
-                if (!response.ok) {
-                    throw new Error('Ошибка при получении деталей маппинга: ' + response.status);
-                }
+                if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
                 return response.json();
             })
             .then(mappingDetails => {
-                console.log('Получены детали маппинга:', mappingDetails);
+                // Применяем маппинг полей
+                quickFillFieldSelectors(mappingDetails);
 
-                // Заполняем селекторы полей после задержки для обеспечения загрузки DOM
-                setTimeout(() => {
-                    enhancedFillFieldSelectors(mappingDetails);
-
-                    // Удаляем индикатор загрузки
-                    if (loadingIndicator.parentNode) {
-                        loadingIndicator.parentNode.removeChild(loadingIndicator);
-                    }
-                }, 300);
+                // Загружаем и применяем настройки импорта
+                return fetch(`/import/api/mapping/${mappingId}/settings`);
             })
-            .catch(error => {
-                console.error('Ошибка при загрузке деталей маппинга:', error);
-
-                // Удаляем индикатор загрузки в случае ошибки
-                if (loadingIndicator.parentNode) {
-                    loadingIndicator.parentNode.removeChild(loadingIndicator);
+            .then(response => {
+                if (response.ok) return response.json();
+                return null; // Если настроек нет, просто продолжаем
+            })
+            .then(importSettings => {
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
                 }
 
-                // Показываем сообщение об ошибке
-                alert(`Ошибка при загрузке деталей маппинга: ${error.message}`);
+                // Если есть настройки импорта, применяем их
+                if (importSettings) {
+                    applyImportSettings(importSettings);
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки маппинга:', error);
+
+                // Удаляем индикатор загрузки
+                if (loadingOverlay.parentNode) {
+                    loadingOverlay.parentNode.removeChild(loadingOverlay);
+                }
+
+                // Короткое уведомление об ошибке
+                showToast('Ошибка', 'Не удалось загрузить данные маппинга', 'error');
             });
     }
+
+    /**
+     * Применяет настройки импорта к форме
+     * @param {Object} settings - Настройки импорта
+     */
+    function applyImportSettings(settings) {
+        // Применяем значения селекторов
+        if (settings.processingStrategy) {
+            setSelectValue('processingStrategy', settings.processingStrategy);
+        }
+        if (settings.batchSize) {
+            setSelectValue('batchSize', settings.batchSize);
+        }
+        if (settings.errorHandling) {
+            setSelectValue('errorHandling', settings.errorHandling);
+        }
+        if (settings.duplicateHandling) {
+            setSelectValue('duplicateHandling', settings.duplicateHandling);
+        }
+
+        // Применяем значения чекбоксов
+        setCheckboxValue('validateData', settings.validateData);
+        setCheckboxValue('trimWhitespace', settings.trimWhitespace);
+        setCheckboxValue('generateReport', settings.generateReport);
+        setCheckboxValue('notifyOnComplete', settings.notifyOnComplete);
+
+        // Показываем вкладку параметров как заполненную
+        const optionsTab = document.getElementById('options-tab');
+        if (optionsTab) {
+            optionsTab.classList.add('text-primary');
+            optionsTab.setAttribute('data-filled', 'true');
+        }
+    }
+
 
     function enhancedFillFieldSelectors(mapping) {
         console.log('Улучшенное заполнение селекторов полей:', mapping);

@@ -589,13 +589,28 @@ public class FileImportController {
             @PathVariable Long clientId,
             @PathVariable String entityType) {
 
-        log.debug("API запрос на получение доступных маппингов для клиента: {}, тип сущности: {}",
-                clientId, entityType);
+        log.debug("API запрос на получение доступных маппингов для клиента: {}, тип сущности: {}", clientId, entityType);
 
         try {
-            List<Map<String, Object>> mappings =
-                    fieldMappingService.getAvailableMappingsForClient(clientId, entityType);
-            return ResponseEntity.ok(mappings);
+            List<Map<String, Object>> mappings = fieldMappingService.getAvailableMappingsForClient(clientId, entityType);
+
+            // Добавляем field_mapping в каждый маппинг
+            List<Map<String, Object>> enrichedMappings = mappings.stream()
+                    .map(mapping -> {
+                        Long mappingId = (Long) mapping.get("id");
+                        Map<String, String> fieldMapping = fieldMappingService.getMappingById(mappingId);
+
+                        if (fieldMapping == null) {
+                            log.warn("У маппинга ID={} нет field_mapping!", mappingId);
+                            mapping.put("field_mapping", Collections.emptyMap());
+                        } else {
+                            mapping.put("field_mapping", fieldMapping);
+                        }
+                        return mapping;
+                    })
+                    .toList();
+
+            return ResponseEntity.ok(enrichedMappings);
         } catch (Exception e) {
             log.error("Ошибка при получении доступных маппингов: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
@@ -617,6 +632,33 @@ public class FileImportController {
         }
 
         return ResponseEntity.ok(mappingDetails);
+    }
+
+    /**
+     * Получает настройки импорта для маппинга по ID
+     */
+    @GetMapping("/api/mapping/{mappingId}/settings")
+    @ResponseBody
+    public ResponseEntity<?> getMappingSettings(@PathVariable Long mappingId) {
+        log.debug("Запрос на получение настроек импорта для маппинга: {}", mappingId);
+
+        try {
+            Map<String, Object> settings = fieldMappingService.getMappingSettingsById(mappingId);
+
+            if (settings == null || settings.isEmpty()) {
+                log.debug("Настройки для маппинга с ID {} не найдены", mappingId);
+                // В случае отсутствия настроек возвращаем пустой объект с кодом 200,
+                // чтобы клиент мог продолжить работу
+                return ResponseEntity.ok(Collections.emptyMap());
+            }
+
+            log.debug("Настройки для маппинга {} успешно получены", mappingId);
+            return ResponseEntity.ok(settings);
+        } catch (Exception e) {
+            log.error("Ошибка при получении настроек маппинга {}: {}", mappingId, e.getMessage(), e);
+            // Возвращаем пустой объект с кодом 200, чтобы клиент мог продолжить работу
+            return ResponseEntity.ok(Collections.emptyMap());
+        }
     }
 
     @GetMapping("/api/entity-fields/{entityType}")

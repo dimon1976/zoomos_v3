@@ -103,15 +103,18 @@ E:.
 |           |   |   |       ProgressInfo.java
 |           |   |   |       WebSocketImportProgressTracker.java
 |           |   |   |       
-|           |   |   \---transformer
-|           |   |           AbstractValueTransformer.java
-|           |   |           BooleanTransformer.java
-|           |   |           DateTimeTransformer.java
-|           |   |           EnumTransformer.java
-|           |   |           NumberTransformer.java
-|           |   |           StringTransformer.java
-|           |   |           ValueTransformer.java
-|           |   |           ValueTransformerFactory.java
+|           |   |   +---transformer
+|           |   |   |       AbstractValueTransformer.java
+|           |   |   |       BooleanTransformer.java
+|           |   |   |       DateTimeTransformer.java
+|           |   |   |       EnumTransformer.java
+|           |   |   |       NumberTransformer.java
+|           |   |   |       StringTransformer.java
+|           |   |   |       ValueTransformer.java
+|           |   |   |       ValueTransformerFactory.java
+|           |   |   |       
+|           |   |   \---util
+|           |   |           ImportParametersUtil.java
 |           |   |           
 |           |   +---product
 |           |   |       ProductService.java

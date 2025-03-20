@@ -1,5 +1,6 @@
 package my.java.service.file.mapping;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,51 @@ public class FieldMappingServiceImpl implements FieldMappingService {
     }
 
     @Override
+    public Map<String, Object> getMappingSettingsById(Long mappingId) {
+        if (mappingId == null) {
+            log.debug("ID маппинга не указан");
+            return Collections.emptyMap();
+        }
+
+        try {
+            // Используем более надежный метод query вместо queryForObject
+            String sql = "SELECT import_params FROM field_mappings WHERE id = ? AND is_active = true";
+            List<String> results = jdbcTemplate.query(
+                    sql,
+                    (rs, rowNum) -> {
+                        try {
+                            return rs.getString("import_params");
+                        } catch (Exception e) {
+                            log.warn("Ошибка при получении колонки import_params: {}", e.getMessage());
+                            return null;
+                        }
+                    },
+                    mappingId
+            );
+
+            if (results.isEmpty() || results.get(0) == null || results.get(0).isEmpty()) {
+                log.debug("Настройки импорта не найдены для маппинга {}", mappingId);
+                return Collections.emptyMap();
+            }
+
+            String importParamsJson = results.get(0);
+            log.debug("Получены настройки импорта для маппинга {}: {}", mappingId, importParamsJson);
+
+            // Преобразуем JSON в Map
+            try {
+                TypeReference<HashMap<String, Object>> typeRef = new TypeReference<HashMap<String, Object>>() {};
+                return objectMapper.readValue(importParamsJson, typeRef);
+            } catch (Exception e) {
+                log.error("Ошибка при разборе JSON настроек импорта для маппинга {}: {}", mappingId, e.getMessage());
+                return Collections.emptyMap();
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при получении настроек импорта для маппинга {}: {}", mappingId, e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
+    @Override
     public Map<String, Object> getMappingInfo(Long mappingId) {
         String sql = "SELECT id, name, description, client_id, entity_type FROM field_mappings WHERE id = ?";
         try {
@@ -67,6 +113,14 @@ public class FieldMappingServiceImpl implements FieldMappingService {
     @Transactional
     public boolean saveImportSettings(Long mappingId, Map<String, Object> settings) {
         try {
+            // Проверяем наличие колонки import_params
+            boolean hasImportParamsColumn = checkImportParamsColumnExists();
+
+            if (!hasImportParamsColumn) {
+                log.warn("Колонка import_params не существует в таблице field_mappings. Настройки не будут сохранены.");
+                return false;
+            }
+
             // Преобразуем настройки в JSON
             String settingsJson = objectMapper.writeValueAsString(settings);
 
@@ -86,6 +140,29 @@ public class FieldMappingServiceImpl implements FieldMappingService {
             return updated > 0;
         } catch (Exception e) {
             log.error("Ошибка при сохранении настроек импорта для маппинга {}: {}", mappingId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Проверяет наличие колонки import_params в таблице field_mappings
+     *
+     * @return true, если колонка существует
+     */
+    private boolean checkImportParamsColumnExists() {
+        try {
+            // PostgreSQL
+            String sql = """
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'field_mappings' 
+                AND column_name = 'import_params'
+                """;
+
+            List<Map<String, Object>> result = jdbcTemplate.queryForList(sql);
+            return !result.isEmpty();
+        } catch (Exception e) {
+            log.error("Ошибка при проверке наличия колонки import_params: {}", e.getMessage());
             return false;
         }
     }

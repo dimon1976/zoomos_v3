@@ -499,6 +499,29 @@ public class FileImportController {
         }
     }
 
+    /**
+     * Удаляет схему маппинга по ID
+     */
+    @DeleteMapping("/api/mapping/{mappingId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteMapping(@PathVariable Long mappingId) {
+        log.debug("API запрос на удаление маппинга с ID: {}", mappingId);
+
+        try {
+            boolean deleted = fieldMappingService.deleteMapping(mappingId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", deleted);
+            response.put("message", deleted ? "Схема маппинга успешно удалена" : "Не удалось удалить схему маппинга");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Ошибка при удалении маппинга: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Ошибка при удалении схемы маппинга: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
     private Map<String, Object> createImportStatusResponse(FileOperationDto operation) {
         Map<String, Object> response = new HashMap<>();
         response.put("id", operation.getId());

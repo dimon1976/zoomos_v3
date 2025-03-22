@@ -165,9 +165,115 @@ public class FileImportController {
     }
 
     private String getEntityTypeFromAnalysis(Map<String, Object> analysis) {
-        return analysis.containsKey("entityType") ? (String) analysis.get("entityType") : "product";
+        return analysis.containsKey("entityType") ? (String) analysis.get("entityType") : "product_with_related";
     }
 
+    /**
+     * Создание новой схемы маппинга с настройками импорта
+     */
+    @PostMapping("/api/mapping/create")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> createMapping(@RequestBody Map<String, Object> requestData) {
+        log.debug("Запрос на создание новой схемы маппинга: {}", requestData);
+
+        try {
+            String name = (String) requestData.get("name");
+            String description = (String) requestData.get("description");
+            Long clientId = Long.valueOf(requestData.get("clientId").toString());
+            String entityType = (String) requestData.get("entityType");
+
+            @SuppressWarnings("unchecked")
+            Map<String, String> fieldMapping = (Map<String, String>) requestData.get("fieldMapping");
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> importSettings = (Map<String, Object>) requestData.get("importSettings");
+
+            if (name == null || fieldMapping == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Название и маппинг полей обязательны"
+                ));
+            }
+
+            // Создаем маппинг
+            Long mappingId = fieldMappingService.createMapping(name, description, clientId, entityType, fieldMapping);
+
+            // Если есть настройки импорта, сохраняем их
+            if (importSettings != null && mappingId != null) {
+                fieldMappingService.saveImportSettings(mappingId, importSettings);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Схема маппинга успешно создана");
+            response.put("mappingId", mappingId);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Ошибка при создании схемы маппинга: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Ошибка: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    /**
+     * Обновление схемы маппинга с настройками импорта
+     */
+    @PutMapping("/api/mapping/{mappingId}/update")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateMappingWithSettings(
+            @PathVariable Long mappingId,
+            @RequestBody Map<String, Object> requestData) {
+
+        log.debug("Запрос на обновление маппинга с ID {}: {}", mappingId, requestData);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> fieldMapping = (Map<String, String>) requestData.get("fieldMapping");
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> importSettings = (Map<String, Object>) requestData.get("importSettings");
+
+            if (fieldMapping == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Маппинг полей обязателен"
+                ));
+            }
+
+            // Получаем информацию о маппинге для сохранения имени и описания
+            Map<String, Object> mappingInfo = fieldMappingService.getMappingInfo(mappingId);
+            String name = (String) mappingInfo.get("name");
+            String description = (String) mappingInfo.get("description");
+
+            // Обновляем маппинг полей
+            boolean success = fieldMappingService.updateMapping(mappingId, name, description, fieldMapping);
+
+            // Если есть настройки импорта, сохраняем их
+            if (importSettings != null && success) {
+                fieldMappingService.saveImportSettings(mappingId, importSettings);
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", success);
+
+            if (success) {
+                response.put("message", "Схема маппинга успешно обновлена");
+            } else {
+                response.put("message", "Не удалось обновить схему маппинга");
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Ошибка при обновлении маппинга: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Ошибка: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
 
     @PostMapping("/{clientId}/import")
     public String importFile(
@@ -393,6 +499,29 @@ public class FileImportController {
         }
     }
 
+    /**
+     * Удаляет схему маппинга по ID
+     */
+    @DeleteMapping("/api/mapping/{mappingId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteMapping(@PathVariable Long mappingId) {
+        log.debug("API запрос на удаление маппинга с ID: {}", mappingId);
+
+        try {
+            boolean deleted = fieldMappingService.deleteMapping(mappingId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", deleted);
+            response.put("message", deleted ? "Схема маппинга успешно удалена" : "Не удалось удалить схему маппинга");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Ошибка при удалении маппинга: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Ошибка при удалении схемы маппинга: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
     private Map<String, Object> createImportStatusResponse(FileOperationDto operation) {
         Map<String, Object> response = new HashMap<>();
         response.put("id", operation.getId());
@@ -483,16 +612,75 @@ public class FileImportController {
             @PathVariable Long clientId,
             @PathVariable String entityType) {
 
-        log.debug("API запрос на получение доступных маппингов для клиента: {}, тип сущности: {}",
-                clientId, entityType);
+        log.debug("API запрос на получение доступных маппингов для клиента: {}, тип сущности: {}", clientId, entityType);
 
         try {
-            List<Map<String, Object>> mappings =
-                    fieldMappingService.getAvailableMappingsForClient(clientId, entityType);
-            return ResponseEntity.ok(mappings);
+            List<Map<String, Object>> mappings = fieldMappingService.getAvailableMappingsForClient(clientId, entityType);
+
+            // Добавляем field_mapping в каждый маппинг
+            List<Map<String, Object>> enrichedMappings = mappings.stream()
+                    .map(mapping -> {
+                        Long mappingId = (Long) mapping.get("id");
+                        Map<String, String> fieldMapping = fieldMappingService.getMappingById(mappingId);
+
+                        if (fieldMapping == null) {
+                            log.warn("У маппинга ID={} нет field_mapping!", mappingId);
+                            mapping.put("field_mapping", Collections.emptyMap());
+                        } else {
+                            mapping.put("field_mapping", fieldMapping);
+                        }
+                        return mapping;
+                    })
+                    .toList();
+
+            return ResponseEntity.ok(enrichedMappings);
         } catch (Exception e) {
             log.error("Ошибка при получении доступных маппингов: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Получает детали маппинга по ID
+     */
+    @GetMapping("/api/mapping-details/{mappingId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, String>> getMappingDetails(@PathVariable Long mappingId) {
+        log.debug("Запрос на получение деталей маппинга по ID: {}", mappingId);
+        Map<String, String> mappingDetails = fieldMappingService.getMappingById(mappingId);
+
+        if (mappingDetails.isEmpty()) {
+            log.warn("Детали маппинга с ID {} не найдены", mappingId);
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(mappingDetails);
+    }
+
+    /**
+     * Получает настройки импорта для маппинга по ID
+     */
+    @GetMapping("/api/mapping/{mappingId}/settings")
+    @ResponseBody
+    public ResponseEntity<?> getMappingSettings(@PathVariable Long mappingId) {
+        log.debug("Запрос на получение настроек импорта для маппинга: {}", mappingId);
+
+        try {
+            Map<String, Object> settings = fieldMappingService.getMappingSettingsById(mappingId);
+
+            if (settings == null || settings.isEmpty()) {
+                log.debug("Настройки для маппинга с ID {} не найдены", mappingId);
+                // В случае отсутствия настроек возвращаем пустой объект с кодом 200,
+                // чтобы клиент мог продолжить работу
+                return ResponseEntity.ok(Collections.emptyMap());
+            }
+
+            log.debug("Настройки для маппинга {} успешно получены", mappingId);
+            return ResponseEntity.ok(settings);
+        } catch (Exception e) {
+            log.error("Ошибка при получении настроек маппинга {}: {}", mappingId, e.getMessage(), e);
+            // Возвращаем пустой объект с кодом 200, чтобы клиент мог продолжить работу
+            return ResponseEntity.ok(Collections.emptyMap());
         }
     }
 

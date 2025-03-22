@@ -17,6 +17,14 @@ public interface FieldMappingService {
     Map<String, String> getMappingById(Long mappingId);
 
     /**
+     * Получает настройки импорта для маппинга по ID
+     *
+     * @param mappingId ID маппинга
+     * @return настройки импорта или пустая карта, если настройки не найдены
+     */
+    Map<String, Object> getMappingSettingsById(Long mappingId);
+
+    /**
      * Получает список всех доступных маппингов для клиента и типа сущности.
      *
      * @param clientId ID клиента
@@ -72,5 +80,7 @@ public interface FieldMappingService {
      * @return метаданные о полях
      */
     Map<String, Object> getEntityFieldsMetadata(String entityType);
+    Map<String, Object> getMappingInfo(Long mappingId);
+    boolean saveImportSettings(Long mappingId, Map<String, Object> settings);
 }
 

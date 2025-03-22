@@ -1,301 +1,229 @@
-// src/main/java/my/java/service/file/tracker/WebSocketImportProgressTracker.java
 package my.java.service.file.tracker;
 
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.FileOperation;
-import my.java.repository.FileOperationRepository;
-import org.springframework.context.annotation.Primary;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Component;
+import my.java.controller.ImportProgressController;
+import my.java.service.file.importer.FileImportService;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Реализация отслеживания прогресса импорта с использованием WebSocket
- * для оповещения клиентов о прогрессе в реальном времени
+ * Реализация трекера прогресса импорта с использованием WebSocket
+ * для отправки обновлений прогресса в реальном времени
  */
-@Component
-@Primary
+@Service
 @Slf4j
-public class WebSocketImportProgressTracker extends ImportProgressTracker {
+public class WebSocketImportProgressTracker implements ImportProgressTracker {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ImportProgressController progressController;
+    private final FileImportService fileImportService;
 
-    /**
-     * Создает трекер с поддержкой WebSocket уведомлений
-     *
-     * @param fileOperationRepository репозиторий для операций с файлами
-     * @param messagingTemplate шаблон для отправки WebSocket сообщений
-     */
+    // Кэш для хранения текущего состояния операций
+    // operationId -> Map<String, Object>
+    private final Map<Long, Map<String, Object>> operationsState = new ConcurrentHashMap<>();
+
+    // Кэш для хранения счетчиков отправленных обновлений
+    // operationId -> counter
+    private final Map<Long, AtomicInteger> updateCounters = new ConcurrentHashMap<>();
+
+    // Кэш для хранения счетчиков обработанных записей
+    // operationId -> processedRecords
+    private final Map<Long, AtomicInteger> processedRecordsCounters = new ConcurrentHashMap<>();
+
+    // Интервал между обновлениями (в количестве записей)
+    private static final int UPDATE_INTERVAL = 10; // Уменьшил интервал для более частых обновлений
+
+    // Максимальное количество обновлений для одной операции
+    private static final int MAX_UPDATES = 500;
+
+    // Используем @Lazy для обеих зависимостей, чтобы разорвать циклическую зависимость
     public WebSocketImportProgressTracker(
-            FileOperationRepository fileOperationRepository,
-            SimpMessagingTemplate messagingTemplate) {
-        super(fileOperationRepository);
-        this.messagingTemplate = messagingTemplate;
+            @Lazy ImportProgressController progressController,
+            @Lazy FileImportService fileImportService) {
+        this.progressController = progressController;
+        this.fileImportService = fileImportService;
+        log.info("WebSocketImportProgressTracker инициализирован");
     }
 
     @Override
-    public ProgressInfo initProgress(Long operationId, int totalRecords) {
-        log.debug("Инициализация отслеживания прогресса с WebSocket для операции #{}, всего записей: {}",
-                operationId, totalRecords);
+    public void initProgress(Long operationId, int initialProgress) {
+        log.info("Инициализация прогресса для операции #{}: ожидается {} записей", operationId, initialProgress);
 
-        // Вызываем метод родительского класса
-        ProgressInfo progressInfo = super.initProgress(operationId, totalRecords);
+        // Инициализируем состояние операции
+        Map<String, Object> state = new ConcurrentHashMap<>();
+        state.put("progress", 0);
+        state.put("processedRecords", 0);
+        state.put("totalRecords", initialProgress);
+        state.put("completed", false);
+        state.put("successful", false);
 
-        // Отправляем начальное сообщение через WebSocket
-        sendProgressUpdateViaWebSocket(operationId, 0, totalRecords, 0);
+        operationsState.put(operationId, state);
+        updateCounters.put(operationId, new AtomicInteger(0));
+        processedRecordsCounters.put(operationId, new AtomicInteger(0));
 
-        return progressInfo;
+        // Отправляем начальное обновление
+        sendUpdate(operationId, state);
     }
 
     @Override
-    public int updateProgress(Long operationId, int processedRecords) {
-        ProgressInfo progressInfo = getProgressInfo(operationId);
+    @Async
+    public void updateProgress(Long operationId, int processedRecords) {
+        log.debug("Обновление прогресса для операции #{}: обработано {} записей", operationId, processedRecords);
 
-        if (progressInfo == null) {
-            log.warn("Попытка обновить прогресс для неотслеживаемой операции #{}", operationId);
-            return 0;
-        }
+        // Получаем текущее состояние операции
+        Map<String, Object> state = operationsState.computeIfAbsent(operationId, k -> new ConcurrentHashMap<>());
 
-        // Обновляем количество обработанных записей
-        progressInfo.setProcessedRecords(processedRecords);
+        // Получаем счетчик обновлений
+        AtomicInteger counter = updateCounters.computeIfAbsent(operationId, k -> new AtomicInteger(0));
 
-        // Вычисляем процент выполнения
-        int progressPercent = calculateProgressPercent(progressInfo);
+        // Обновляем счетчик обработанных записей
+        processedRecordsCounters.computeIfAbsent(operationId, k -> new AtomicInteger(0)).set(processedRecords);
 
-        // Если процент изменился, обновляем информацию в БД и отправляем обновление через WebSocket
-        if (shouldUpdateProgress(progressInfo, progressPercent)) {
-            updateProgressStateWithWebSocket(operationId, progressInfo, processedRecords, progressPercent);
-        }
-
-        return progressPercent;
-    }
-
-    @Override
-    public int incrementProgress(Long operationId, int incrementBy) {
-        ProgressInfo progressInfo = getProgressInfo(operationId);
-
-        if (progressInfo == null) {
-            log.warn("Попытка обновить прогресс для неотслеживаемой операции #{}", operationId);
-            return 0;
-        }
-
-        // Увеличиваем счетчик обработанных записей
-        int newProcessedRecords = progressInfo.getProcessedRecords().addAndGet(incrementBy);
-
-        // Вычисляем процент выполнения
-        int progressPercent = calculateProgressPercent(progressInfo);
-
-        // Если процент изменился или прошло достаточно времени с последнего обновления,
-        // обновляем информацию в БД и отправляем обновление через WebSocket
-        if (shouldUpdateProgress(progressInfo, progressPercent) ||
-                isTimeThresholdExceeded(progressInfo)) {
-            updateProgressStateWithWebSocket(operationId, progressInfo, newProcessedRecords, progressPercent);
-        }
-
-        return progressPercent;
-    }
-
-    @Override
-    public void completeProgress(Long operationId, boolean successful, int totalProcessed,
-                                 int successfulRecords, String errorMessage) {
-        ProgressInfo progressInfo = getProgressInfo(operationId);
-
-        if (progressInfo == null) {
-            log.warn("Попытка завершить прогресс для неотслеживаемой операции #{}", operationId);
-            return;
-        }
-
+        // Получаем актуальную информацию об операции
         try {
-            // Обновляем информацию о завершении в БД
-            updateCompletionState(operationId, successful, totalProcessed,
-                    progressInfo.getTotalRecords(), successfulRecords, errorMessage);
+            // Обновляем счетчик только если прошло достаточно записей или это первое обновление
+            boolean shouldUpdate = processedRecords % UPDATE_INTERVAL == 0 ||
+                    counter.get() == 0 ||
+                    processedRecords == 1;
 
-            // Отправляем финальное обновление через WebSocket
-            sendCompletionUpdateViaWebSocket(operationId, successful, totalProcessed,
-                    successfulRecords, errorMessage);
+            // Ограничиваем количество обновлений для предотвращения перегрузки
+            if (shouldUpdate && counter.get() < MAX_UPDATES) {
+                // Получаем актуальную информацию об операции из сервиса
+                try {
+                    var operation = fileImportService.getImportStatus(operationId);
 
-            log.info("Операция #{} {} обработано: {}, успешно: {}",
-                    operationId,
-                    successful ? "успешно завершена," : "завершена с ошибкой,",
-                    totalProcessed,
-                    successfulRecords);
-        } catch (Exception e) {
-            log.error("Ошибка при обновлении статуса операции #{}: {}", operationId, e.getMessage());
-        } finally {
-            // Удаляем информацию о прогрессе из карты
-            removeProgressInfo(operationId);
-        }
-    }
+                    // Вычисляем прогресс
+                    int totalRecords = operation.getTotalRecords() != null ? operation.getTotalRecords() : 0;
+                    int progress = totalRecords > 0 ? (int) ((long) processedRecords * 100 / totalRecords) : 0;
 
-    /**
-     * Определяет, нужно ли обновлять прогресс операции.
-     *
-     * @param progressInfo информация о прогрессе
-     * @param currentProgressPercent текущий процент прогресса
-     * @return true, если нужно обновить прогресс
-     */
-    private boolean shouldUpdateProgress(ProgressInfo progressInfo, int currentProgressPercent) {
-        return currentProgressPercent != progressInfo.getLastReportedPercent();
-    }
+                    // Обновляем состояние
+                    state.put("progress", progress);
+                    state.put("processedRecords", processedRecords);
+                    state.put("totalRecords", totalRecords);
+                    state.put("status", operation.getStatus().toString());
 
-    /**
-     * Определяет, прошло ли достаточно времени с последнего обновления.
-     *
-     * @param progressInfo информация о прогрессе
-     * @return true, если пора обновить данные
-     */
-    private boolean isTimeThresholdExceeded(ProgressInfo progressInfo) {
-        // Обновляем не чаще чем раз в секунду
-        long timeSinceLastUpdate = System.currentTimeMillis() - progressInfo.getLastDbUpdateTime();
-        return timeSinceLastUpdate > 1000;
-    }
+                    // Отправляем обновление
+                    sendUpdate(operationId, state);
 
-    /**
-     * Обновляет состояние прогресса и отправляет WebSocket уведомление.
-     *
-     * @param operationId ID операции
-     * @param progressInfo информация о прогрессе
-     * @param processedRecords количество обработанных записей
-     * @param progressPercent процент выполнения
-     */
-    private void updateProgressStateWithWebSocket(Long operationId, ProgressInfo progressInfo,
-                                                  int processedRecords, int progressPercent) {
-        progressInfo.setLastReportedPercent(progressPercent);
-        progressInfo.setLastDbUpdateTime(System.currentTimeMillis());
+                    // Увеличиваем счетчик обновлений
+                    int updateCount = counter.incrementAndGet();
 
-        updateOperationInDb(operationId, processedRecords, progressInfo.getTotalRecords(), progressPercent);
-        sendProgressUpdateViaWebSocket(operationId, processedRecords, progressInfo.getTotalRecords(), progressPercent);
-    }
+                    log.info("Отправлено обновление #{} для операции #{}: {}% ({} из {} записей)",
+                            updateCount, operationId, progress, processedRecords, totalRecords);
+                } catch (Exception e) {
+                    // В случае ошибки запроса к сервису, используем данные из кэша
+                    log.warn("Не удалось получить информацию об операции #{} из сервиса: {}", operationId, e.getMessage());
 
-    /**
-     * Обновляет состояние завершения операции в БД.
-     *
-     * @param operationId ID операции
-     * @param successful флаг успешности операции
-     * @param totalProcessed общее количество обработанных записей
-     * @param totalRecords общее количество записей
-     * @param successfulRecords количество успешно обработанных записей
-     * @param errorMessage сообщение об ошибке
-     */
-    private void updateCompletionState(Long operationId, boolean successful, int totalProcessed,
-                                       int totalRecords, int successfulRecords, String errorMessage) {
-        try {
-            FileOperation operation = findOperationById(operationId);
+                    // Рассчитываем прогресс на основе кэшированных данных
+                    int totalRecords = state.containsKey("totalRecords") ? (Integer)state.get("totalRecords") : 0;
+                    int progress = totalRecords > 0 ? (int) ((long) processedRecords * 100 / totalRecords) : 0;
 
-            if (successful) {
-                operation.markAsCompleted(successfulRecords);
-            } else {
-                operation.markAsFailed(errorMessage);
+                    // Обновляем состояние
+                    state.put("progress", progress);
+                    state.put("processedRecords", processedRecords);
+
+                    // Отправляем обновление
+                    sendUpdate(operationId, state);
+
+                    // Увеличиваем счетчик обновлений
+                    counter.incrementAndGet();
+                }
             }
-
-            // Устанавливаем окончательное значение прогресса
-            operation.setProcessedRecords(totalProcessed);
-            operation.setProcessingProgress(100);
-            operation.setTotalRecords(totalRecords);
-
-            saveOperation(operation);
         } catch (Exception e) {
-            log.error("Ошибка при обновлении статуса операции #{}: {}", operationId, e.getMessage());
-            throw e;
+            log.error("Ошибка при обновлении прогресса операции #{}: {}", operationId, e.getMessage(), e);
         }
     }
 
-    /**
-     * Находит операцию по ID.
-     *
-     * @param operationId ID операции
-     * @return найденная операция
-     * @throws IllegalArgumentException если операция не найдена
-     */
-    private FileOperation findOperationById(Long operationId) {
-        return fileOperationRepository.findById(operationId)
-                .orElseThrow(() -> new IllegalArgumentException("Операция с ID " + operationId + " не найдена"));
+    @Override
+    @Async
+    public void incrementProgress(Long operationId, int increment) {
+        // Получаем текущий счетчик обработанных записей
+        AtomicInteger counter = processedRecordsCounters.computeIfAbsent(operationId, k -> new AtomicInteger(0));
+
+        // Увеличиваем счетчик
+        int newValue = counter.addAndGet(increment);
+
+        log.debug("Увеличен счетчик прогресса для операции #{} на {}, новое значение: {}",
+                operationId, increment, newValue);
+
+        // Обновляем прогресс
+        updateProgress(operationId, newValue);
     }
 
-    /**
-     * Сохраняет операцию в репозитории.
-     *
-     * @param operation операция для сохранения
-     */
-    private void saveOperation(FileOperation operation) {
-        fileOperationRepository.save(operation);
-    }
+    @Override
+    public void completeProgress(Long operationId, boolean success, int processedRecords, int totalRecords, String errorMessage) {
+        log.info("Завершение прогресса для операции #{}: успешно: {}, обработано: {}, всего: {}",
+                operationId, success, processedRecords, totalRecords);
 
-    /**
-     * Удаляет информацию о прогрессе из карты.
-     *
-     * @param operationId ID операции
-     */
-    private void removeProgressInfo(Long operationId) {
-        // Метод должен быть защищен от исключений, чтобы всегда очистить состояние
-        try {
-            super.progressMap.remove(operationId);
-        } catch (Exception e) {
-            log.error("Ошибка при удалении информации о прогрессе операции #{}: {}", operationId, e.getMessage());
+        // Получаем текущее состояние операции
+        Map<String, Object> state = operationsState.computeIfAbsent(operationId, k -> new ConcurrentHashMap<>());
+
+        // Обновляем состояние
+        state.put("completed", true);
+        state.put("successful", success);
+        state.put("processedRecords", processedRecords);
+        state.put("totalRecords", totalRecords);
+        state.put("progress", success ? 100 : 0);
+
+        // Добавляем сообщение об ошибке, если есть
+        if (!success && errorMessage != null) {
+            state.put("errorMessage", errorMessage);
         }
-    }
 
-    /**
-     * Отправляет обновление прогресса через WebSocket
-     *
-     * @param operationId ID операции
-     * @param processedRecords количество обработанных записей
-     * @param totalRecords общее количество записей
-     * @param progressPercent процент выполнения
-     */
-    private void sendProgressUpdateViaWebSocket(Long operationId, int processedRecords,
-                                                int totalRecords, int progressPercent) {
-        String destination = "/topic/import-progress/" + operationId;
+        // Отправляем финальное обновление
+        sendUpdate(operationId, state);
 
-        Map<String, Object> progressUpdate = new HashMap<>();
-        progressUpdate.put("operationId", operationId);
-        progressUpdate.put("processedRecords", processedRecords);
-        progressUpdate.put("totalRecords", totalRecords);
-        progressUpdate.put("progress", progressPercent);
-        progressUpdate.put("completed", false);
-
-        try {
-            messagingTemplate.convertAndSend(destination, progressUpdate);
-            log.debug("Отправлено WebSocket-обновление прогресса: операция #{}, прогресс: {}%",
-                    operationId, progressPercent);
-        } catch (Exception e) {
-            log.error("Ошибка при отправке WebSocket-обновления прогресса для операции #{}: {}",
-                    operationId, e.getMessage());
+        // Записываем в лог
+        if (success) {
+            log.info("Операция #{} успешно завершена, обработано: {}, успешно: {}",
+                    operationId, processedRecords, totalRecords);
+        } else {
+            log.error("Операция #{} завершена с ошибкой: {}", operationId, errorMessage);
         }
+
+        // Отправляем WebSocket-уведомление о завершении
+        log.debug("Отправлено WebSocket-уведомление о завершении: операция #{}, успешно: {}", operationId, success);
+
+        // Очищаем кэш
+        operationsState.remove(operationId);
+        updateCounters.remove(operationId);
+        processedRecordsCounters.remove(operationId);
     }
 
     /**
-     * Отправляет уведомление о завершении через WebSocket
+     * Отправляет обновление через WebSocket
      *
      * @param operationId ID операции
-     * @param successful флаг успешности операции
-     * @param totalProcessed общее количество обработанных записей
-     * @param successfulRecords количество успешно обработанных записей
-     * @param errorMessage сообщение об ошибке
+     * @param state текущее состояние операции
      */
-    private void sendCompletionUpdateViaWebSocket(Long operationId, boolean successful,
-                                                  int totalProcessed, int successfulRecords,
-                                                  String errorMessage) {
-        String destination = "/topic/import-progress/" + operationId;
-
-        Map<String, Object> completionUpdate = new HashMap<>();
-        completionUpdate.put("operationId", operationId);
-        completionUpdate.put("processedRecords", totalProcessed);
-        completionUpdate.put("successfulRecords", successfulRecords);
-        completionUpdate.put("progress", 100);
-        completionUpdate.put("completed", true);
-        completionUpdate.put("successful", successful);
-        completionUpdate.put("errorMessage", errorMessage);
-
+    private void sendUpdate(Long operationId, Map<String, Object> state) {
         try {
-            messagingTemplate.convertAndSend(destination, completionUpdate);
-            log.debug("Отправлено WebSocket-уведомление о завершении: операция #{}, успешно: {}",
-                    operationId, successful);
+            log.debug("Отправка WebSocket-обновления для операции #{}: {}", operationId, state);
+
+            // Создаем копию состояния для отправки
+            Map<String, Object> update = new HashMap<>(state);
+
+            // Добавляем ID операции
+            update.put("operationId", operationId);
+
+            // Добавляем сообщение о прогрессе
+            int processedRecords = (int) update.getOrDefault("processedRecords", 0);
+            int totalRecords = (int) update.getOrDefault("totalRecords", 0);
+            int progress = (int) update.getOrDefault("progress", 0);
+
+            String message = String.format("Обработано %d из %d записей (%d%%)",
+                    processedRecords, totalRecords, progress);
+            update.put("message", message);
+
+            // Отправляем обновление через контроллер
+            progressController.sendProgressUpdate(operationId, update);
         } catch (Exception e) {
-            log.error("Ошибка при отправке WebSocket-уведомления о завершении для операции #{}: {}",
-                    operationId, e.getMessage());
+            log.error("Ошибка при отправке WebSocket-уведомления: {}", e.getMessage(), e);
         }
     }
 }

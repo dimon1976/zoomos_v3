@@ -295,10 +295,10 @@ public class FileImportController {
         }
 
         try {
+            // Проверка и подготовка данных
             Client client = getClientForImport(clientId, redirectAttributes);
             Path filePath = validateTempFile(tempFilePath, redirectAttributes, clientId);
             Long mappingId = parseMappingId(mappingIdStr, params);
-
             Map<String, String> importParams = prepareImportParams(entityType, params);
 
             // Обработка создания нового маппинга, если необходимо
@@ -306,9 +306,25 @@ public class FileImportController {
                 createNewMappingIfRequested(clientId, entityType, params, importParams);
             }
 
-            return processImport(clientId, fileName, client, filePath, mappingId,
-                    strategyId, importParams, redirectAttributes);
+            // ВАЖНО: Запускаем импорт асинхронно, НЕ дожидаясь его завершения
+            FileOperationDto operation = fileImportService.processUploadedFile(
+                    filePath, client, mappingId, strategyId, importParams);
 
+            if (operation != null) {
+                // Добавляем сообщение об успешном начале импорта
+                redirectAttributes.addFlashAttribute("successMessage",
+                        "Импорт файла '" + fileName + "' успешно запущен. Перенаправление на страницу прогресса...");
+
+                log.info("Запущен асинхронный импорт. Перенаправление на страницу прогресса импорта: /import/progress/{}",
+                        operation.getId());
+
+                // Перенаправляем на страницу прогресса импорта
+                return "redirect:/import/progress/" + operation.getId();
+            } else {
+                redirectAttributes.addFlashAttribute("errorMessage",
+                        "Не удалось запустить импорт файла");
+                return "redirect:/import/" + clientId;
+            }
         } catch (FileOperationException e) {
             // Эта ошибка уже обработана и добавлена в redirectAttributes
             return "redirect:/import/" + clientId;
@@ -438,27 +454,6 @@ public class FileImportController {
                 log.info("Создан новый маппинг полей: {}, ID: {}", mappingName, mappingId);
                 importParams.put("createdMappingId", mappingId.toString());
             }
-        }
-    }
-
-    private String processImport(Long clientId, String fileName, Client client, Path filePath,
-                                 Long mappingId, Long strategyId, Map<String, String> importParams,
-                                 RedirectAttributes redirectAttributes) {
-        // Импортируем файл напрямую, используя его путь
-        FileOperationDto operation = fileImportService.processUploadedFile(
-                filePath, client, mappingId, strategyId, importParams);
-
-        if (operation != null) {
-            // Добавляем сообщение об успешном начале импорта
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Импорт файла '" + fileName + "' успешно запущен");
-
-            // Перенаправляем на страницу прогресса импорта вместо страницы клиента
-            return "redirect:/import/progress/" + operation.getId();
-        } else {
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Не удалось запустить импорт файла");
-            return "redirect:/import/" + clientId;
         }
     }
 

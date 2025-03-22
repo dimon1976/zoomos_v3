@@ -62,6 +62,9 @@
         .log-error {
             color: #dc3545;
         }
+        .log-warning {
+            color: #ffc107;
+        }
         #completionActions {
             display: none;
         }
@@ -75,6 +78,7 @@
 </div>
 
 <section>
+    <!-- Скрытые поля для JavaScript -->
     <input type="hidden" id="operationId" th:value="${operation.id}">
     <input type="hidden" id="clientId" th:value="${client.id}">
 
@@ -138,15 +142,15 @@
                     </dd>
 
                     <dt class="col-sm-5">Ожидается записей:</dt>
-                    <dd class="col-sm-7" th:text="${operation.totalRecords ?: 'Неизвестно'}">
-                        1000
+                    <dd class="col-sm-7" th:text="${operation.totalRecords ?: 'Определяется...'}" id="totalRecords">
+                        Определяется...
                     </dd>
                 </dl>
             </div>
         </div>
     </div>
 
-    <!-- Сообщение об ошибке подключения -->
+    <!-- Сообщение о статусе подключения -->
     <div id="connectionStatus" class="alert alert-warning">
         <i class="fas fa-spinner fa-spin me-2"></i>
         Подключение к серверу для отслеживания прогресса...
@@ -178,7 +182,7 @@
     </div>
 
     <!-- Кнопки действий после завершения -->
-    <div id="completionActions" class="mt-4 d-none">
+    <div id="completionActions" class="mt-4">
         <div class="alert alert-success">
             <i class="fas fa-check-circle me-2"></i>
             Импорт успешно завершен
@@ -197,6 +201,7 @@
     </div>
 </section>
 
+<!-- JavaScript для WebSocket -->
 <script th:src="@{/js/lib/sockjs.min.js}"></script>
 <script th:src="@{/js/lib/stomp.min.js}"></script>
 <script th:src="@{/js/import-progress.js}"></script>

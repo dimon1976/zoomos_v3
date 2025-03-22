@@ -15,9 +15,6 @@ import my.java.service.file.processor.FileProcessorFactory;
 import my.java.service.file.strategy.FileProcessingStrategy;
 import my.java.service.file.tracker.ImportProgressTracker;
 import my.java.util.PathResolver;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,7 +41,6 @@ public class FileImportJob implements Callable<FileOperationDto> {
     private final FileOperationRepository fileOperationRepository;
     private final FileProcessorFactory processorFactory;
     private final List<FileProcessingStrategy> processingStrategies;
-    private final PlatformTransactionManager transactionManager;
     private final ImportProgressTracker progressTracker;
     private final PathResolver pathResolver;
     private final EntitySaverFactory entitySaverFactory;
@@ -62,7 +58,6 @@ public class FileImportJob implements Callable<FileOperationDto> {
             FileOperationRepository fileOperationRepository,
             FileProcessorFactory processorFactory,
             List<FileProcessingStrategy> processingStrategies,
-            PlatformTransactionManager transactionManager,
             ImportProgressTracker progressTracker,
             PathResolver pathResolver,
             EntitySaverFactory entitySaverFactory) {
@@ -76,7 +71,6 @@ public class FileImportJob implements Callable<FileOperationDto> {
         this.fileOperationRepository = fileOperationRepository;
         this.processorFactory = processorFactory;
         this.processingStrategies = processingStrategies;
-        this.transactionManager = transactionManager;
         this.progressTracker = progressTracker;
         this.pathResolver = pathResolver;
         this.entitySaverFactory = entitySaverFactory;
@@ -109,10 +103,6 @@ public class FileImportJob implements Callable<FileOperationDto> {
         log.info("НАЧАЛО ВЫПОЛНЕНИЯ ЗАДАЧИ ИМПОРТА ДЛЯ ОПЕРАЦИИ #{} - поток {}",
                 operation.getId(), Thread.currentThread().getName());
 
-        // Обновляем статус операции
-        operation.markAsProcessing();
-        fileOperationRepository.save(operation);
-
         try {
             // Проверяем существование файла
             if (!Files.exists(filePath)) {
@@ -133,7 +123,17 @@ public class FileImportJob implements Callable<FileOperationDto> {
 
             // Оцениваем количество записей
             int estimatedRecords = processor.estimateRecordCount(filePath);
-            progressTracker.initProgress(operation.getId(), Math.max(1, estimatedRecords));
+
+            // Обновляем количество записей в операции и трекере прогресса
+            operation.setTotalRecords(estimatedRecords);
+            fileOperationRepository.save(operation);
+
+            // Инициализируем/обновляем прогресс с оцененным количеством записей
+            progressTracker.updateProgress(operation.getId(), 0);
+            log.info("Оценено количество записей: {} для операции #{}", estimatedRecords, operation.getId());
+
+            // Добавляем небольшую задержку для обновления UI
+            Thread.sleep(200);
 
             // Обрабатываем файл
             List<ImportableEntity> entities = processor.processFile(
@@ -241,27 +241,39 @@ public class FileImportJob implements Callable<FileOperationDto> {
 
     /**
      * Сохраняет сущности в БД.
+     * Упрощенная версия без использования TransactionManager.
      *
      * @param entities список сущностей для сохранения
      * @return количество сохраненных сущностей
      */
     private int saveEntities(List<ImportableEntity> entities) {
         if (entities == null || entities.isEmpty()) {
+            log.warn("Получен пустой список сущностей для сохранения");
             return 0;
         }
+
+        log.info("Начинаем сохранение {} сущностей типа {}", entities.size(), entityType);
 
         // Получаем функцию для сохранения сущностей указанного типа из фабрики
         Function<List<ImportableEntity>, Integer> saveFunction = entitySaverFactory.getSaver(entityType.toLowerCase());
 
+        if (saveFunction == null) {
+            log.error("Не найдена функция сохранения для типа: {}", entityType.toLowerCase());
+            return 0;
+        }
+
+        // Логируем информацию о функции сохранения
+        log.debug("Получена функция сохранения: {}", saveFunction.getClass().getName());
+
         // Определяем размер пакета для сохранения
         int batchSize = getBatchSizeFromParams();
 
-        // Создаем шаблон транзакции
-        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
-        txTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-
         int totalSaved = 0;
         List<ImportableEntity> batch = new ArrayList<>(batchSize);
+
+        // Инициализируем прогресс-трекер с более точным количеством сущностей
+        log.info("Запуск сохранения {} сущностей, размер пакета: {}", entities.size(), batchSize);
+        progressTracker.updateProgress(operation.getId(), 0);
 
         for (int i = 0; i < entities.size(); i++) {
             // Проверяем отмену операции
@@ -276,25 +288,61 @@ public class FileImportJob implements Callable<FileOperationDto> {
             // Если пакет заполнен или это последняя сущность, сохраняем пакет
             if (batch.size() >= batchSize || i == entities.size() - 1) {
                 try {
-                    // Сохраняем пакет в отдельной транзакции
-                    Integer savedInBatch = txTemplate.execute(status -> {
-                        try {
-                            return saveFunction.apply(batch);
-                        } catch (Exception e) {
-                            log.error("Ошибка при сохранении пакета сущностей: {}", e.getMessage(), e);
-                            status.setRollbackOnly();
-                            return 0;
-                        }
-                    });
+                    // Более детальное логирование перед сохранением
+                    log.debug("Пытаемся сохранить пакет размером {}", batch.size());
+
+                    // Проверяем первую сущность в пакете для отладки
+                    if (!batch.isEmpty()) {
+                        ImportableEntity firstEntity = batch.get(0);
+                        log.debug("Пример сущности для сохранения: тип={}, client={}",
+                                firstEntity.getClass().getSimpleName(),
+                                client.getId());
+                    }
+
+                    // Сохраняем пакет
+                    Integer savedInBatch = saveFunction.apply(new ArrayList<>(batch));
+
+                    // Проверяем результат сохранения
+                    log.debug("Результат сохранения пакета: {}", savedInBatch);
 
                     if (savedInBatch != null) {
                         totalSaved += savedInBatch;
+                        log.debug("Всего сохранено на данный момент: {}", totalSaved);
+                    } else {
+                        log.warn("Сохранение пакета вернуло null, возможна проблема с сохранением");
                     }
 
                     // Обновляем прогресс
-                    progressTracker.incrementProgress(operation.getId(), batch.size());
+                    int processedCount = i + 1;
+                    progressTracker.updateProgress(operation.getId(), processedCount);
+
+                    // Логируем прогресс каждые 1000 сущностей или при завершении
+                    if (processedCount % 1000 == 0 || i == entities.size() - 1) {
+                        int percent = entities.size() > 0 ? (processedCount * 100 / entities.size()) : 0;
+                        log.info("Прогресс импорта операции #{}: обработано {} из {} сущностей ({}%), сохранено: {}",
+                                operation.getId(), processedCount, entities.size(), percent, totalSaved);
+                    }
                 } catch (Exception e) {
                     log.error("Ошибка при сохранении пакета сущностей: {}", e.getMessage(), e);
+                    // Пробуем сохранить записи поодиночке при ошибке пакетного сохранения
+                    if (batch.size() > 1) {
+                        log.info("Попытка сохранения записей поодиночке");
+                        for (ImportableEntity entity : batch) {
+                            try {
+                                List<ImportableEntity> singleEntity = Collections.singletonList(entity);
+                                log.debug("Сохраняем одиночную сущность: {}", entity.getClass().getSimpleName());
+                                Integer saved = saveFunction.apply(singleEntity);
+                                log.debug("Результат сохранения одиночной сущности: {}", saved);
+                                if (saved != null && saved > 0) {
+                                    totalSaved += saved;
+                                }
+                            } catch (Exception singleError) {
+                                log.error("Ошибка при сохранении отдельной записи: {} - {}",
+                                        entity.getClass().getSimpleName(),
+                                        singleError.getMessage());
+                            }
+                        }
+                    }
                 }
 
                 // Очищаем пакет
@@ -302,9 +350,9 @@ public class FileImportJob implements Callable<FileOperationDto> {
             }
         }
 
+        log.info("Завершено сохранение сущностей. Всего сохранено: {}", totalSaved);
         return totalSaved;
     }
-
 
     /**
      * Получает размер пакета из параметров.
@@ -348,6 +396,9 @@ public class FileImportJob implements Callable<FileOperationDto> {
                 .errorMessage(operation.getErrorMessage())
                 .startedAt(operation.getStartedAt())
                 .completedAt(operation.getCompletedAt())
+                .processingProgress(operation.getProcessingProgress())
+                .processedRecords(operation.getProcessedRecords())
+                .totalRecords(operation.getTotalRecords())
                 .build();
     }
 

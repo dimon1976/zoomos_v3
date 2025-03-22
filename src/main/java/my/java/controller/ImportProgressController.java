@@ -1,19 +1,20 @@
-// src/main/java/my/java/controller/ImportProgressController.java
 package my.java.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
+import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
 import my.java.service.file.importer.FileImportService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -55,30 +56,30 @@ public class ImportProgressController {
 
     /**
      * WebSocket эндпоинт для получения обновлений о прогрессе
+     * Клиенты подписываются на /topic/import-progress/{operationId}
      */
     @MessageMapping("/import-progress")
-    @SendTo("/topic/import-progress")
-    public Map<String, Object> getProgressUpdate(String message) {
+    public void getProgressUpdate(@Payload String message) {
         try {
             // Извлекаем ID операции из сообщения
             Long operationId = Long.parseLong(message);
+            log.debug("Received WebSocket request for import progress update: operation #{}", operationId);
 
             // Получаем информацию о прогрессе
             FileOperationDto operation = fileImportService.getImportStatus(operationId);
 
             // Формируем ответ
-            Map<String, Object> response = new HashMap<>();
-            response.put("operationId", operationId);
-            response.put("status", operation.getStatus().toString());
-            response.put("progress", operation.getProcessingProgress() != null ? operation.getProcessingProgress() : 0);
-            response.put("processedRecords", operation.getProcessedRecords() != null ? operation.getProcessedRecords() : 0);
-            response.put("totalRecords", operation.getTotalRecords() != null ? operation.getTotalRecords() : 0);
-            response.put("completed", operation.getStatus() == my.java.model.FileOperation.OperationStatus.COMPLETED ||
-                    operation.getStatus() == my.java.model.FileOperation.OperationStatus.FAILED);
-            response.put("successful", operation.getStatus() == my.java.model.FileOperation.OperationStatus.COMPLETED);
-            response.put("errorMessage", operation.getErrorMessage());
+            Map<String, Object> response = createProgressResponse(operation);
 
-            return response;
+            // Отправляем обновление прогресса конкретному клиенту
+            sendProgressUpdate(operationId, response);
+
+            log.debug("Sent progress update for operation #{}: progress={}%, processed={}, total={}, status={}",
+                    operationId,
+                    operation.getProcessingProgress(),
+                    operation.getProcessedRecords(),
+                    operation.getTotalRecords(),
+                    operation.getStatus());
         } catch (Exception e) {
             log.error("Error getting import progress update: {}", e.getMessage(), e);
 
@@ -86,8 +87,80 @@ public class ImportProgressController {
             errorResponse.put("error", true);
             errorResponse.put("message", e.getMessage());
 
-            return errorResponse;
+            // Отправляем ответ об ошибке
+            messagingTemplate.convertAndSend("/topic/import-progress", errorResponse);
         }
+    }
+
+    /**
+     * Создает объект ответа с информацией о прогрессе
+     *
+     * @param operation информация об операции
+     * @return объект ответа
+     */
+    private Map<String, Object> createProgressResponse(FileOperationDto operation) {
+        Map<String, Object> response = new HashMap<>();
+
+        // Базовая информация
+        response.put("operationId", operation.getId());
+        response.put("status", operation.getStatus().toString());
+
+        // Информация о прогрессе
+        response.put("progress", operation.getProcessingProgress() != null ? operation.getProcessingProgress() : 0);
+        response.put("processedRecords", operation.getProcessedRecords() != null ? operation.getProcessedRecords() : 0);
+        response.put("totalRecords", operation.getTotalRecords() != null ? operation.getTotalRecords() : 0);
+
+        // Флаги состояния
+        boolean isCompleted = operation.getStatus() == FileOperation.OperationStatus.COMPLETED ||
+                operation.getStatus() == FileOperation.OperationStatus.FAILED;
+
+        response.put("completed", isCompleted);
+        response.put("successful", operation.getStatus() == FileOperation.OperationStatus.COMPLETED);
+
+        // Дополнительная информация
+        response.put("errorMessage", operation.getErrorMessage());
+        response.put("startedAt", operation.getStartedAt());
+        response.put("completedAt", operation.getCompletedAt());
+        response.put("duration", operation.getDuration());
+
+        // Расчет оставшегося времени (если операция в процессе)
+        if (operation.getStatus() == FileOperation.OperationStatus.PROCESSING &&
+                operation.getProcessingProgress() != null &&
+                operation.getProcessingProgress() > 0 &&
+                operation.getStartedAt() != null &&
+                operation.getProcessedRecords() != null &&
+                operation.getProcessedRecords() > 0 &&
+                operation.getTotalRecords() != null &&
+                operation.getTotalRecords() > 0) {
+
+            try {
+                ZonedDateTime now = ZonedDateTime.now();
+                long elapsedSeconds = now.toEpochSecond() - operation.getStartedAt().toEpochSecond();
+
+                if (elapsedSeconds > 0) {
+                    double recordsPerSecond = operation.getProcessedRecords() / (double) elapsedSeconds;
+                    long remainingRecords = operation.getTotalRecords() - operation.getProcessedRecords();
+                    long estimatedSecondsRemaining = (long) (remainingRecords / recordsPerSecond);
+
+                    response.put("estimatedTimeRemaining", estimatedSecondsRemaining);
+
+                    // Добавляем сообщение о прогрессе
+                    String progressMsg = String.format(
+                            "Обработано %d из %d записей (%d%%). Скорость: %.1f записей/сек",
+                            operation.getProcessedRecords(),
+                            operation.getTotalRecords(),
+                            operation.getProcessingProgress(),
+                            recordsPerSecond
+                    );
+
+                    response.put("message", progressMsg);
+                }
+            } catch (Exception e) {
+                log.warn("Ошибка при расчете оставшегося времени: {}", e.getMessage());
+            }
+        }
+
+        return response;
     }
 
     /**
@@ -97,6 +170,16 @@ public class ImportProgressController {
      * @param update информация об обновлении
      */
     public void sendProgressUpdate(Long operationId, Map<String, Object> update) {
-        messagingTemplate.convertAndSend("/topic/import-progress/" + operationId, update);
+        try {
+            log.debug("Отправка WebSocket обновления для операции #{}", operationId);
+
+            // Отправляем обновление для конкретной операции
+            messagingTemplate.convertAndSend("/topic/import-progress/" + operationId, update);
+
+            // Также отправляем в общий канал
+            messagingTemplate.convertAndSend("/topic/import-progress", update);
+        } catch (Exception e) {
+            log.error("Ошибка при отправке WebSocket-обновления: {}", e.getMessage(), e);
+        }
     }
 }

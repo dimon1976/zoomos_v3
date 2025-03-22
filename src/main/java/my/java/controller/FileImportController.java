@@ -19,7 +19,9 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -295,10 +297,10 @@ public class FileImportController {
         }
 
         try {
+            // Проверка и подготовка данных
             Client client = getClientForImport(clientId, redirectAttributes);
             Path filePath = validateTempFile(tempFilePath, redirectAttributes, clientId);
             Long mappingId = parseMappingId(mappingIdStr, params);
-
             Map<String, String> importParams = prepareImportParams(entityType, params);
 
             // Обработка создания нового маппинга, если необходимо
@@ -306,9 +308,25 @@ public class FileImportController {
                 createNewMappingIfRequested(clientId, entityType, params, importParams);
             }
 
-            return processImport(clientId, fileName, client, filePath, mappingId,
-                    strategyId, importParams, redirectAttributes);
+            // ВАЖНО: Запускаем импорт асинхронно, НЕ дожидаясь его завершения
+            FileOperationDto operation = fileImportService.processUploadedFile(
+                    filePath, client, mappingId, strategyId, importParams);
 
+            if (operation != null) {
+                // Добавляем сообщение об успешном начале импорта
+                redirectAttributes.addFlashAttribute("successMessage",
+                        "Импорт файла '" + fileName + "' успешно запущен. Перенаправление на страницу прогресса...");
+
+                log.info("Запущен асинхронный импорт. Перенаправление на страницу прогресса импорта: /import/progress/{}",
+                        operation.getId());
+
+                // Перенаправляем на страницу прогресса импорта
+                return "redirect:/import/progress/" + operation.getId();
+            } else {
+                redirectAttributes.addFlashAttribute("errorMessage",
+                        "Не удалось запустить импорт файла");
+                return "redirect:/import/" + clientId;
+            }
         } catch (FileOperationException e) {
             // Эта ошибка уже обработана и добавлена в redirectAttributes
             return "redirect:/import/" + clientId;
@@ -441,27 +459,6 @@ public class FileImportController {
         }
     }
 
-    private String processImport(Long clientId, String fileName, Client client, Path filePath,
-                                 Long mappingId, Long strategyId, Map<String, String> importParams,
-                                 RedirectAttributes redirectAttributes) {
-        // Импортируем файл напрямую, используя его путь
-        FileOperationDto operation = fileImportService.processUploadedFile(
-                filePath, client, mappingId, strategyId, importParams);
-
-        if (operation != null) {
-            // Добавляем сообщение об успешном начале импорта
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "Импорт файла '" + fileName + "' успешно запущен");
-
-            // Перенаправляем на страницу прогресса импорта вместо страницы клиента
-            return "redirect:/import/progress/" + operation.getId();
-        } else {
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Не удалось запустить импорт файла");
-            return "redirect:/import/" + clientId;
-        }
-    }
-
     @GetMapping("/status/{operationId}")
     public String showImportStatus(@PathVariable Long operationId, Model model) {
         log.debug("Запрос на отображение статуса импорта для операции: {}", operationId);
@@ -486,11 +483,33 @@ public class FileImportController {
 
     @GetMapping("/api/status/{operationId}")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> getImportStatus(@PathVariable Long operationId) {
-        log.debug("API запрос на получение статуса импорта для операции: {}", operationId);
+    public ResponseEntity<?> getImportStatus(
+            @PathVariable Long operationId,
+            @RequestParam(value = "noRedirect", required = false, defaultValue = "true") boolean noRedirect) {
+
+        log.debug("API запрос на получение статуса импорта для операции: {}, noRedirect={}", operationId, noRedirect);
 
         try {
             FileOperationDto operation = fileImportService.getImportStatus(operationId);
+
+            // Проверяем, завершена ли операция и нужно ли делать редирект
+            if (operation.getStatus() == FileOperation.OperationStatus.COMPLETED && !noRedirect) {
+                log.debug("Операция завершена успешно, выполняем редирект на страницу клиента");
+
+                // Формируем URI для редиректа на страницу клиента
+                URI clientUri = ServletUriComponentsBuilder
+                        .fromCurrentContextPath()
+                        .path("/clients/{id}")
+                        .buildAndExpand(operation.getClientId())
+                        .toUri();
+
+                // Возвращаем статус 302 Found с указанием адреса для редиректа
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(clientUri)
+                        .build();
+            }
+
+            // Если операция не завершена или указан флаг noRedirect, возвращаем обычный ответ
             return ResponseEntity.ok(createImportStatusResponse(operation));
         } catch (Exception e) {
             log.error("Ошибка при получении статуса импорта через API: {}", e.getMessage(), e);

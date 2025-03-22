@@ -1,581 +1,558 @@
 /**
- * Модуль для отслеживания прогресса импорта файлов через WebSocket
+ * Скрипт для отслеживания прогресса импорта через WebSocket
+ * С защитой от автоматического редиректа при завершении импорта
  */
-class ImportProgressTracker {
-    /**
-     * Конструктор для отслеживания прогресса импорта
-     * @param {number} operationId - ID операции импорта
-     * @param {object} options - Опции для настройки трекера
-     */
-    constructor(operationId, options = {}) {
-        this.operationId = operationId;
 
-        // Настройки по умолчанию
-        this.options = Object.assign({
-            url: '/ws',
-            progressBarSelector: '#progressBar',
-            progressTextSelector: '#progressText',
-            statusSelector: '#importStatus',
-            logContainerSelector: '#logContainer',
-            elapsedTimeSelector: '#elapsedTime',
-            startTime: new Date(),
-            onConnect: null,
-            onProgress: null,
-            onComplete: null,
-            onError: null,
-            enableAutoRedirect: true,
-            redirectDelay: 3000,
-            redirectUrl: null
-        }, options);
+// Инициализация защиты от редиректа
+window.importCompleted = false;
 
-        this.connected = false;
-        this.stompClient = null;
-        this.subscription = null;
-        this.timer = null;
-        this.lastLogTime = null;
-    }
+// Функция для добавления параметра noRedirect к URL
+function addNoRedirectParam(url) {
+    if (typeof url !== 'string') return url;
 
-    /**
-     * Обработка события закрытия страницы - отключение от WebSocket
-     */
-    setupPageUnloadHandler() {
-        // Обработка закрытия страницы
-        window.addEventListener('beforeunload', () => {
-            console.log('Страница закрывается, отключаемся от WebSocket');
-            this.disconnect();
-        });
-
-        // Обработка потери видимости страницы
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                console.log('Страница скрыта, отключаемся от WebSocket');
-                this.disconnect();
-            }
-        });
-
-        // Обработка ошибок в WebSocket соединении
-        this.stompClient.debug = (message) => {
-            if (message.includes('Lost connection') || message.includes('error')) {
-                console.warn('Ошибка WebSocket соединения:', message);
-                this.disconnect();
-            }
-        };
-    }
-
-    /**
-     * Подключение к WebSocket для отслеживания прогресса
-     */
-    connect() {
-        console.log("Попытка подключения к WebSocket", this.options.url);
-        const socket = new SockJS(this.options.url);
-        this.stompClient = Stomp.over(socket);
-
-        // Отключаем логи STOMP
-        this.stompClient.debug = () => {
-        };
-
-        this.stompClient.connect({},
-            this._onConnect.bind(this),
-            this._onError.bind(this)
-        );
-    }
-
-    /**
-     * Обработчик успешного подключения
-     * @param {string} frame - Информация о фрейме подключения
-     * @private
-     */
-    /**
-     * Обработчик успешного подключения
-     * @param {string} frame - Информация о фрейме подключения
-     * @private
-     */
-    _onConnect(frame) {
-        console.log("WebSocket соединение установлено", frame);
-        this.connected = true;
-
-        // Подписываемся на обновления прогресса
-        this.subscription = this.stompClient.subscribe(
-            '/topic/import-progress/' + this.operationId,
-            this._handleProgressUpdate.bind(this)
-        );
-
-        // Запускаем таймер обновления времени
-        this._startTimer();
-
-        // Настраиваем обработчик закрытия страницы
-        this.setupPageUnloadHandler();
-
-        // Вызываем пользовательский обработчик подключения
-        if (typeof this.options.onConnect === 'function') {
-            this.options.onConnect();
-        }
-    }
-
-    /**
-     * Обработчик ошибки подключения
-     * @param {object} error - Объект ошибки
-     * @private
-     */
-    _onError(error) {
-        console.error('Ошибка подключения к WebSocket:', error);
-        if (typeof this.options.onError === 'function') {
-            this.options.onError(error);
-        }
-    }
-
-    /**
-     * Отключение от WebSocket
-     */
-    disconnect() {
-        try {
-            if (this.subscription) {
-                this.subscription.unsubscribe();
-                this.subscription = null;
-            }
-
-            if (this.stompClient && this.connected) {
-                this.stompClient.disconnect(() => {
-                    console.log('Успешно отключено от WebSocket');
-                }, {});
-                this.connected = false;
-            }
-
-            // Останавливаем таймер
-            this._stopTimer();
-
-            console.log('Отключено от WebSocket');
-        } catch (e) {
-            console.error('Ошибка при отключении от WebSocket:', e);
-        }
-    }
-
-    /**
-     * Запускает таймер обновления прошедшего времени
-     * @private
-     */
-    _startTimer() {
-        const elapsedTimeElement = document.querySelector(this.options.elapsedTimeSelector);
-        if (!elapsedTimeElement) return;
-
-        this.timer = setInterval(() => {
-            const now = new Date();
-            const elapsed = now - this.options.startTime;
-            elapsedTimeElement.textContent = this._formatElapsedTime(elapsed);
-        }, 1000);
-    }
-
-    /**
-     * Форматирует время в удобочитаемый формат
-     * @param {number} elapsed - Прошедшее время в миллисекундах
-     * @returns {string} Отформатированное время
-     * @private
-     */
-    _formatElapsedTime(elapsed) {
-        const hours = Math.floor(elapsed / 3600000);
-        const minutes = Math.floor((elapsed % 3600000) / 60000);
-        const seconds = Math.floor((elapsed % 60000) / 1000);
-
-        let timeString = '';
-        if (hours > 0) {
-            timeString += hours + ' ч ';
-        }
-        timeString += minutes + ' мин ' + seconds + ' сек';
-
-        return timeString;
-    }
-
-    /**
-     * Останавливает таймер обновления времени
-     * @private
-     */
-    _stopTimer() {
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-    }
-
-    /**
-     * Обработка обновления прогресса
-     * @param {object} message - Сообщение с обновлением прогресса
-     * @private
-     */
-    _handleProgressUpdate(message) {
-        const update = JSON.parse(message.body);
-        console.log('Обновление прогресса:', update);
-
-        this._updateProgressBar(update);
-        this._updateProgressText(update);
-        this._updateStatus(update);
-        this._addLogEntry(update);
-
-        // Вызываем пользовательский обработчик прогресса
-        if (typeof this.options.onProgress === 'function') {
-            this.options.onProgress(update);
-        }
-
-        // Обработка завершения импорта
-        if (update.completed) {
-            this._handleCompletedImport(update);
-        }
-    }
-
-    /**
-     * Обновляет прогресс-бар
-     * @param {object} update - Данные обновления
-     * @private
-     */
-    _updateProgressBar(update) {
-        const progressBar = document.querySelector(this.options.progressBarSelector);
-        if (progressBar && update.progress !== undefined) {
-            progressBar.style.width = update.progress + '%';
-            progressBar.setAttribute('aria-valuenow', update.progress);
-            progressBar.textContent = update.progress + '%';
-        }
-    }
-
-    /**
-     * Обновляет текстовое описание прогресса
-     * @param {object} update - Данные обновления
-     * @private
-     */
-    _updateProgressText(update) {
-        const progressText = document.querySelector(this.options.progressTextSelector);
-        if (progressText && update.processedRecords !== undefined) {
-            progressText.textContent = `Обработано ${update.processedRecords} из ${update.totalRecords} записей (${update.progress}%)`;
-        }
-    }
-
-    /**
-     * Обновляет индикатор статуса
-     * @param {object} update - Данные обновления
-     * @private
-     */
-    _updateStatus(update) {
-        const statusElement = document.querySelector(this.options.statusSelector);
-        if (statusElement) {
-            if (update.completed) {
-                if (update.successful) {
-                    statusElement.textContent = 'Завершено';
-                    statusElement.className = 'badge bg-success';
-                } else {
-                    statusElement.textContent = 'Ошибка';
-                    statusElement.className = 'badge bg-danger';
-                    this._showErrorMessage(update.errorMessage);
-                }
-            } else {
-                statusElement.textContent = 'Импорт в процессе';
-                statusElement.className = 'badge bg-primary';
-            }
-        }
-    }
-
-    /**
-     * Отображает сообщение об ошибке
-     * @param {string} errorMessage - Текст сообщения
-     * @private
-     */
-    _showErrorMessage(errorMessage) {
-        if (!errorMessage) return;
-
-        const errorElement = document.getElementById('errorMessage');
-        if (errorElement) {
-            errorElement.textContent = errorMessage;
-            errorElement.classList.remove('d-none');
-        }
-    }
-
-    /**
-     * Добавляет запись в журнал операции
-     * @param {object} update - Данные обновления
-     * @private
-     */
-    _addLogEntry(update) {
-        const logContainer = document.querySelector(this.options.logContainerSelector);
-        if (!logContainer) return;
-
-        const now = new Date();
-
-        // Контроль частоты записей (не чаще 1 раза в секунду)
-        if (this.lastLogTime && now - this.lastLogTime < 1000) {
-            return;
-        }
-
-        this.lastLogTime = now;
-        const timeStr = now.toTimeString().split(' ')[0];
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-
-        // Определяем класс и сообщение
-        const {logClass, logMessage} = this._getLogClassAndMessage(update);
-
-        logEntry.innerHTML = `
-            <span class="log-time">${timeStr}</span>
-            <span class="${logClass}">${logMessage}</span>
-        `;
-
-        // Добавляем запись и прокручиваем вниз
-        logContainer.appendChild(logEntry);
-        logContainer.scrollTop = logContainer.scrollHeight;
-    }
-
-    /**
-     * Определяет класс и сообщение для записи в журнал
-     * @param {object} update - Данные обновления
-     * @returns {object} Объект с классом CSS и текстом сообщения
-     * @private
-     */
-    _getLogClassAndMessage(update) {
-        let logClass = 'log-info';
-        let logMessage = '';
-
-        if (update.completed) {
-            if (update.successful) {
-                logClass = 'log-success';
-                logMessage = `Импорт успешно завершен. Обработано записей: ${update.processedRecords}`;
-            } else {
-                logClass = 'log-error';
-                logMessage = `Импорт завершился с ошибкой: ${update.errorMessage || 'Неизвестная ошибка'}`;
-            }
-        } else {
-            logMessage = `Обработано ${update.processedRecords} из ${update.totalRecords} записей (${update.progress}%)`;
-        }
-
-        return {logClass, logMessage};
-    }
-
-    /**
-     * Обработка завершения импорта
-     * @param {object} update - Данные обновления
-     * @private
-     */
-    _handleCompletedImport(update) {
-        // Показываем кнопки действий
-        this._showCompletionActions();
-
-        // Останавливаем таймер
-        this._stopTimer();
-
-        // Вызываем пользовательский обработчик завершения
-        if (typeof this.options.onComplete === 'function') {
-            this.options.onComplete(update);
-        }
-
-        // Отключаемся от WebSocket
-        this.disconnect();
-
-        // Автоматическое перенаправление после успешного завершения
-        if (update.successful && this.options.enableAutoRedirect && this.options.redirectUrl) {
-            setTimeout(() => {
-                window.location.href = this.options.redirectUrl;
-            }, this.options.redirectDelay);
-        }
-    }
-
-    /**
-     * Показывает элементы для действий после завершения импорта
-     * @private
-     */
-    _showCompletionActions() {
-        const completionActions = document.getElementById('completionActions');
-        if (completionActions) {
-            completionActions.style.display = 'block';
-            completionActions.classList.remove('d-none');
-        }
+    if (url.includes('?')) {
+        return url + '&noRedirect=true';
+    } else {
+        return url + '?noRedirect=true';
     }
 }
 
-/**
- * Инициализация отслеживания прогресса при загрузке страницы
- */
-document.addEventListener('DOMContentLoaded', function () {
+// 1. Перехватываем AJAX запросы (XMLHttpRequest)
+const originalXHROpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+    // Запоминаем оригинальный URL для логирования
+    this._originalUrl = url;
 
-    const operationIdElement = document.getElementById('operationId');
-    if (operationIdElement) {
-        const operationId = operationIdElement.value;
-        const clientId = document.getElementById('clientId')?.value;
-
-        if (operationId) {
-            // Получаем время начала операции
-            let startTimeStr = document.querySelector('[data-start-time]')?.dataset?.startTime;
-            let startTime = startTimeStr ? new Date(startTimeStr) : new Date();
-
-            // Создаем трекер прогресса
-            const tracker = new ImportProgressTracker(operationId, {
-                redirectUrl: clientId ? `/clients/${clientId}` : '/import',
-                startTime: startTime,
-                onConnect: () => {
-                    console.log('Подключено к отслеживанию прогресса импорта');
-                    document.getElementById('connectionStatus')?.classList.add('d-none');
-                },
-                onComplete: (update) => {
-                    console.log('Импорт завершен:', update);
-                    updateCompletionInfo();
-                },
-                onError: (error) => {
-                    console.error('Ошибка отслеживания прогресса импорта:', error);
-                    showConnectionError();
-
-                    // Инициализируем запасной метод для получения статуса
-                    initStatusPolling(operationId);
-                }
-            });
-
-            // Подключаемся к WebSocket
-            tracker.connect();
-
-            // Сохраняем трекер в глобальной переменной
-            window.importProgressTracker = tracker;
-
-            // Инициализируем обработчик кнопки отмены импорта
-            initCancelButton(operationId);
-
-            // Инициализируем запасной метод даже если WebSocket работает
-            initStatusPolling(operationId);
-        }
-    }
-});
-
-// Добавим функцию для периодической проверки статуса импорта через REST API
-function initStatusPolling(operationId) {
-    // Устанавливаем интервал проверки (каждые 5 секунд)
-    const interval = setInterval(() => {
-        if (!window.importProgressTracker || !window.importProgressTracker.connected) {
-            fetch(`/import/api/status/${operationId}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Обновляем интерфейс на основе полученных данных
-                    updateProgressUI(data);
-
-                    // Если импорт завершен, останавливаем опрос
-                    if (data.status === 'COMPLETED' || data.status === 'FAILED') {
-                        clearInterval(interval);
-                    }
-                })
-                .catch(error => {
-                    console.error('Ошибка при получении статуса импорта:', error);
-                });
-        }
-    }, 5000);
-
-    // Сохраняем ID интервала для возможной очистки
-    window.statusPollingInterval = interval;
-}
-
-// Функция для обновления UI на основе данных о статусе
-function updateProgressUI(data) {
-    const progressBar = document.querySelector('#progressBar');
-    const progressText = document.querySelector('#progressText');
-    const statusElement = document.querySelector('#importStatus');
-
-    if (progressBar && data.processingProgress !== undefined) {
-        progressBar.style.width = data.processingProgress + '%';
-        progressBar.setAttribute('aria-valuenow', data.processingProgress);
-        progressBar.textContent = data.processingProgress + '%';
+    // Если импорт завершен, добавляем параметр noRedirect
+    if (window.importCompleted && typeof url === 'string') {
+        url = addNoRedirectParam(url);
+        console.log("AJAX запрос изменен:", this._originalUrl, "->", url);
     }
 
-    if (progressText && data.processedRecords !== undefined) {
-        progressText.textContent = `Обработано ${data.processedRecords} из ${data.totalRecords} записей (${data.processingProgress}%)`;
-    }
-
-    if (statusElement) {
-        if (data.status === 'COMPLETED') {
-            statusElement.textContent = 'Завершено';
-            statusElement.className = 'badge bg-success';
-        } else if (data.status === 'FAILED') {
-            statusElement.textContent = 'Ошибка';
-            statusElement.className = 'badge bg-danger';
-        } else {
-            statusElement.textContent = 'Импорт в процессе';
-            statusElement.className = 'badge bg-primary';
-        }
-    }
-}
-
-// Установим глобальный обработчик ошибок WebSocket
-window.onerror = function(message, source, lineno, colno, error) {
-    if (message.includes('WebSocket') || (error && error.message && error.message.includes('WebSocket'))) {
-        console.error('Ошибка WebSocket:', message);
-
-        // Если есть активный трекер, отключаем его
-        if (window.importProgressTracker && window.importProgressTracker.connected) {
-            window.importProgressTracker.disconnect();
-        }
-
-        return true; // Предотвращаем всплытие ошибки
-    }
-    return false;
+    return originalXHROpen.call(this, method, url, async, user, pass);
 };
 
-/**
- * Инициализирует обработчик кнопки отмены импорта
- * @param {number} operationId - ID операции импорта
- */
-function initCancelButton(operationId) {
-    const cancelImportBtn = document.getElementById('cancelImportBtn');
-    if (cancelImportBtn) {
-        cancelImportBtn.addEventListener('click', function () {
-            if (confirm('Вы уверены, что хотите отменить импорт? Это действие нельзя отменить.')) {
-                cancelImport(operationId);
-            }
-        });
-    }
-}
-
-/**
- * Отправляет запрос на отмену импорта
- * @param {number} operationId - ID операции импорта
- */
-function cancelImport(operationId) {
-    fetch(`/import/api/cancel/${operationId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
+// 2. Перехватываем запросы Fetch API
+const originalFetch = window.fetch;
+window.fetch = function(input, init) {
+    // Если импорт завершен, модифицируем URL
+    if (window.importCompleted) {
+        if (typeof input === 'string') {
+            input = addNoRedirectParam(input);
+            console.log("Fetch запрос изменен:", input);
+        } else if (input instanceof Request) {
+            // Создаем новый Request с модифицированным URL
+            const modifiedUrl = addNoRedirectParam(input.url);
+            console.log("Fetch Request изменен:", input.url, "->", modifiedUrl);
+            input = new Request(modifiedUrl, input);
         }
-    })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Операция успешно отменена, перезагружаем страницу
-                window.location.reload();
-            } else {
-                alert(`Не удалось отменить импорт: ${data.message}`);
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка при отмене импорта:', error);
-            alert('Произошла ошибка при отмене импорта');
-        });
-}
-
-/**
- * Обновляет информацию о завершении импорта
- */
-function updateCompletionInfo() {
-    // Отображаем кнопки действий после завершения
-    const actionsElement = document.getElementById('completionActions');
-    if (actionsElement) {
-        actionsElement.classList.remove('d-none');
     }
 
-    // Обновляем информацию о времени завершения
-    const processingTimeElement = document.getElementById('processingTime');
-    if (processingTimeElement) {
-        const completionTime = new Date().toLocaleTimeString();
-        processingTimeElement.textContent = completionTime;
-    }
-}
+    return originalFetch.call(window, input, init);
+};
 
-/**
- * Показывает ошибку подключения
- */
-function showConnectionError() {
+// Основной код скрипта
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("Инициализация скрипта import-progress.js");
+
+    // Получаем ID операции и клиента из скрытых полей
+    const operationId = document.getElementById('operationId').value;
+    const clientId = document.getElementById('clientId').value;
+
+    console.log("Операция ID:", operationId);
+    console.log("Клиент ID:", clientId);
+
+    // Получаем элементы UI
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
     const connectionStatus = document.getElementById('connectionStatus');
-    if (connectionStatus) {
-        connectionStatus.classList.remove('d-none');
-        connectionStatus.textContent = 'Ошибка подключения для отслеживания прогресса';
-        connectionStatus.classList.remove('alert-warning');
-        connectionStatus.classList.add('alert-danger');
+    const errorMessage = document.getElementById('errorMessage');
+    const importStatus = document.getElementById('importStatus');
+    const logContainer = document.getElementById('logContainer');
+    const completionActions = document.getElementById('completionActions');
+    const processingTime = document.getElementById('processingTime');
+    const cancelImportBtn = document.getElementById('cancelImportBtn');
+    const totalRecordsEl = document.getElementById('totalRecords');
+
+    // Переменные для отслеживания времени
+    let startTime = null;
+    const startTimeEl = document.querySelector('[data-start-time]');
+    if (startTimeEl) {
+        startTime = new Date(startTimeEl.getAttribute('data-start-time'));
+    } else {
+        startTime = new Date();
     }
-}
+
+    // Переменные для WebSocket
+    let stompClient = null;
+    let retryCount = 0;
+    const maxRetries = 5;
+    let connected = false;
+
+    // Инициализация WebSocket соединения
+    initWebSocket();
+
+    // Обновляем таймер каждую секунду
+    setInterval(updateElapsedTime, 1000);
+
+    // Функция инициализации WebSocket
+    function initWebSocket() {
+        console.log("Инициализация WebSocket соединения...");
+
+        connectionStatus.classList.remove('d-none');
+        connectionStatus.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Подключение к серверу для отслеживания прогресса...';
+
+        try {
+            // Создаем SockJS соединение
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+
+            // Отключаем логи STOMP клиента в продакшне
+            // stompClient.debug = null;
+
+            // Настраиваем обработчики для WebSocket
+            socket.onopen = function() {
+                console.log("SockJS соединение открыто");
+            };
+
+            socket.onclose = function() {
+                console.log("SockJS соединение закрыто");
+                handleConnectionClosed();
+            };
+
+            socket.onerror = function(error) {
+                console.error("SockJS ошибка:", error);
+                handleConnectionError(error);
+            };
+
+            // Подключаемся к серверу
+            stompClient.connect({}, onConnected, onError);
+
+        } catch (e) {
+            console.error("Ошибка при инициализации WebSocket:", e);
+            handleConnectionError(e);
+        }
+    }
+
+    // Функция для обработки успешного подключения
+    function onConnected() {
+        console.log("WebSocket соединение установлено");
+        connected = true;
+        connectionStatus.classList.add('d-none');
+
+        // Подписываемся на обновления для конкретной операции
+        stompClient.subscribe(`/topic/import-progress/${operationId}`, onProgressUpdate);
+        console.log(`Подписка на /topic/import-progress/${operationId} установлена`);
+
+        // Подписываемся на общие обновления
+        stompClient.subscribe('/topic/import-progress', onProgressUpdate);
+        console.log("Подписка на /topic/import-progress установлена");
+
+        // Отправляем запрос на получение текущего статуса
+        stompClient.send("/app/import-progress", {}, operationId);
+        console.log(`Отправлен запрос статуса для операции ${operationId}`);
+
+        // Добавляем запись в лог
+        addLogEntry('Подключение к серверу установлено. Отслеживание прогресса...', 'info');
+
+        // Сбрасываем счетчик попыток
+        retryCount = 0;
+    }
+
+    // Функция для обработки ошибки подключения
+    function onError(error) {
+        console.error('Ошибка WebSocket соединения:', error);
+        handleConnectionError(error);
+    }
+
+    // Обработка закрытия соединения
+    function handleConnectionClosed() {
+        if (!connected) return;
+
+        connected = false;
+        connectionStatus.classList.remove('d-none', 'alert-warning');
+        connectionStatus.classList.add('alert-info');
+        connectionStatus.innerHTML = `
+            <i class="fas fa-info-circle me-2"></i>
+            Соединение с сервером прервано. 
+            <button onclick="location.reload()" class="btn btn-outline-primary btn-sm ms-2">Переподключиться</button>
+        `;
+    }
+
+    // Обработка ошибки соединения
+    function handleConnectionError(error) {
+        // Если количество попыток не превышено, пробуем переподключиться
+        if (retryCount < maxRetries) {
+            retryCount++;
+            connectionStatus.classList.remove('d-none');
+            connectionStatus.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>Ошибка подключения. Повторная попытка ${retryCount}/${maxRetries}...`;
+
+            // Пробуем переподключиться через 3 секунды
+            setTimeout(initWebSocket, 3000);
+        } else {
+            // Если превышено количество попыток, показываем сообщение и предлагаем перезагрузить страницу
+            connectionStatus.classList.remove('alert-warning');
+            connectionStatus.classList.add('alert-danger');
+            connectionStatus.innerHTML = `
+                <i class="fas fa-exclamation-circle me-2"></i>
+                Не удалось установить соединение с сервером. 
+                <button onclick="location.reload()" class="btn btn-outline-light btn-sm ms-2">Перезагрузить страницу</button>
+                <a href="/import/status/${operationId}" class="btn btn-outline-light btn-sm ms-2">Посмотреть статус</a>
+            `;
+        }
+    }
+
+    // Функция для обработки обновлений о прогрессе
+    function onProgressUpdate(message) {
+        console.log("Получено WebSocket-сообщение:", message);
+        try {
+            const data = JSON.parse(message.body);
+            console.log("Данные сообщения:", data);
+
+            // Проверяем, что обновление относится к нашей операции
+            if (data.operationId && data.operationId != operationId) {
+                console.log("Сообщение для другой операции, игнорируем");
+                return;
+            }
+
+            // Обновляем прогресс
+            if (data.progress !== undefined) {
+                updateProgress(data.progress);
+            }
+
+            // Обновляем текст прогресса
+            if (data.processedRecords !== undefined && data.totalRecords !== undefined) {
+                updateProgressText(data.processedRecords, data.totalRecords);
+
+                // Обновляем ожидаемое количество записей
+                if (totalRecordsEl && data.totalRecords > 0) {
+                    totalRecordsEl.textContent = data.totalRecords;
+                }
+            }
+
+            // Проверяем статус операции
+            if (data.status) {
+                updateStatus(data.status);
+            }
+
+            // Проверяем, завершена ли операция
+            if (data.completed) {
+                handleCompletion(data.successful, data.errorMessage);
+            }
+
+            // Если есть сообщение, добавляем его в лог
+            if (data.message) {
+                addLogEntry(data.message, data.successful ? 'success' : data.error ? 'error' : 'info');
+            }
+
+        } catch (e) {
+            console.error('Ошибка обработки сообщения:', e);
+            addLogEntry('Ошибка обработки сообщения от сервера: ' + e.message, 'error');
+        }
+    }
+
+    // Функция для обновления прогресс-бара
+    function updateProgress(progress) {
+        console.log("Обновление прогресса:", progress);
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+            progressBar.textContent = `${progress}%`;
+            progressBar.setAttribute('aria-valuenow', progress);
+        }
+    }
+
+    // Функция для обновления текста прогресса
+    function updateProgressText(processed, total) {
+        console.log(`Обновление текста прогресса: ${processed}/${total}`);
+        if (progressText) {
+            progressText.textContent = `Обработано ${processed} из ${total} записей`;
+
+            // Пытаемся оценить оставшееся время
+            if (processed > 0 && total > 0) {
+                const progress = processed / total;
+                if (progress > 0 && progress < 1) {
+                    const elapsed = new Date() - startTime;
+                    const estimated = elapsed / progress;
+                    const remaining = estimated - elapsed;
+
+                    const minutes = Math.floor(remaining / 60000);
+                    const seconds = Math.floor((remaining % 60000) / 1000);
+
+                    progressText.textContent += ` (осталось примерно ${minutes} мин ${seconds} сек)`;
+                }
+            }
+        }
+    }
+
+    // Функция для обновления статуса операции
+    function updateStatus(status) {
+        console.log("Обновление статуса:", status);
+        if (importStatus) {
+            // Удаляем существующие классы
+            importStatus.classList.remove('bg-primary', 'bg-warning', 'bg-success', 'bg-danger');
+
+            switch (status) {
+                case 'PENDING':
+                    importStatus.classList.add('bg-warning');
+                    importStatus.textContent = 'Ожидание';
+                    break;
+                case 'PROCESSING':
+                    importStatus.classList.add('bg-primary');
+                    importStatus.textContent = 'Импорт в процессе';
+                    break;
+                case 'COMPLETED':
+                    importStatus.classList.add('bg-success');
+                    importStatus.textContent = 'Импорт завершен';
+                    break;
+                case 'FAILED':
+                    importStatus.classList.add('bg-danger');
+                    importStatus.textContent = 'Ошибка импорта';
+                    break;
+                default:
+                    importStatus.classList.add('bg-secondary');
+                    importStatus.textContent = 'Неизвестный статус';
+            }
+        }
+    }
+
+    // Функция для обработки завершения операции
+    function handleCompletion(successful, errorMsg) {
+        console.log("Обработка завершения операции:", successful, errorMsg);
+
+        // ВАЖНО: Перехватываем все GET-запросы после завершения импорта
+        // и предотвращаем редиректы сразу в родительском окне
+
+        // Создаем HTMLAnchorElement для работы с URL
+        const urlParser = document.createElement('a');
+
+        // Сохраняем оригинальный метод
+        const originalOpen = XMLHttpRequest.prototype.open;
+
+        // Переопределяем метод open
+        XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+            // Разбираем URL
+            urlParser.href = url;
+            const path = urlParser.pathname;
+
+            // Если это запрос статуса импорта - блокируем его полностью
+            if (method === 'GET' && path.includes('/import/api/status/')) {
+                console.log('БЛОКИРОВКА запроса:', method, url);
+
+                // Вместо настоящего запроса создаем фиктивный ответ
+                this.abort = function() {};
+                this.getAllResponseHeaders = function() { return ''; };
+                this.getResponseHeader = function() { return null; };
+                this.open = function() {};
+                this.overrideMimeType = function() {};
+                this.send = function() {
+                    // Эмулируем успешный ответ
+                    this.readyState = 4;
+                    this.status = 200;
+                    this.statusText = 'OK';
+                    this.responseText = JSON.stringify({
+                        status: "COMPLETED",
+                        message: "Операция завершена успешно (ответ эмулирован)"
+                    });
+
+                    // Вызываем onreadystatechange, если определен
+                    if (typeof this.onreadystatechange === 'function') {
+                        this.onreadystatechange();
+                    }
+                };
+                return;
+            }
+
+            // Вызываем оригинальный метод для остальных запросов
+            return originalOpen.apply(this, arguments);
+        };
+
+        // Устанавливаем флаг завершения импорта
+        window.importCompleted = true;
+
+        // Предотвращаем потенциальные редиректы через таймеры
+        const maxTimerId = setTimeout(function(){}, 0);
+        for(let i = 0; i < maxTimerId; i++) {
+            clearTimeout(i);
+            clearInterval(i);
+        }
+
+        // Скрываем кнопку отмены
+        if (cancelImportBtn) {
+            cancelImportBtn.style.display = 'none';
+        }
+
+        // Прерываем обновление, если операция завершена
+        if (stompClient !== null && connected) {
+            stompClient.disconnect();
+            connected = false;
+        }
+
+        // Обновляем UI в зависимости от результата
+        if (successful) {
+            // Показываем кнопки для завершения
+            if (completionActions) {
+                // Модифицируем все ссылки, чтобы предотвратить автоматический переход
+                const links = completionActions.querySelectorAll('a');
+                links.forEach(link => {
+                    const originalHref = link.getAttribute('href');
+                    if (originalHref) {
+                        // Заменяем href на javascript:void(0) и сохраняем оригинальный URL
+                        link.setAttribute('data-original-href', originalHref);
+                        link.setAttribute('href', 'javascript:void(0)');
+
+                        // Добавляем обработчик клика, который будет открывать страницу в новой вкладке
+                        link.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            console.log("Переход по ссылке:", originalHref);
+                            window.open(originalHref, '_blank');
+                        });
+                    }
+
+                    // Устанавливаем tabindex=-1 чтобы предотвратить автофокус
+                    link.setAttribute('tabindex', '-1');
+                });
+
+                // Добавляем уведомление о предотвращении редиректа
+                const successNotice = document.createElement('div');
+                successNotice.className = 'alert alert-info mt-3 mb-3';
+                successNotice.innerHTML = `
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Импорт успешно завершен!</strong> 
+                Вы останетесь на этой странице. Используйте кнопки ниже для перехода к другим разделам.
+            `;
+
+                // Вставляем уведомление перед кнопками действий
+                if (completionActions.parentNode) {
+                    completionActions.parentNode.insertBefore(successNotice, completionActions);
+                }
+
+                // Показываем блок с действиями с небольшой задержкой,
+                // чтобы дать время модифицировать ссылки
+                setTimeout(() => {
+                    completionActions.style.display = 'block';
+
+                    // Снимаем фокус с любого активного элемента
+                    if (document.activeElement) {
+                        document.activeElement.blur();
+                    }
+                }, 100);
+            }
+
+            // Добавляем время обработки
+            if (processingTime) {
+                const elapsed = new Date() - startTime;
+                const minutes = Math.floor(elapsed / 60000);
+                const seconds = Math.floor((elapsed % 60000) / 1000);
+                processingTime.textContent = `(завершено за ${minutes} мин ${seconds} сек)`;
+            }
+
+            // Добавляем финальную запись в лог
+            addLogEntry('Импорт успешно завершен!', 'success');
+        } else {
+            // Отображаем сообщение об ошибке
+            if (errorMessage) {
+                errorMessage.classList.remove('d-none');
+                errorMessage.innerHTML = `
+                <i class="fas fa-exclamation-circle me-2"></i>
+                ${errorMsg || 'Произошла ошибка при импорте файла.'}
+            `;
+            }
+
+            // Добавляем финальную запись в лог
+            addLogEntry(`Импорт завершился с ошибкой: ${errorMsg || 'Неизвестная ошибка'}`, 'error');
+        }
+
+        // Блокируем попытки закрыть страницу
+        window.onbeforeunload = function(e) {
+            // Отменяем событие
+            e.preventDefault();
+            // Для Chrome требуется задать возвратное значение
+            e.returnValue = '';
+            return '';
+        };
+    }
+
+    // Функция для добавления записи в лог
+    function addLogEntry(message, type = 'info') {
+        console.log(`Добавление записи в лог: ${message} (${type})`);
+        if (logContainer) {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-time">${timeStr}</span>
+                <span class="log-${type}">${message}</span>
+            `;
+
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    }
+
+    // Функция для обновления прошедшего времени
+    function updateElapsedTime() {
+        const elapsedTimeEl = document.getElementById('elapsedTime');
+        if (elapsedTimeEl && startTime) {
+            const elapsed = new Date() - startTime;
+            const hours = Math.floor(elapsed / 3600000);
+            const minutes = Math.floor((elapsed % 3600000) / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+
+            let timeStr = '';
+            if (hours > 0) {
+                timeStr += `${hours} ч `;
+            }
+            timeStr += `${minutes} мин ${seconds} сек`;
+
+            elapsedTimeEl.textContent = timeStr;
+        }
+    }
+
+    // Обработчик кнопки отмены импорта
+    if (cancelImportBtn) {
+        cancelImportBtn.addEventListener('click', function() {
+            if (confirm('Вы уверены, что хотите отменить импорт? Это действие нельзя отменить.')) {
+                console.log("Пользователь инициировал отмену импорта");
+
+                // Отправляем запрос на отмену импорта
+                fetch(`/import/api/cancel/${operationId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log("Ответ сервера на запрос отмены:", data);
+                        if (data.success) {
+                            addLogEntry('Запрос на отмену импорта отправлен', 'warning');
+                            // Отключаем кнопку отмены
+                            cancelImportBtn.disabled = true;
+                            cancelImportBtn.textContent = 'Отмена в процессе...';
+                        } else {
+                            addLogEntry(`Ошибка при отмене импорта: ${data.message}`, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Ошибка при отправке запроса отмены:", error);
+                        addLogEntry('Ошибка при отправке запроса на отмену', 'error');
+                    });
+            }
+        });
+    }
+
+    // НОВЫЙ КОД: Блокируем закрытие страницы
+    window.addEventListener('beforeunload', function(event) {
+        if (window.importCompleted) {
+            console.log("Попытка покинуть страницу после завершения импорта");
+            event.preventDefault();
+            event.returnValue = 'Импорт успешно завершен. Вы уверены, что хотите покинуть страницу?';
+            return 'Импорт успешно завершен. Вы уверены, что хотите покинуть страницу?';
+        }
+    });
+
+    // Добавляем первую запись в лог
+    addLogEntry('Инициализация отслеживания прогресса импорта...', 'info');
+});

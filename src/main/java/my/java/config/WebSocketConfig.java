@@ -27,19 +27,5 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOriginPatterns("*")  // Вместо setAllowedOrigins("*")
                 .withSockJS();
 
-        // ИЛИ Вариант 2: Отключить credentials, если они не нужны
-    /*
-    registry.addEndpoint("/ws")
-            .setAllowedOrigins("*")
-            .setAllowCredentials(false)
-            .withSockJS();
-    */
-
-        // ИЛИ Вариант 3: Указать конкретные источники
-    /*
-    registry.addEndpoint("/ws")
-            .setAllowedOrigins("http://localhost:8080")
-            .withSockJS();
-    */
     }
 }

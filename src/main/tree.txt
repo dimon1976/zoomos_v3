@@ -137,6 +137,7 @@ E:.
     |   \---migration
     |           V1__Base_Schema.sql
     |           V2__Add_Import_Params_Columns.sql
+    |           V3__Add_Import_Params_Column.sql
     |           
     +---static
     |   +---css

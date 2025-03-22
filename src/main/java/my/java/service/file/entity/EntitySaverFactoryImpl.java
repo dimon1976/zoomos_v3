@@ -1,4 +1,3 @@
-// src/main/java/my/java/service/file/entity/EntitySaverFactoryImpl.java
 package my.java.service.file.entity;
 
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +6,7 @@ import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
 import my.java.service.competitor.CompetitorDataService;
+import my.java.service.file.repository.RelatedEntitiesRepository;
 import my.java.service.product.ProductService;
 import my.java.service.region.RegionDataService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +27,8 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
     public EntitySaverFactoryImpl(
             ProductService productService,
             RegionDataService regionDataService,
-            CompetitorDataService competitorDataService) {
+            CompetitorDataService competitorDataService,
+            RelatedEntitiesRepository relatedEntitiesRepository) {
 
         // Регистрируем обработчики для стандартных типов сущностей
         registerSaver("product", entities -> {
@@ -52,6 +53,12 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
                     .map(e -> (CompetitorData) e)
                     .toList();
             return competitorDataService.saveCompetitorDataList(competitorDataList);
+        });
+
+        // Добавляем обработчик для связанных сущностей
+        registerSaver("product_with_related", entities -> {
+            log.info("Сохранение связанных сущностей, всего: {}", entities.size());
+            return relatedEntitiesRepository.saveRelatedEntities(entities);
         });
     }
 

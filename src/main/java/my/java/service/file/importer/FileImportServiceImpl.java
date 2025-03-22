@@ -13,6 +13,8 @@ import my.java.model.entity.RegionData;
 import my.java.repository.FileOperationRepository;
 import my.java.service.competitor.CompetitorDataService;
 import my.java.service.file.builder.EntitySetBuilderFactory;
+import my.java.service.file.entity.EntitySaverFactory;
+import my.java.service.file.job.FileImportJob;
 import my.java.service.file.mapping.FieldMappingService;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
@@ -43,7 +45,6 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
-//@RequiredArgsConstructor
 public class FileImportServiceImpl implements FileImportService {
 
     private final PathResolver pathResolver;
@@ -56,6 +57,7 @@ public class FileImportServiceImpl implements FileImportService {
     private final CompetitorDataService competitorDataService;
     private final RelatedEntitiesRepository relatedEntitiesRepository;
     private final EntitySetBuilderFactory entitySetBuilderFactory;
+    private final EntitySaverFactory entitySaverFactory;
     private final ImportProgressTracker importProgressTracker;
 
 
@@ -72,7 +74,7 @@ public class FileImportServiceImpl implements FileImportService {
             @Qualifier("fileProcessingExecutor") TaskExecutor fileProcessingExecutor,
             List<FileProcessingStrategy> processingStrategies,
             RelatedEntitiesRepository relatedEntitiesRepository,
-            EntitySetBuilderFactory entitySetBuilderFactory, ImportProgressTracker importProgressTracker) {
+            EntitySetBuilderFactory entitySetBuilderFactory, EntitySaverFactory entitySaverFactory, ImportProgressTracker importProgressTracker) {
 
         this.pathResolver = pathResolver;
         this.fileOperationRepository = fileOperationRepository;
@@ -86,6 +88,7 @@ public class FileImportServiceImpl implements FileImportService {
         this.processingStrategies = processingStrategies;
         this.relatedEntitiesRepository = relatedEntitiesRepository;
         this.entitySetBuilderFactory = entitySetBuilderFactory;
+        this.entitySaverFactory = entitySaverFactory;
         this.importProgressTracker = importProgressTracker;
     }
 
@@ -285,8 +288,18 @@ public class FileImportServiceImpl implements FileImportService {
         return false;
     }
 
+    /**
+     * Запускает асинхронную обработку загруженного файла.
+     * Важно: этот метод НЕ дожидается завершения обработки.
+     *
+     * @param filePath путь к файлу
+     * @param client клиент
+     * @param mappingId идентификатор маппинга полей
+     * @param strategyId идентификатор стратегии обработки
+     * @param params дополнительные параметры для обработки
+     * @return DTO созданной операции (с начальным статусом)
+     */
     @Override
-    @Transactional
     public FileOperationDto processUploadedFile(
             Path filePath,
             Client client,
@@ -294,100 +307,98 @@ public class FileImportServiceImpl implements FileImportService {
             Long strategyId,
             Map<String, String> params) {
 
-        log.info("Обработка загруженного файла: {}, клиент: {}", filePath, client.getName());
-
-        // Создаем запись об операции, если еще не создана
-        FileOperation operation = findOrCreateFileOperation(client, filePath, params);
-
-        // Инициализируем трекер прогресса для операции
-        if (operation != null && operation.getId() != null) {
-            log.debug("Инициализация трекера прогресса для операции #{}", operation.getId());
-            importProgressTracker.initProgress(operation.getId(), 0);
-            importProgressTracker.updateProgress(operation.getId(), 1);
-        }
+        log.info("Запуск асинхронной обработки файла: {}, клиент: {}", filePath, client.getName());
 
         try {
-            // Получаем подходящий процессор для файла
-            Optional<FileProcessor> processorOpt = fileProcessorFactory.createProcessor(filePath);
-            if (processorOpt.isEmpty()) {
-                throw new FileOperationException("Не найден подходящий процессор для файла: " + filePath);
-            }
-
-            FileProcessor processor = processorOpt.get();
-            log.debug("Выбран процессор: {}", processor.getClass().getSimpleName());
-
-            // Определяем тип сущности для импорта (можно получить из параметров)
+            // Определяем тип сущности из параметров
             String entityType = getEntityTypeFromParams(params);
             log.debug("Тип сущности для импорта: {}", entityType);
 
+            // Создаем запись об операции
+            FileOperation operation = findOrCreateFileOperation(client, filePath, params);
+            operation.markAsProcessing(); // Сразу меняем статус на "в процессе"
+            operation = fileOperationRepository.save(operation);
+            log.debug("Создана запись об операции: #{}, статус: {}", operation.getId(), operation.getStatus());
+
+            // Инициализируем трекер прогресса
+            long operationId = operation.getId();
+            importProgressTracker.initProgress(operationId, 0);
+
             // Получаем маппинг полей
-            Map<String, String> fieldMapping = null;
+            Map<String, String> fieldMapping = getFieldMapping(mappingId, params);
 
-            // Если mappingId задан, получаем маппинг по ID
-            if (mappingId != null) {
-                fieldMapping = fieldMappingService.getMappingById(mappingId);
-            }
+            // Создаем и настраиваем задачу для асинхронного выполнения
+            FileImportJob job = FileImportJob.builder()
+                    .operation(operation)
+                    .filePath(filePath)
+                    .client(client)
+                    .fieldMapping(fieldMapping)
+                    .params(params)
+                    .entityType(entityType)
+                    .fileOperationRepository(fileOperationRepository)
+                    .processorFactory(fileProcessorFactory)
+                    .processingStrategies(processingStrategies)
+                    .progressTracker(importProgressTracker)
+                    .pathResolver(pathResolver)
+                    .entitySaverFactory(entitySaverFactory)
+                    .build();
 
-            // Проверяем, есть ли маппинг в параметрах (случай, когда пользователь создал новый маппинг)
-            if ((fieldMapping == null || fieldMapping.isEmpty()) && params != null) {
-                fieldMapping = extractFieldMappingFromParams(params);
-            }
-
-            // Если маппинг все еще не указан, пробуем автоматически сопоставить поля
-            if (fieldMapping == null || fieldMapping.isEmpty()) {
-                Map<String, Object> fileAnalysis = processor.analyzeFile(filePath, null);
-                if (fileAnalysis.containsKey("headers")) {
-                    @SuppressWarnings("unchecked")
-                    List<String> headers = (List<String>) fileAnalysis.get("headers");
-                    fieldMapping = fieldMappingService.suggestMapping(headers, entityType);
-                    log.debug("Автоматически создан маппинг полей: {}", fieldMapping);
-                } else {
-                    throw new FileOperationException("Не удалось определить заголовки файла");
+            // Запускаем задачу асинхронно
+            CompletableFuture<FileOperationDto> future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return job.call();
+                } catch (Exception e) {
+                    log.error("Ошибка при выполнении задачи импорта: {}", e.getMessage(), e);
+                    if (e instanceof RuntimeException) {
+                        throw (RuntimeException) e;
+                    }
+                    throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
                 }
-            }
+            }, fileProcessingExecutor);
 
-            // Меняем статус операции на "в процессе"
-            operation.markAsProcessing();
-            operation = fileOperationRepository.save(operation);
+            // Сохраняем задачу и ее Future в карту активных задач
+            activeImportTasks.put(operationId, future);
 
-            // Обрабатываем файл
-            List<ImportableEntity> entities = processor.processFile(
-                    filePath, entityType, client, fieldMapping, params, operation);
+            // Добавляем обработчик завершения задачи для удаления из списка активных
+            future.whenComplete((result, ex) -> {
+                activeImportTasks.remove(operationId);
+                if (ex != null) {
+                    log.error("Задача импорта завершилась с ошибкой: {}", ex.getMessage(), ex);
+                } else {
+                    log.info("Задача импорта успешно завершена: операция #{}", operationId);
+                }
+            });
 
-            // Сохраняем сущности в БД через соответствующий механизм
-            int savedEntities = saveEntities(entities, entityType);
-
-            // Обновляем статус операции
-            operation.markAsCompleted(savedEntities);
-            operation = fileOperationRepository.save(operation);
-
-            // Завершаем отслеживание прогресса
-            if (operation != null && operation.getId() != null) {
-                importProgressTracker.completeProgress(operation.getId(), true, savedEntities,
-                        savedEntities, null);
-            }
-
-            // Перемещаем файл из временной директории в постоянную
-            Path permanentPath = pathResolver.moveFromTempToUpload(filePath, "imported_" + client.getId() + "_" + operation.getId());
-            operation.setResultFilePath(permanentPath.toString());
-            operation = fileOperationRepository.save(operation);
-
-            log.info("Файл успешно обработан: {}, создано сущностей: {}", filePath, savedEntities);
-
+            // Возвращаем DTO с информацией об операции (она уже в статусе PROCESSING)
             return mapToDto(operation);
+
         } catch (Exception e) {
-            log.error("Ошибка при обработке файла: {}", e.getMessage(), e);
-            operation.markAsFailed(e.getMessage());
-            operation = fileOperationRepository.save(operation);
-
-            // Отмечаем прогресс как завершенный с ошибкой
-            if (operation != null && operation.getId() != null) {
-                importProgressTracker.completeProgress(operation.getId(), false, 0, 0, e.getMessage());
-            }
-
-            throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
-
+            log.error("Ошибка при подготовке задачи импорта: {}", e.getMessage(), e);
+            throw new FileOperationException("Ошибка при запуске задачи импорта: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Получает маппинг полей по ID или из параметров.
+     *
+     * @param mappingId ID маппинга
+     * @param params параметры запроса
+     * @return маппинг полей
+     */
+    private Map<String, String> getFieldMapping(Long mappingId, Map<String, String> params) {
+        Map<String, String> fieldMapping = null;
+
+        // Если mappingId задан, получаем маппинг по ID
+        if (mappingId != null) {
+            fieldMapping = fieldMappingService.getMappingById(mappingId);
+        }
+
+        // Проверяем, есть ли маппинг в параметрах
+        if ((fieldMapping == null || fieldMapping.isEmpty()) && params != null) {
+            fieldMapping = extractFieldMappingFromParams(params);
+        }
+
+        return fieldMapping != null ? fieldMapping : new HashMap<>();
     }
 
     /**

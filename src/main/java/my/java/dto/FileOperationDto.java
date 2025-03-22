@@ -74,6 +74,14 @@ public class FileOperationDto {
         }
     }
 
+    // Проверка завершения операции
+    public Boolean isCompleted(OperationStatus status) {
+        if (OperationStatus.COMPLETED.equals(status)) {
+            return true;
+        }
+        return false;
+    }
+
     // Получение типа операции в виде текста для отображения
     public String getOperationTypeDisplay() {
         if (operationType == null) {

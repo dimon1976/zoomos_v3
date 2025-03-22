@@ -35,12 +35,10 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
 
         String normalizedValue = value.trim().toLowerCase();
 
-        // Проверяем, есть ли значение в списке TRUE_VALUES
         if (TRUE_VALUES.contains(normalizedValue)) {
             return Boolean.TRUE;
         }
 
-        // Проверяем, есть ли значение в списке FALSE_VALUES
         if (FALSE_VALUES.contains(normalizedValue)) {
             return Boolean.FALSE;
         }
@@ -49,7 +47,6 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
         try {
             return Boolean.valueOf(normalizedValue);
         } catch (Exception e) {
-            // Возвращаем null, если не удалось преобразовать
             return null;
         }
     }
@@ -69,20 +66,10 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
             return "";
         }
 
-        // Проверяем, есть ли указание формата в параметрах
-        if (params != null && !params.isEmpty()) {
-            // Формат: "true=Да|false=Нет"
-            String[] parts = params.split("\\|");
-            for (String part : parts) {
-                if (value && part.startsWith("true=")) {
-                    return part.substring("true=".length());
-                } else if (!value && part.startsWith("false=")) {
-                    return part.substring("false=".length());
-                }
-            }
-        }
+        // Ищем форматы для true/false в параметрах
+        String trueFormat = extractParameter(params, "true", "true");
+        String falseFormat = extractParameter(params, "false", "false");
 
-        // По умолчанию возвращаем стандартный текст
-        return value ? "true" : "false";
+        return value ? trueFormat : falseFormat;
     }
 }

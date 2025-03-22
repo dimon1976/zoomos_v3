@@ -55,55 +55,38 @@ public abstract class NumberTransformer<T extends Number> extends AbstractValueT
      * @return настроенный NumberFormat
      */
     protected NumberFormat getNumberFormat(String params) {
-        Locale locale = Locale.getDefault();
-
-        // Проверяем, указана ли локаль в параметрах
-        if (params != null && params.contains("locale=")) {
-            String localeParam = extractParameter(params, "locale", null);
-            if (localeParam != null) {
-                // Формат локали: "язык_страна", например "ru_RU"
-                String[] localeParts = localeParam.split("_");
-                if (localeParts.length == 2) {
-                    locale = new Locale(localeParts[0], localeParts[1]);
-                } else if (localeParts.length == 1) {
-                    locale = new Locale(localeParts[0]);
-                }
-            }
-        }
-
-        // Получаем формат числа
+        Locale locale = getLocaleFromParams(params);
         String pattern = extractParameter(params, "pattern", null);
+
         if (pattern != null) {
-            // Используем указанный шаблон
-            return new DecimalFormat(pattern);
+            DecimalFormat format = (DecimalFormat) NumberFormat.getNumberInstance(locale);
+            format.applyPattern(pattern);
+            return format;
         } else {
-            // Используем стандартный числовой формат для локали
             return NumberFormat.getNumberInstance(locale);
         }
     }
 
     /**
-     * Извлекает значение параметра из строки параметров
+     * Извлекает локаль из параметров
      *
-     * @param params строка параметров
-     * @param paramName имя параметра
-     * @param defaultValue значение по умолчанию
-     * @return значение параметра или значение по умолчанию
+     * @param params параметры форматирования
+     * @return локаль из параметров или локаль по умолчанию
      */
-    protected String extractParameter(String params, String paramName, String defaultValue) {
-        if (params == null) {
-            return defaultValue;
+    protected Locale getLocaleFromParams(String params) {
+        String localeParam = extractParameter(params, "locale", null);
+        if (localeParam == null) {
+            return Locale.getDefault();
         }
 
-        // Параметры в формате "param1=value1|param2=value2|..."
-        String[] parts = params.split("\\|");
-        for (String part : parts) {
-            if (part.startsWith(paramName + "=")) {
-                return part.substring((paramName + "=").length());
-            }
+        String[] localeParts = localeParam.split("_");
+        if (localeParts.length == 2) {
+            return new Locale(localeParts[0], localeParts[1]);
+        } else if (localeParts.length == 1) {
+            return new Locale(localeParts[0]);
         }
 
-        return defaultValue;
+        return Locale.getDefault();
     }
 }
 
@@ -111,6 +94,7 @@ public abstract class NumberTransformer<T extends Number> extends AbstractValueT
  * Трансформатор целых чисел (Integer)
  */
 @Component
+@Slf4j
 class IntegerTransformer extends NumberTransformer<Integer> {
 
     public IntegerTransformer() {
@@ -131,6 +115,7 @@ class IntegerTransformer extends NumberTransformer<Integer> {
         try {
             return getNumberFormat(params).format(value);
         } catch (Exception e) {
+            log.warn("Error formatting Integer value: {}", e.getMessage());
             return value.toString();
         }
     }
@@ -140,6 +125,7 @@ class IntegerTransformer extends NumberTransformer<Integer> {
  * Трансформатор длинных целых чисел (Long)
  */
 @Component
+@Slf4j
 class LongTransformer extends NumberTransformer<Long> {
 
     public LongTransformer() {
@@ -160,6 +146,7 @@ class LongTransformer extends NumberTransformer<Long> {
         try {
             return getNumberFormat(params).format(value);
         } catch (Exception e) {
+            log.warn("Error formatting Long value: {}", e.getMessage());
             return value.toString();
         }
     }
@@ -169,6 +156,7 @@ class LongTransformer extends NumberTransformer<Long> {
  * Трансформатор дробных чисел (Double)
  */
 @Component
+@Slf4j
 class DoubleTransformer extends NumberTransformer<Double> {
 
     public DoubleTransformer() {
@@ -189,6 +177,7 @@ class DoubleTransformer extends NumberTransformer<Double> {
         try {
             return getNumberFormat(params).format(value);
         } catch (Exception e) {
+            log.warn("Error formatting Double value: {}", e.getMessage());
             return value.toString();
         }
     }

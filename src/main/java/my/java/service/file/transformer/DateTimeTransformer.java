@@ -45,21 +45,48 @@ public abstract class DateTimeTransformer<T> extends AbstractValueTransformer<T>
             return handleEmpty(params);
         }
 
+        value = value.trim();
+
         // Если указан формат в параметрах, используем его
-        String formatPattern = extractPatternFromParams(params);
+        String formatPattern = extractParameter(params, "pattern", null);
         if (formatPattern != null) {
-            try {
-                return parseDateTime(value.trim(), formatPattern);
-            } catch (DateTimeParseException e) {
-                log.warn("Could not parse date/time '{}' with pattern '{}': {}",
-                        value, formatPattern, e.getMessage());
+            T result = tryParseWithPattern(value, formatPattern);
+            if (result != null) {
+                return result;
             }
         }
 
         // Иначе пробуем различные стандартные форматы
+        return tryParseWithDefaultPatterns(value);
+    }
+
+    /**
+     * Пытается преобразовать строку с заданным шаблоном
+     *
+     * @param value строковое значение
+     * @param pattern шаблон формата
+     * @return преобразованное значение или null в случае неудачи
+     */
+    private T tryParseWithPattern(String value, String pattern) {
+        try {
+            return parseDateTime(value, pattern);
+        } catch (DateTimeParseException e) {
+            log.warn("Could not parse date/time '{}' with pattern '{}': {}",
+                    value, pattern, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Пытается преобразовать строку используя шаблоны по умолчанию
+     *
+     * @param value строковое значение
+     * @return преобразованное значение или null в случае неудачи
+     */
+    private T tryParseWithDefaultPatterns(String value) {
         for (String pattern : getDefaultPatterns()) {
             try {
-                return parseDateTime(value.trim(), pattern);
+                return parseDateTime(value, pattern);
             } catch (DateTimeParseException e) {
                 // Игнорируем и продолжаем пробовать другие форматы
             }
@@ -86,27 +113,28 @@ public abstract class DateTimeTransformer<T> extends AbstractValueTransformer<T>
      */
     protected abstract List<String> getDefaultPatterns();
 
-    /**
-     * Извлекает шаблон формата из параметров
-     *
-     * @param params строка с параметрами
-     * @return шаблон формата или null, если не указан
-     */
-    protected String extractPatternFromParams(String params) {
-        if (params == null || params.trim().isEmpty()) {
-            return null;
+    @Override
+    public String toString(T value, String params) {
+        if (value == null) {
+            return "";
         }
 
-        // Параметры в формате "pattern=yyyy-MM-dd|param2=value2|..."
-        String[] parts = params.split("\\|");
-        for (String part : parts) {
-            if (part.startsWith("pattern=")) {
-                return part.substring("pattern=".length());
-            }
+        String pattern = extractParameter(params, "pattern", null);
+        if (pattern == null) {
+            pattern = getDefaultPatterns().get(0); // Используем первый формат по умолчанию
         }
 
-        return null;
+        return formatDateTime(value, pattern);
     }
+
+    /**
+     * Форматирует дату/время в строку с использованием указанного шаблона
+     *
+     * @param value значение даты/времени
+     * @param pattern шаблон формата
+     * @return отформатированная строка
+     */
+    protected abstract String formatDateTime(T value, String pattern);
 }
 
 /**
@@ -131,16 +159,7 @@ class LocalDateTransformer extends DateTimeTransformer<LocalDate> {
     }
 
     @Override
-    public String toString(LocalDate value, String params) {
-        if (value == null) {
-            return "";
-        }
-
-        String pattern = extractPatternFromParams(params);
-        if (pattern == null) {
-            pattern = DEFAULT_DATE_PATTERNS.get(0); // Используем первый формат по умолчанию
-        }
-
+    protected String formatDateTime(LocalDate value, String pattern) {
         return value.format(DateTimeFormatter.ofPattern(pattern));
     }
 }
@@ -167,16 +186,7 @@ class LocalTimeTransformer extends DateTimeTransformer<LocalTime> {
     }
 
     @Override
-    public String toString(LocalTime value, String params) {
-        if (value == null) {
-            return "";
-        }
-
-        String pattern = extractPatternFromParams(params);
-        if (pattern == null) {
-            pattern = DEFAULT_TIME_PATTERNS.get(0); // Используем первый формат по умолчанию
-        }
-
+    protected String formatDateTime(LocalTime value, String pattern) {
         return value.format(DateTimeFormatter.ofPattern(pattern));
     }
 }
@@ -203,16 +213,7 @@ class LocalDateTimeTransformer extends DateTimeTransformer<LocalDateTime> {
     }
 
     @Override
-    public String toString(LocalDateTime value, String params) {
-        if (value == null) {
-            return "";
-        }
-
-        String pattern = extractPatternFromParams(params);
-        if (pattern == null) {
-            pattern = DEFAULT_DATETIME_PATTERNS.get(0); // Используем первый формат по умолчанию
-        }
-
+    protected String formatDateTime(LocalDateTime value, String pattern) {
         return value.format(DateTimeFormatter.ofPattern(pattern));
     }
 }
@@ -246,16 +247,7 @@ class ZonedDateTimeTransformer extends DateTimeTransformer<ZonedDateTime> {
     }
 
     @Override
-    public String toString(ZonedDateTime value, String params) {
-        if (value == null) {
-            return "";
-        }
-
-        String pattern = extractPatternFromParams(params);
-        if (pattern == null) {
-            pattern = DEFAULT_DATETIME_PATTERNS.get(0); // Используем первый формат по умолчанию
-        }
-
+    protected String formatDateTime(ZonedDateTime value, String pattern) {
         return value.format(DateTimeFormatter.ofPattern(pattern));
     }
 }

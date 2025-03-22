@@ -27,7 +27,7 @@ public abstract class AbstractValueTransformer<T> implements ValueTransformer<T>
 
     @Override
     public boolean canTransform(String value, String params) {
-        if (value == null || value.trim().isEmpty()) {
+        if (isEmpty(value)) {
             return true; // Пустые значения всегда можно преобразовать (в null)
         }
 
@@ -69,6 +69,29 @@ public abstract class AbstractValueTransformer<T> implements ValueTransformer<T>
     }
 
     /**
+     * Извлекает значение параметра из строки параметров
+     *
+     * @param params строка параметров
+     * @param paramName имя параметра
+     * @param defaultValue значение по умолчанию
+     * @return значение параметра или значение по умолчанию
+     */
+    protected String extractParameter(String params, String paramName, String defaultValue) {
+        if (params == null) {
+            return defaultValue;
+        }
+
+        String[] parts = params.split("\\|");
+        for (String part : parts) {
+            if (part.startsWith(paramName + "=")) {
+                return part.substring((paramName + "=").length());
+            }
+        }
+
+        return defaultValue;
+    }
+
+    /**
      * Пытается получить значение по умолчанию из параметров
      *
      * @param params строка параметров
@@ -76,18 +99,6 @@ public abstract class AbstractValueTransformer<T> implements ValueTransformer<T>
      * @return значение по умолчанию
      */
     protected String getDefaultValue(String params, String defaultValue) {
-        if (params == null || params.trim().isEmpty()) {
-            return defaultValue;
-        }
-
-        // Формат params: "default=value|param2=value2|..."
-        String[] parts = params.split("\\|");
-        for (String part : parts) {
-            if (part.startsWith("default=")) {
-                return part.substring("default=".length());
-            }
-        }
-
-        return defaultValue;
+        return extractParameter(params, "default", defaultValue);
     }
 }

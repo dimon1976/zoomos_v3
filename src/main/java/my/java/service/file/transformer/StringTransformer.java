@@ -21,11 +21,9 @@ public class StringTransformer extends AbstractValueTransformer<String> {
             return handleEmpty(params);
         }
 
-        // Параметры могут содержать указание на обрезку пробелов
-        boolean trim = true;
-        if (params != null && params.contains("trim=false")) {
-            trim = false;
-        }
+        // Проверяем параметр обрезки пробелов
+        boolean trim = !Boolean.FALSE.toString().equalsIgnoreCase(
+                extractParameter(params, "trim", Boolean.TRUE.toString()));
 
         return trim ? value.trim() : value;
     }
@@ -37,6 +35,6 @@ public class StringTransformer extends AbstractValueTransformer<String> {
 
     @Override
     public String toString(String value, String params) {
-        return value;
+        return value == null ? "" : value;
     }
 }

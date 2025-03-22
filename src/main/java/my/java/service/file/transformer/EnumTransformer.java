@@ -34,18 +34,8 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
         }
 
         try {
-            Class<? extends Enum<?>> enumClass = (Class<? extends Enum<?>>) Class.forName(enumClassName);
-            String mapping = extractParameter(params, "mapping", null);
-
-            if (mapping != null) {
-                Map<String, String> mappings = parseMappings(mapping);
-                String enumValue = mappings.get(value.trim().toLowerCase());
-                if (enumValue != null) {
-                    return getEnumValue(enumClass, enumValue);
-                }
-            }
-
-            return getEnumValue(enumClass, value.trim());
+            Class<? extends Enum<?>> enumClass = loadEnumClass(enumClassName);
+            return transformToEnum(value.trim(), enumClass, params);
         } catch (ClassNotFoundException e) {
             log.warn("Enum class not found: {}", enumClassName, e);
             return null;
@@ -53,6 +43,45 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
             log.warn("Error transforming string to enum: {}", e.getMessage(), e);
             return null;
         }
+    }
+
+    /**
+     * Загружает класс перечисления
+     *
+     * @param enumClassName имя класса
+     * @return класс перечисления
+     * @throws ClassNotFoundException если класс не найден
+     * @throws IllegalArgumentException если класс не является перечислением
+     */
+    @SuppressWarnings("unchecked")
+    private Class<? extends Enum<?>> loadEnumClass(String enumClassName) throws ClassNotFoundException {
+        Class<?> clazz = Class.forName(enumClassName);
+        if (!clazz.isEnum()) {
+            throw new IllegalArgumentException("Class is not an enum: " + enumClassName);
+        }
+        return (Class<? extends Enum<?>>) clazz;
+    }
+
+    /**
+     * Преобразует строку в значение перечисления
+     *
+     * @param value строковое значение
+     * @param enumClass класс перечисления
+     * @param params параметры преобразования
+     * @return значение перечисления
+     */
+    private Enum<?> transformToEnum(String value, Class<? extends Enum<?>> enumClass, String params) {
+        String mapping = extractParameter(params, "mapping", null);
+
+        if (mapping != null) {
+            Map<String, String> mappings = parseMappings(mapping);
+            String enumValue = mappings.get(value.toLowerCase());
+            if (enumValue != null) {
+                return getEnumValue(enumClass, enumValue);
+            }
+        }
+
+        return getEnumValue(enumClass, value);
     }
 
     @Override
@@ -79,21 +108,12 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
         return value.name();
     }
 
-    protected String extractParameter(String params, String paramName, String defaultValue) {
-        if (params == null) {
-            return defaultValue;
-        }
-
-        String[] parts = params.split("\\|");
-        for (String part : parts) {
-            if (part.startsWith(paramName + "=")) {
-                return part.substring((paramName + "=").length());
-            }
-        }
-
-        return defaultValue;
-    }
-
+    /**
+     * Разбирает строку сопоставлений в Map
+     *
+     * @param mapping строка сопоставлений
+     * @return отображение строковых значений на значения перечисления
+     */
     protected Map<String, String> parseMappings(String mapping) {
         Map<String, String> result = new HashMap<>();
 
@@ -112,11 +132,20 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
         return result;
     }
 
+    /**
+     * Получает значение перечисления по строке
+     *
+     * @param enumClass класс перечисления
+     * @param value строковое значение
+     * @return значение перечисления
+     * @throws IllegalArgumentException если значение не найдено
+     */
     @SuppressWarnings({"unchecked", "rawtypes"})
     protected <E extends Enum<E>> Enum<?> getEnumValue(Class<? extends Enum<?>> enumClass, String value) {
         try {
             return Enum.valueOf((Class<E>) enumClass, value);
         } catch (IllegalArgumentException e) {
+            // Пытаемся найти без учета регистра
             for (Enum<?> enumValue : enumClass.getEnumConstants()) {
                 if (enumValue.name().equalsIgnoreCase(value)) {
                     return enumValue;

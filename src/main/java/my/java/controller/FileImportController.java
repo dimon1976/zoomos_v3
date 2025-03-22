@@ -19,7 +19,9 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -481,11 +483,33 @@ public class FileImportController {
 
     @GetMapping("/api/status/{operationId}")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> getImportStatus(@PathVariable Long operationId) {
-        log.debug("API запрос на получение статуса импорта для операции: {}", operationId);
+    public ResponseEntity<?> getImportStatus(
+            @PathVariable Long operationId,
+            @RequestParam(value = "noRedirect", required = false, defaultValue = "true") boolean noRedirect) {
+
+        log.debug("API запрос на получение статуса импорта для операции: {}, noRedirect={}", operationId, noRedirect);
 
         try {
             FileOperationDto operation = fileImportService.getImportStatus(operationId);
+
+            // Проверяем, завершена ли операция и нужно ли делать редирект
+            if (operation.getStatus() == FileOperation.OperationStatus.COMPLETED && !noRedirect) {
+                log.debug("Операция завершена успешно, выполняем редирект на страницу клиента");
+
+                // Формируем URI для редиректа на страницу клиента
+                URI clientUri = ServletUriComponentsBuilder
+                        .fromCurrentContextPath()
+                        .path("/clients/{id}")
+                        .buildAndExpand(operation.getClientId())
+                        .toUri();
+
+                // Возвращаем статус 302 Found с указанием адреса для редиректа
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(clientUri)
+                        .build();
+            }
+
+            // Если операция не завершена или указан флаг noRedirect, возвращаем обычный ответ
             return ResponseEntity.ok(createImportStatusResponse(operation));
         } catch (Exception e) {
             log.error("Ошибка при получении статуса импорта через API: {}", e.getMessage(), e);

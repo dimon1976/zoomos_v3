@@ -7,7 +7,7 @@
         ~{::style},
         'Прогресс импорта файла ' + ${operation.fileName},
         ~{::.page-actions}
-      )}">
+      )}" xmlns="http://www.w3.org/1999/html">
 <head>
     <title>Прогресс импорта - Обработка файлов</title>
     <style>
@@ -15,26 +15,32 @@
             margin-top: 2rem;
             margin-bottom: 2rem;
         }
+
         .progress {
             height: 2rem;
         }
+
         .progress-bar {
             font-size: 1rem;
             line-height: 2rem;
         }
+
         .info-card {
             border-radius: 0.5rem;
             margin-bottom: 1.5rem;
             padding: 1.5rem;
             background-color: #f8f9fa;
         }
+
         .operation-details dt {
             font-weight: 600;
             color: #495057;
         }
+
         .operation-details dd {
             margin-bottom: 0.75rem;
         }
+
         .log-container {
             max-height: 300px;
             overflow-y: auto;
@@ -45,26 +51,33 @@
             padding: 1rem;
             margin-top: 1.5rem;
         }
+
         .log-entry {
             margin-bottom: 0.25rem;
             font-size: 0.9rem;
         }
+
         .log-time {
             color: #6c757d;
             margin-right: 0.5rem;
         }
+
         .log-info {
             color: #17a2b8;
         }
+
         .log-success {
             color: #28a745;
         }
+
         .log-error {
             color: #dc3545;
         }
+
         .log-warning {
             color: #ffc107;
         }
+
         #completionActions {
             display: none;
         }
@@ -108,7 +121,8 @@
             <div class="progress">
                 <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
                      role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
-                     style="width: 0%">0%</div>
+                     style="width: 0%">0%
+                </div>
             </div>
             <p id="progressText" class="text-center mt-2">Подготовка к импорту...</p>
         </div>

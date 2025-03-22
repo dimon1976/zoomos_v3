@@ -384,66 +384,82 @@
          * Обновляет статус операции
          */
         function updateOperationStatus() {
-            fetch(`/import/api/status/${operationId}`)
+            fetch(`/import/api/status/${operationId}?noRedirect=true`)
                 .then(response => response.json())
                 .then(data => {
-                    // Обновляем статус
                     if (data.status !== operationStatus) {
-                        // Статус изменился, перезагружаем страницу
-                        window.location.reload();
+                        // Обновляем статус и другие элементы без перезагрузки страницы
+                        updateStatusUI(data);
                         return;
                     }
-
-                    // Обновляем прогресс
-                    const progressBar = document.querySelector('.progress-bar');
-                    if (progressBar && data.processingProgress !== null) {
-                        progressBar.style.width = `${data.processingProgress}%`;
-                        progressBar.textContent = `${data.processingProgress}%`;
-                    }
-
-                    // Обновляем обработанные записи
-                    const processedRecords = document.querySelector('.operation-details .row:nth-child(6) .col-md-9');
-                    if (processedRecords && data.processedRecords !== null) {
-                        processedRecords.innerHTML = `${data.processedRecords} / ${data.totalRecords} записей`;
-                    }
-
-                    // Обновляем оставшееся время
-                    const timeRemaining = document.getElementById('timeRemaining');
-                    if (timeRemaining && data.processingProgress > 0) {
-                        const elapsedMs = new Date() - startTime;
-                        const totalMs = (elapsedMs / data.processingProgress) * 100;
-                        const remainingMs = totalMs - elapsedMs;
-
-                        if (remainingMs > 0) {
-                            const remainingMinutes = Math.floor(remainingMs / 60000);
-                            const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
-                            timeRemaining.textContent = `Осталось примерно ${remainingMinutes} мин ${remainingSeconds} сек`;
-                        } else {
-                            timeRemaining.textContent = 'Завершение...';
-                        }
-                    }
-
-                    // Добавляем запись в журнал
-                    if (data.processedRecords > 0) {
-                        const logContainer = document.getElementById('operationLog');
-                        const logEntry = document.createElement('div');
-                        logEntry.className = 'log-entry';
-
-                        const now = new Date();
-                        const timeStr = now.toTimeString().split(' ')[0];
-
-                        logEntry.innerHTML = `
-                            <span class="log-time">${timeStr}</span>
-                            <span class="log-info">Обработано ${data.processedRecords} из ${data.totalRecords} записей (${data.processingProgress}%)</span>
-                        `;
-
-                        logContainer.appendChild(logEntry);
-                        logContainer.scrollTop = logContainer.scrollHeight;
-                    }
+                    // Обновляем прогресс и другие элементы
+                    updateProgressUI(data);
                 })
                 .catch(error => {
                     console.error('Error updating operation status:', error);
                 });
+        }
+
+        function updateStatusUI(data) {
+            const statusBadge = document.querySelector('.status-badge');
+            if (statusBadge) {
+                statusBadge.className = `status-badge status-${data.status.toLowerCase()}`;
+                statusBadge.innerHTML = `<i class="fas fa-check-circle me-2"></i>${data.status}`;
+            }
+
+            const progressBar = document.querySelector('.progress-bar');
+            if (progressBar && data.processingProgress !== null) {
+                progressBar.style.width = `${data.processingProgress}%`;
+                progressBar.textContent = `${data.processingProgress}%`;
+            }
+
+            const processedRecords = document.querySelector('.operation-details .row:nth-child(6) .col-md-9');
+            if (processedRecords && data.processedRecords !== null) {
+                processedRecords.innerHTML = `${data.processedRecords} / ${data.totalRecords} записей`;
+            }
+
+            const timeRemaining = document.getElementById('timeRemaining');
+            if (timeRemaining && data.processingProgress > 0) {
+                const elapsedMs = new Date() - startTime;
+                const totalMs = (elapsedMs / data.processingProgress) * 100;
+                const remainingMs = totalMs - elapsedMs;
+
+                if (remainingMs > 0) {
+                    const remainingMinutes = Math.floor(remainingMs / 60000);
+                    const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+                    timeRemaining.textContent = `Осталось примерно ${remainingMinutes} мин ${remainingSeconds} сек`;
+                } else {
+                    timeRemaining.textContent = 'Завершение...';
+                }
+            }
+        }
+
+        function updateProgressUI(data) {
+            const progressBar = document.querySelector('.progress-bar');
+            if (progressBar && data.processingProgress !== null) {
+                progressBar.style.width = `${data.processingProgress}%`;
+                progressBar.textContent = `${data.processingProgress}%`;
+            }
+
+            const processedRecords = document.querySelector('.operation-details .row:nth-child(6) .col-md-9');
+            if (processedRecords && data.processedRecords !== null) {
+                processedRecords.innerHTML = `${data.processedRecords} / ${data.totalRecords} записей`;
+            }
+
+            const timeRemaining = document.getElementById('timeRemaining');
+            if (timeRemaining && data.processingProgress > 0) {
+                const elapsedMs = new Date() - startTime;
+                const totalMs = (elapsedMs / data.processingProgress) * 100;
+                const remainingMs = totalMs - elapsedMs;
+
+                if (remainingMs > 0) {
+                    const remainingMinutes = Math.floor(remainingMs / 60000);
+                    const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+                    timeRemaining.textContent = `Осталось примерно ${remainingMinutes} мин ${remainingSeconds} сек`;
+                } else {
+                    timeRemaining.textContent = 'Завершение...';
+                }
+            }
         }
 
         /**

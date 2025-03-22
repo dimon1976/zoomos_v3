@@ -1,6 +1,57 @@
 /**
  * Скрипт для отслеживания прогресса импорта через WebSocket
+ * С защитой от автоматического редиректа при завершении импорта
  */
+
+// Инициализация защиты от редиректа
+window.importCompleted = false;
+
+// Функция для добавления параметра noRedirect к URL
+function addNoRedirectParam(url) {
+    if (typeof url !== 'string') return url;
+
+    if (url.includes('?')) {
+        return url + '&noRedirect=true';
+    } else {
+        return url + '?noRedirect=true';
+    }
+}
+
+// 1. Перехватываем AJAX запросы (XMLHttpRequest)
+const originalXHROpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+    // Запоминаем оригинальный URL для логирования
+    this._originalUrl = url;
+
+    // Если импорт завершен, добавляем параметр noRedirect
+    if (window.importCompleted && typeof url === 'string') {
+        url = addNoRedirectParam(url);
+        console.log("AJAX запрос изменен:", this._originalUrl, "->", url);
+    }
+
+    return originalXHROpen.call(this, method, url, async, user, pass);
+};
+
+// 2. Перехватываем запросы Fetch API
+const originalFetch = window.fetch;
+window.fetch = function(input, init) {
+    // Если импорт завершен, модифицируем URL
+    if (window.importCompleted) {
+        if (typeof input === 'string') {
+            input = addNoRedirectParam(input);
+            console.log("Fetch запрос изменен:", input);
+        } else if (input instanceof Request) {
+            // Создаем новый Request с модифицированным URL
+            const modifiedUrl = addNoRedirectParam(input.url);
+            console.log("Fetch Request изменен:", input.url, "->", modifiedUrl);
+            input = new Request(modifiedUrl, input);
+        }
+    }
+
+    return originalFetch.call(window, input, init);
+};
+
+// Основной код скрипта
 document.addEventListener('DOMContentLoaded', function() {
     console.log("Инициализация скрипта import-progress.js");
 
@@ -267,6 +318,64 @@ document.addEventListener('DOMContentLoaded', function() {
     // Функция для обработки завершения операции
     function handleCompletion(successful, errorMsg) {
         console.log("Обработка завершения операции:", successful, errorMsg);
+
+        // ВАЖНО: Перехватываем все GET-запросы после завершения импорта
+        // и предотвращаем редиректы сразу в родительском окне
+
+        // Создаем HTMLAnchorElement для работы с URL
+        const urlParser = document.createElement('a');
+
+        // Сохраняем оригинальный метод
+        const originalOpen = XMLHttpRequest.prototype.open;
+
+        // Переопределяем метод open
+        XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
+            // Разбираем URL
+            urlParser.href = url;
+            const path = urlParser.pathname;
+
+            // Если это запрос статуса импорта - блокируем его полностью
+            if (method === 'GET' && path.includes('/import/api/status/')) {
+                console.log('БЛОКИРОВКА запроса:', method, url);
+
+                // Вместо настоящего запроса создаем фиктивный ответ
+                this.abort = function() {};
+                this.getAllResponseHeaders = function() { return ''; };
+                this.getResponseHeader = function() { return null; };
+                this.open = function() {};
+                this.overrideMimeType = function() {};
+                this.send = function() {
+                    // Эмулируем успешный ответ
+                    this.readyState = 4;
+                    this.status = 200;
+                    this.statusText = 'OK';
+                    this.responseText = JSON.stringify({
+                        status: "COMPLETED",
+                        message: "Операция завершена успешно (ответ эмулирован)"
+                    });
+
+                    // Вызываем onreadystatechange, если определен
+                    if (typeof this.onreadystatechange === 'function') {
+                        this.onreadystatechange();
+                    }
+                };
+                return;
+            }
+
+            // Вызываем оригинальный метод для остальных запросов
+            return originalOpen.apply(this, arguments);
+        };
+
+        // Устанавливаем флаг завершения импорта
+        window.importCompleted = true;
+
+        // Предотвращаем потенциальные редиректы через таймеры
+        const maxTimerId = setTimeout(function(){}, 0);
+        for(let i = 0; i < maxTimerId; i++) {
+            clearTimeout(i);
+            clearInterval(i);
+        }
+
         // Скрываем кнопку отмены
         if (cancelImportBtn) {
             cancelImportBtn.style.display = 'none';
@@ -282,7 +391,51 @@ document.addEventListener('DOMContentLoaded', function() {
         if (successful) {
             // Показываем кнопки для завершения
             if (completionActions) {
-                completionActions.classList.remove('d-none');
+                // Модифицируем все ссылки, чтобы предотвратить автоматический переход
+                const links = completionActions.querySelectorAll('a');
+                links.forEach(link => {
+                    const originalHref = link.getAttribute('href');
+                    if (originalHref) {
+                        // Заменяем href на javascript:void(0) и сохраняем оригинальный URL
+                        link.setAttribute('data-original-href', originalHref);
+                        link.setAttribute('href', 'javascript:void(0)');
+
+                        // Добавляем обработчик клика, который будет открывать страницу в новой вкладке
+                        link.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            console.log("Переход по ссылке:", originalHref);
+                            window.open(originalHref, '_blank');
+                        });
+                    }
+
+                    // Устанавливаем tabindex=-1 чтобы предотвратить автофокус
+                    link.setAttribute('tabindex', '-1');
+                });
+
+                // Добавляем уведомление о предотвращении редиректа
+                const successNotice = document.createElement('div');
+                successNotice.className = 'alert alert-info mt-3 mb-3';
+                successNotice.innerHTML = `
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Импорт успешно завершен!</strong> 
+                Вы останетесь на этой странице. Используйте кнопки ниже для перехода к другим разделам.
+            `;
+
+                // Вставляем уведомление перед кнопками действий
+                if (completionActions.parentNode) {
+                    completionActions.parentNode.insertBefore(successNotice, completionActions);
+                }
+
+                // Показываем блок с действиями с небольшой задержкой,
+                // чтобы дать время модифицировать ссылки
+                setTimeout(() => {
+                    completionActions.style.display = 'block';
+
+                    // Снимаем фокус с любого активного элемента
+                    if (document.activeElement) {
+                        document.activeElement.blur();
+                    }
+                }, 100);
             }
 
             // Добавляем время обработки
@@ -300,14 +453,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (errorMessage) {
                 errorMessage.classList.remove('d-none');
                 errorMessage.innerHTML = `
-                    <i class="fas fa-exclamation-circle me-2"></i>
-                    ${errorMsg || 'Произошла ошибка при импорте файла.'}
-                `;
+                <i class="fas fa-exclamation-circle me-2"></i>
+                ${errorMsg || 'Произошла ошибка при импорте файла.'}
+            `;
             }
 
             // Добавляем финальную запись в лог
             addLogEntry(`Импорт завершился с ошибкой: ${errorMsg || 'Неизвестная ошибка'}`, 'error');
         }
+
+        // Блокируем попытки закрыть страницу
+        window.onbeforeunload = function(e) {
+            // Отменяем событие
+            e.preventDefault();
+            // Для Chrome требуется задать возвратное значение
+            e.returnValue = '';
+            return '';
+        };
     }
 
     // Функция для добавления записи в лог
@@ -380,6 +542,16 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // НОВЫЙ КОД: Блокируем закрытие страницы
+    window.addEventListener('beforeunload', function(event) {
+        if (window.importCompleted) {
+            console.log("Попытка покинуть страницу после завершения импорта");
+            event.preventDefault();
+            event.returnValue = 'Импорт успешно завершен. Вы уверены, что хотите покинуть страницу?';
+            return 'Импорт успешно завершен. Вы уверены, что хотите покинуть страницу?';
+        }
+    });
 
     // Добавляем первую запись в лог
     addLogEntry('Инициализация отслеживания прогресса импорта...', 'info');

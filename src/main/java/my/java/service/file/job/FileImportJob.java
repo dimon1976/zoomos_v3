@@ -104,96 +104,158 @@ public class FileImportJob implements Callable<FileOperationDto> {
                 operation.getId(), Thread.currentThread().getName());
 
         try {
-            // Проверяем существование файла
-            if (!Files.exists(filePath)) {
-                throw new FileOperationException("Файл не найден: " + filePath);
-            }
-
-            // Получаем подходящий процессор для файла
-            FileProcessor processor = processorFactory.createProcessor(filePath)
-                    .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
-
-            // Получаем подходящую стратегию обработки
-            FileProcessingStrategy strategy = selectProcessingStrategy(filePath);
-
-            // Проверяем валидность файла
-            if (!processor.validateFile(filePath)) {
-                throw new FileOperationException("Файл не прошел валидацию: " + filePath);
-            }
-
-            // Оцениваем количество записей
-            int estimatedRecords = processor.estimateRecordCount(filePath);
-
-            // Обновляем количество записей в операции и трекере прогресса
-            operation.setTotalRecords(estimatedRecords);
-            fileOperationRepository.save(operation);
-
-            // Инициализируем/обновляем прогресс с оцененным количеством записей
-            progressTracker.updateProgress(operation.getId(), 0);
-            log.info("Оценено количество записей: {} для операции #{}", estimatedRecords, operation.getId());
-
-            // Добавляем небольшую задержку для обновления UI
-            Thread.sleep(200);
+            validateFile();
+            prepareImport();
 
             // Обрабатываем файл
-            List<ImportableEntity> entities = processor.processFile(
-                    filePath, entityType, client, fieldMapping, params, operation);
-
-            log.debug("Файл обработан, получено {} сущностей", entities.size());
+            List<ImportableEntity> entities = processFile();
 
             // Проверяем отмену операции
-            if (cancelled.get()) {
-                throw new FileOperationException("Операция отменена пользователем");
-            }
+            checkCancellation();
 
-            // Сохраняем сущности в БД используя соответствующий сервис из фабрики
+            // Сохраняем сущности в БД
             int savedCount = saveEntities(entities);
 
-            // Обновляем статус операции
-            operation.markAsCompleted(savedCount);
-            operation.setCompletedAt(ZonedDateTime.now());
-            fileOperationRepository.save(operation);
+            // Выполняем действия по завершению импорта
+            completeImportSuccess(savedCount);
 
-            // Завершаем отслеживание прогресса
-            progressTracker.completeProgress(operation.getId(), true, entities.size(), savedCount, null);
-
-            // Перемещаем файл из временной директории (если это временный файл)
-            if (filePath.toString().contains("temp-files")) {
-                Path permanentPath = pathResolver.moveFromTempToUpload(
-                        filePath, "imported_" + client.getId() + "_" + operation.getId());
-                operation.setResultFilePath(permanentPath.toString());
-                fileOperationRepository.save(operation);
-            }
-
-            log.info("Задача импорта успешно выполнена для операции #{}, сохранено {} сущностей",
-                    operation.getId(), savedCount);
-
-            // Возвращаем DTO с информацией об операции
             return mapToDto(operation);
         } catch (Exception e) {
             log.error("Ошибка при выполнении задачи импорта для операции #{}: {}",
                     operation.getId(), e.getMessage(), e);
 
-            // Обновляем статус операции
-            operation.markAsFailed(e.getMessage());
-            operation.setCompletedAt(ZonedDateTime.now());
-            fileOperationRepository.save(operation);
-
-            // Завершаем отслеживание прогресса
-            progressTracker.completeProgress(operation.getId(), false, 0, 0, e.getMessage());
-
+            handleImportFailure(e);
             throw e;
         }
     }
 
     /**
+     * Валидирует файл перед импортом
+     *
+     * @throws FileOperationException если файл не найден или не валиден
+     */
+    private void validateFile() throws FileOperationException {
+        // Проверяем существование файла
+        if (!Files.exists(filePath)) {
+            throw new FileOperationException("Файл не найден: " + filePath);
+        }
+
+        // Получаем подходящий процессор для файла
+        FileProcessor processor = processorFactory.createProcessor(filePath)
+                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
+
+        // Проверяем валидность файла
+        if (!processor.validateFile(filePath)) {
+            throw new FileOperationException("Файл не прошел валидацию: " + filePath);
+        }
+    }
+
+    /**
+     * Подготавливает импорт - оценивает количество записей и обновляет прогресс
+     *
+     * @throws Exception при ошибке оценки количества записей
+     */
+    private void prepareImport() throws Exception {
+        FileProcessor processor = processorFactory.createProcessor(filePath)
+                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
+
+        // Оцениваем количество записей
+        int estimatedRecords = processor.estimateRecordCount(filePath);
+
+        // Обновляем количество записей в операции и трекере прогресса
+        operation.setTotalRecords(estimatedRecords);
+        fileOperationRepository.save(operation);
+
+        // Инициализируем/обновляем прогресс с оцененным количеством записей
+        progressTracker.updateProgress(operation.getId(), 0);
+        log.info("Оценено количество записей: {} для операции #{}", estimatedRecords, operation.getId());
+
+        // Добавляем небольшую задержку для обновления UI
+        Thread.sleep(200);
+    }
+
+    /**
+     * Обрабатывает файл и возвращает список сущностей
+     *
+     * @return список сущностей из файла
+     * @throws FileOperationException если возникли проблемы при обработке
+     */
+    private List<ImportableEntity> processFile() throws FileOperationException {
+        FileProcessor processor = processorFactory.createProcessor(filePath)
+                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
+
+        // Получаем подходящую стратегию обработки
+        FileProcessingStrategy strategy = selectProcessingStrategy();
+
+        // Обрабатываем файл
+        List<ImportableEntity> entities = processor.processFile(
+                filePath, entityType, client, fieldMapping, params, operation);
+
+        log.debug("Файл обработан, получено {} сущностей", entities.size());
+
+        return entities;
+    }
+
+    /**
+     * Проверяет, была ли отменена операция
+     *
+     * @throws FileOperationException если операция была отменена
+     */
+    private void checkCancellation() throws FileOperationException {
+        if (cancelled.get()) {
+            throw new FileOperationException("Операция отменена пользователем");
+        }
+    }
+
+    /**
+     * Обрабатывает ситуацию неудачного импорта
+     *
+     * @param e исключение, вызвавшее неудачу
+     */
+    private void handleImportFailure(Exception e) {
+        // Обновляем статус операции
+        operation.markAsFailed(e.getMessage());
+        operation.setCompletedAt(ZonedDateTime.now());
+        fileOperationRepository.save(operation);
+
+        // Завершаем отслеживание прогресса
+        progressTracker.completeProgress(operation.getId(), false, 0, 0, e.getMessage());
+    }
+
+    /**
+     * Выполняет действия по успешному завершению импорта
+     *
+     * @param savedCount количество сохраненных сущностей
+     * @throws Exception при ошибке завершения импорта
+     */
+    private void completeImportSuccess(int savedCount) throws Exception {
+        // Обновляем статус операции
+        operation.markAsCompleted(savedCount);
+        operation.setCompletedAt(ZonedDateTime.now());
+        fileOperationRepository.save(operation);
+
+        // Завершаем отслеживание прогресса
+        progressTracker.completeProgress(operation.getId(), true, savedCount, savedCount, null);
+
+        // Перемещаем файл из временной директории (если это временный файл)
+        if (filePath.toString().contains("temp-files")) {
+            Path permanentPath = pathResolver.moveFromTempToUpload(
+                    filePath, "imported_" + client.getId() + "_" + operation.getId());
+            operation.setResultFilePath(permanentPath.toString());
+            fileOperationRepository.save(operation);
+        }
+
+        log.info("Задача импорта успешно выполнена для операции #{}, сохранено {} сущностей",
+                operation.getId(), savedCount);
+    }
+
+    /**
      * Выбирает стратегию обработки для файла.
      *
-     * @param filePath путь к файлу
      * @return подходящая стратегия обработки
      * @throws FileOperationException если не найдена подходящая стратегия
      */
-    private FileProcessingStrategy selectProcessingStrategy(Path filePath) {
+    private FileProcessingStrategy selectProcessingStrategy() {
         Long strategyId = getStrategyIdFromParams();
 
         if (strategyId != null) {
@@ -206,12 +268,7 @@ public class FileImportJob implements Callable<FileOperationDto> {
         }
 
         // Ищем подходящую стратегию по совместимости с файлом
-        List<FileProcessingStrategy> compatibleStrategies = new ArrayList<>();
-        for (FileProcessingStrategy strategy : processingStrategies) {
-            if (strategy.isCompatibleWithFile(filePath)) {
-                compatibleStrategies.add(strategy);
-            }
-        }
+        List<FileProcessingStrategy> compatibleStrategies = findCompatibleStrategies();
 
         if (compatibleStrategies.isEmpty()) {
             throw new FileOperationException("Не найдена подходящая стратегия обработки для файла: " + filePath);
@@ -221,6 +278,21 @@ public class FileImportJob implements Callable<FileOperationDto> {
         compatibleStrategies.sort(Comparator.comparingInt(FileProcessingStrategy::getPriority).reversed());
 
         return compatibleStrategies.get(0);
+    }
+
+    /**
+     * Находит стратегии, совместимые с файлом
+     *
+     * @return список совместимых стратегий
+     */
+    private List<FileProcessingStrategy> findCompatibleStrategies() {
+        List<FileProcessingStrategy> compatibleStrategies = new ArrayList<>();
+        for (FileProcessingStrategy strategy : processingStrategies) {
+            if (strategy.isCompatibleWithFile(filePath)) {
+                compatibleStrategies.add(strategy);
+            }
+        }
+        return compatibleStrategies;
     }
 
     /**
@@ -241,7 +313,6 @@ public class FileImportJob implements Callable<FileOperationDto> {
 
     /**
      * Сохраняет сущности в БД.
-     * Упрощенная версия без использования TransactionManager.
      *
      * @param entities список сущностей для сохранения
      * @return количество сохраненных сущностей
@@ -255,15 +326,7 @@ public class FileImportJob implements Callable<FileOperationDto> {
         log.info("Начинаем сохранение {} сущностей типа {}", entities.size(), entityType);
 
         // Получаем функцию для сохранения сущностей указанного типа из фабрики
-        Function<List<ImportableEntity>, Integer> saveFunction = entitySaverFactory.getSaver(entityType.toLowerCase());
-
-        if (saveFunction == null) {
-            log.error("Не найдена функция сохранения для типа: {}", entityType.toLowerCase());
-            return 0;
-        }
-
-        // Логируем информацию о функции сохранения
-        log.debug("Получена функция сохранения: {}", saveFunction.getClass().getName());
+        Function<List<ImportableEntity>, Integer> saveFunction = getSaveFunction();
 
         // Определяем размер пакета для сохранения
         int batchSize = getBatchSizeFromParams();
@@ -288,61 +351,18 @@ public class FileImportJob implements Callable<FileOperationDto> {
             // Если пакет заполнен или это последняя сущность, сохраняем пакет
             if (batch.size() >= batchSize || i == entities.size() - 1) {
                 try {
-                    // Более детальное логирование перед сохранением
-                    log.debug("Пытаемся сохранить пакет размером {}", batch.size());
-
-                    // Проверяем первую сущность в пакете для отладки
-                    if (!batch.isEmpty()) {
-                        ImportableEntity firstEntity = batch.get(0);
-                        log.debug("Пример сущности для сохранения: тип={}, client={}",
-                                firstEntity.getClass().getSimpleName(),
-                                client.getId());
-                    }
-
                     // Сохраняем пакет
                     Integer savedInBatch = saveFunction.apply(new ArrayList<>(batch));
-
-                    // Проверяем результат сохранения
-                    log.debug("Результат сохранения пакета: {}", savedInBatch);
-
                     if (savedInBatch != null) {
                         totalSaved += savedInBatch;
-                        log.debug("Всего сохранено на данный момент: {}", totalSaved);
-                    } else {
-                        log.warn("Сохранение пакета вернуло null, возможна проблема с сохранением");
                     }
 
                     // Обновляем прогресс
-                    int processedCount = i + 1;
-                    progressTracker.updateProgress(operation.getId(), processedCount);
-
-                    // Логируем прогресс каждые 1000 сущностей или при завершении
-                    if (processedCount % 1000 == 0 || i == entities.size() - 1) {
-                        int percent = entities.size() > 0 ? (processedCount * 100 / entities.size()) : 0;
-                        log.info("Прогресс импорта операции #{}: обработано {} из {} сущностей ({}%), сохранено: {}",
-                                operation.getId(), processedCount, entities.size(), percent, totalSaved);
-                    }
+                    updateProgress(i + 1, entities.size(), totalSaved);
                 } catch (Exception e) {
                     log.error("Ошибка при сохранении пакета сущностей: {}", e.getMessage(), e);
                     // Пробуем сохранить записи поодиночке при ошибке пакетного сохранения
-                    if (batch.size() > 1) {
-                        log.info("Попытка сохранения записей поодиночке");
-                        for (ImportableEntity entity : batch) {
-                            try {
-                                List<ImportableEntity> singleEntity = Collections.singletonList(entity);
-                                log.debug("Сохраняем одиночную сущность: {}", entity.getClass().getSimpleName());
-                                Integer saved = saveFunction.apply(singleEntity);
-                                log.debug("Результат сохранения одиночной сущности: {}", saved);
-                                if (saved != null && saved > 0) {
-                                    totalSaved += saved;
-                                }
-                            } catch (Exception singleError) {
-                                log.error("Ошибка при сохранении отдельной записи: {} - {}",
-                                        entity.getClass().getSimpleName(),
-                                        singleError.getMessage());
-                            }
-                        }
-                    }
+                    totalSaved += saveEntitiesIndividually(batch, saveFunction);
                 }
 
                 // Очищаем пакет
@@ -352,6 +372,72 @@ public class FileImportJob implements Callable<FileOperationDto> {
 
         log.info("Завершено сохранение сущностей. Всего сохранено: {}", totalSaved);
         return totalSaved;
+    }
+
+    /**
+     * Получает функцию сохранения из фабрики
+     *
+     * @return функция сохранения
+     */
+    private Function<List<ImportableEntity>, Integer> getSaveFunction() {
+        Function<List<ImportableEntity>, Integer> saveFunction = entitySaverFactory.getSaver(entityType.toLowerCase());
+
+        if (saveFunction == null) {
+            log.error("Не найдена функция сохранения для типа: {}", entityType.toLowerCase());
+            return entities -> 0;
+        }
+
+        log.debug("Получена функция сохранения: {}", saveFunction.getClass().getName());
+        return saveFunction;
+    }
+
+    /**
+     * Обновляет прогресс импорта
+     *
+     * @param processedCount количество обработанных сущностей
+     * @param totalCount общее количество сущностей
+     * @param savedCount количество сохраненных сущностей
+     */
+    private void updateProgress(int processedCount, int totalCount, int savedCount) {
+        progressTracker.updateProgress(operation.getId(), processedCount);
+
+        // Логируем прогресс каждые 1000 сущностей или при завершении
+        if (processedCount % 1000 == 0 || processedCount == totalCount) {
+            int percent = totalCount > 0 ? (processedCount * 100 / totalCount) : 0;
+            log.info("Прогресс импорта операции #{}: обработано {} из {} сущностей ({}%), сохранено: {}",
+                    operation.getId(), processedCount, totalCount, percent, savedCount);
+        }
+    }
+
+    /**
+     * Сохраняет сущности по одной при ошибке пакетного сохранения
+     *
+     * @param batch пакет сущностей
+     * @param saveFunction функция сохранения
+     * @return количество сохраненных сущностей
+     */
+    private int saveEntitiesIndividually(List<ImportableEntity> batch, Function<List<ImportableEntity>, Integer> saveFunction) {
+        int savedCount = 0;
+
+        if (batch.size() > 1) {
+            log.info("Попытка сохранения записей поодиночке");
+            for (ImportableEntity entity : batch) {
+                try {
+                    List<ImportableEntity> singleEntity = Collections.singletonList(entity);
+                    log.debug("Сохраняем одиночную сущность: {}", entity.getClass().getSimpleName());
+                    Integer saved = saveFunction.apply(singleEntity);
+                    if (saved != null && saved > 0) {
+                        savedCount += saved;
+                    }
+                } catch (Exception singleError) {
+                    log.error("Ошибка при сохранении отдельной записи: {} - {}",
+                            entity.getClass().getSimpleName(),
+                            singleError.getMessage());
+                }
+            }
+        }
+
+        return savedCount;
     }
 
     /**

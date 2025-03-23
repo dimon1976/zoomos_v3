@@ -1,5 +1,6 @@
 package my.java.service.file.entity;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
@@ -12,16 +13,26 @@ import my.java.service.region.RegionDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
+/**
+ * Реализация фабрики для получения компонентов, сохраняющих различные типы сущностей
+ */
 @Component
 @Slf4j
 public class EntitySaverFactoryImpl implements EntitySaverFactory {
 
     private final Map<String, Function<List<ImportableEntity>, Integer>> savers = new HashMap<>();
+
+    private final ProductService productService;
+    private final RegionDataService regionDataService;
+    private final CompetitorDataService competitorDataService;
+    private final RelatedEntitiesRepository relatedEntitiesRepository;
 
     @Autowired
     public EntitySaverFactoryImpl(
@@ -29,37 +40,82 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
             RegionDataService regionDataService,
             CompetitorDataService competitorDataService,
             RelatedEntitiesRepository relatedEntitiesRepository) {
+        this.productService = productService;
+        this.regionDataService = regionDataService;
+        this.competitorDataService = competitorDataService;
+        this.relatedEntitiesRepository = relatedEntitiesRepository;
+    }
 
-        // Регистрируем обработчики для стандартных типов сущностей
-        registerSaver("product", entities -> {
-            List<Product> products = entities.stream()
-                    .filter(e -> e instanceof Product)
-                    .map(e -> (Product) e)
-                    .toList();
-            return productService.saveProducts(products);
-        });
+    /**
+     * Инициализирует фабрику стандартными обработчиками
+     */
+    @PostConstruct
+    public void initialize() {
+        registerStandardSavers();
+    }
 
-        registerSaver("regiondata", entities -> {
-            List<RegionData> regionDataList = entities.stream()
-                    .filter(e -> e instanceof RegionData)
-                    .map(e -> (RegionData) e)
-                    .toList();
-            return regionDataService.saveRegionDataList(regionDataList);
-        });
+    /**
+     * Регистрирует стандартные обработчики
+     */
+    private void registerStandardSavers() {
+        // Регистрируем обработчик для продуктов
+        registerSaver("product", entities -> saveProducts(entities));
 
-        registerSaver("competitordata", entities -> {
-            List<CompetitorData> competitorDataList = entities.stream()
-                    .filter(e -> e instanceof CompetitorData)
-                    .map(e -> (CompetitorData) e)
-                    .toList();
-            return competitorDataService.saveCompetitorDataList(competitorDataList);
-        });
+        // Регистрируем обработчик для регионов
+        registerSaver("regiondata", entities -> saveRegionData(entities));
+
+        // Регистрируем обработчик для конкурентов
+        registerSaver("competitordata", entities -> saveCompetitorData(entities));
 
         // Добавляем обработчик для связанных сущностей
-        registerSaver("product_with_related", entities -> {
-            log.info("Сохранение связанных сущностей, всего: {}", entities.size());
-            return relatedEntitiesRepository.saveRelatedEntities(entities);
-        });
+        registerSaver("product_with_related", entities -> relatedEntitiesRepository.saveRelatedEntities(entities));
+    }
+
+    /**
+     * Сохраняет продукты
+     *
+     * @param entities список сущностей
+     * @return количество сохраненных сущностей
+     */
+    private int saveProducts(List<ImportableEntity> entities) {
+        List<Product> products = filterEntitiesByType(entities, Product.class);
+        return productService.saveProducts(products);
+    }
+
+    /**
+     * Сохраняет данные регионов
+     *
+     * @param entities список сущностей
+     * @return количество сохраненных сущностей
+     */
+    private int saveRegionData(List<ImportableEntity> entities) {
+        List<RegionData> regionDataList = filterEntitiesByType(entities, RegionData.class);
+        return regionDataService.saveRegionDataList(regionDataList);
+    }
+
+    /**
+     * Сохраняет данные конкурентов
+     *
+     * @param entities список сущностей
+     * @return количество сохраненных сущностей
+     */
+    private int saveCompetitorData(List<ImportableEntity> entities) {
+        List<CompetitorData> competitorDataList = filterEntitiesByType(entities, CompetitorData.class);
+        return competitorDataService.saveCompetitorDataList(competitorDataList);
+    }
+
+    /**
+     * Фильтрует сущности по типу
+     *
+     * @param entities список сущностей
+     * @param type тип сущностей
+     * @return отфильтрованный список сущностей указанного типа
+     */
+    private <T extends ImportableEntity> List<T> filterEntitiesByType(List<ImportableEntity> entities, Class<T> type) {
+        return entities.stream()
+                .filter(type::isInstance)
+                .map(type::cast)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -79,13 +135,23 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
 
     @Override
     public void registerSaver(String entityType, Function<List<ImportableEntity>, Integer> saverFunction) {
-        if (entityType == null || saverFunction == null) {
-            throw new IllegalArgumentException("Тип сущности и функция сохранения не могут быть null");
-        }
+        validateSaverRegistrationParams(entityType, saverFunction);
 
         String type = entityType.toLowerCase();
         log.debug("Регистрация обработчика для типа сущности: {}", type);
         savers.put(type, saverFunction);
+    }
+
+    /**
+     * Валидирует параметры при регистрации обработчика
+     *
+     * @param entityType тип сущности
+     * @param saverFunction функция сохранения
+     */
+    private void validateSaverRegistrationParams(String entityType, Function<List<ImportableEntity>, Integer> saverFunction) {
+        if (entityType == null || saverFunction == null) {
+            throw new IllegalArgumentException("Тип сущности и функция сохранения не могут быть null");
+        }
     }
 
     @Override

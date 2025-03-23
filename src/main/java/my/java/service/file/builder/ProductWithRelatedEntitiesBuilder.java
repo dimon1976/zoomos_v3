@@ -27,22 +27,12 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     private Long clientId;
     private Long fileId;
 
-    // Динамические маппинги, которые могут быть переопределены
-    private Map<String, String> productFieldMapping;
-    private Map<String, String> regionFieldMapping;
-    private Map<String, String> competitorFieldMapping;
-
     // Маппинг между заголовками файла и полями сущностей
     private Map<String, String> fileHeaderToEntityField;
 
     public ProductWithRelatedEntitiesBuilder(ValueTransformerFactory transformerFactory, EntityFieldService entityFieldService) {
         this.transformerFactory = transformerFactory;
         this.entityFieldService = entityFieldService;
-
-        // Инициализируем маппинги из сервиса
-        this.productFieldMapping = entityFieldService.getFieldMappings("product");
-        this.regionFieldMapping = entityFieldService.getFieldMappings("regiondata");
-        this.competitorFieldMapping = entityFieldService.getFieldMappings("competitordata");
 
         // Инициализируем пустой маппинг заголовков файла
         this.fileHeaderToEntityField = new HashMap<>();
@@ -61,15 +51,31 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     }
 
     private boolean applyProductData(Map<String, String> row) {
-        boolean hasData = false;
+        // Собираем данные, относящиеся к продукту
+        Map<String, String> productData = extractEntityData(row, "product");
 
-        // Создаем продукт, если еще не создан
+        if (productData.isEmpty()) {
+            return false;
+        }
+
+        // Инициализируем продукт, если он еще не создан
+        initializeProduct();
+
+        // Заполняем поля продукта
+        product.fillFromMap(productData);
+
+        return true;
+    }
+
+    /**
+     * Инициализирует продукт, если он еще не создан
+     */
+    private void initializeProduct() {
         if (product == null) {
             product = new Product();
             product.setTransformerFactory(transformerFactory);
         }
 
-        // Применяем клиентский ID и ID файла
         if (clientId != null) {
             product.setClientId(clientId);
         }
@@ -79,38 +85,37 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         }
 
         product.setDataSource(DataSourceType.FILE);
-
-        // Заполняем поля продукта на основе маппинга заголовков файла
-        Map<String, String> productData = new HashMap<>();
-
-        for (Map.Entry<String, String> entry : row.entrySet()) {
-            String fileHeader = entry.getKey();
-            String value = entry.getValue();
-
-            // Пропускаем пустые значения
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            // Получаем имя поля сущности из маппинга заголовков
-            String entityField = fileHeaderToEntityField.get(fileHeader);
-            if (entityField != null && entityField.startsWith("product")) {
-                hasData = true;
-                productData.put(entityField, value);
-            }
-        }
-
-        if (hasData) {
-            product.fillFromMap(productData);
-        }
-
-        return hasData;
     }
 
     private boolean applyRegionData(Map<String, String> row) {
-        boolean hasData = false;
+        // Проверяем, есть ли данные о регионе в строке
+        if (!rowContainsRegionData(row)) {
+            return false;
+        }
 
-        // Проверяем, есть ли данные для региона на основе маппинга заголовков
+        // Извлекаем данные региона
+        Map<String, String> regionDataMap = extractEntityData(row, "region");
+
+        if (regionDataMap.isEmpty()) {
+            return false;
+        }
+
+        // Инициализируем данные о регионе, если они еще не созданы
+        initializeRegionData();
+
+        // Заполняем поля региона
+        regionData.fillFromMap(regionDataMap);
+
+        return true;
+    }
+
+    /**
+     * Проверяет, содержит ли строка данные о регионе
+     *
+     * @param row строка данных
+     * @return true, если строка содержит данные о регионе
+     */
+    private boolean rowContainsRegionData(Map<String, String> row) {
         for (Map.Entry<String, String> entry : row.entrySet()) {
             String fileHeader = entry.getKey();
             String value = entry.getValue();
@@ -121,54 +126,55 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
 
             String entityField = fileHeaderToEntityField.get(fileHeader);
             if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
-                hasData = true;
-                break;
+                return true;
             }
         }
+        return false;
+    }
 
-        if (!hasData) {
-            return false;
-        }
-
-        // Создаем регион, если еще не создан
+    /**
+     * Инициализирует данные о регионе, если они еще не созданы
+     */
+    private void initializeRegionData() {
         if (regionData == null) {
             regionData = new RegionData();
             regionData.setTransformerFactory(transformerFactory);
         }
 
-        // Применяем клиентский ID
         if (clientId != null) {
             regionData.setClientId(clientId);
         }
-
-        // Заполняем поля региона
-        Map<String, String> regionDataMap = new HashMap<>();
-        for (Map.Entry<String, String> entry : row.entrySet()) {
-            String fileHeader = entry.getKey();
-            String value = entry.getValue();
-
-            // Пропускаем пустые значения
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            String entityField = fileHeaderToEntityField.get(fileHeader);
-            if (entityField != null && (entityField.equals("region") || entityField.equals("regionAddress"))) {
-                regionDataMap.put(entityField, value);
-            }
-        }
-
-        if (!regionDataMap.isEmpty()) {
-            regionData.fillFromMap(regionDataMap);
-        }
-
-        return !regionDataMap.isEmpty();
     }
 
     private boolean applyCompetitorData(Map<String, String> row) {
-        boolean hasData = false;
+        // Проверяем, есть ли данные о конкуренте в строке
+        if (!rowContainsCompetitorData(row)) {
+            return false;
+        }
 
-        // Проверяем, есть ли данные для конкурента на основе маппинга заголовков
+        // Извлекаем данные конкурента
+        Map<String, String> competitorDataMap = extractEntityData(row, "competitor");
+
+        if (competitorDataMap.isEmpty()) {
+            return false;
+        }
+
+        // Инициализируем данные о конкуренте, если они еще не созданы
+        initializeCompetitorData();
+
+        // Заполняем поля конкурента
+        competitorData.fillFromMap(competitorDataMap);
+
+        return true;
+    }
+
+    /**
+     * Проверяет, содержит ли строка данные о конкуренте
+     *
+     * @param row строка данных
+     * @return true, если строка содержит данные о конкуренте
+     */
+    private boolean rowContainsCompetitorData(Map<String, String> row) {
         for (Map.Entry<String, String> entry : row.entrySet()) {
             String fileHeader = entry.getKey();
             String value = entry.getValue();
@@ -179,48 +185,53 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
 
             String entityField = fileHeaderToEntityField.get(fileHeader);
             if (entityField != null && entityField.startsWith("competitor")) {
-                hasData = true;
-                break;
+                return true;
             }
         }
+        return false;
+    }
 
-        if (!hasData) {
-            return false;
-        }
-
-        // Создаем данные о конкуренте, если еще не созданы
+    /**
+     * Инициализирует данные о конкуренте, если они еще не созданы
+     */
+    private void initializeCompetitorData() {
         if (competitorData == null) {
             competitorData = new CompetitorData();
             competitorData.setTransformerFactory(transformerFactory);
         }
 
-        // Применяем клиентский ID
         if (clientId != null) {
             competitorData.setClientId(clientId);
         }
+    }
 
-        // Заполняем поля конкурента
-        Map<String, String> competitorDataMap = new HashMap<>();
+    /**
+     * Извлекает данные для определенной сущности из строки
+     *
+     * @param row строка данных
+     * @param entityPrefix префикс полей сущности
+     * @return карта с данными сущности
+     */
+    private Map<String, String> extractEntityData(Map<String, String> row, String entityPrefix) {
+        Map<String, String> entityData = new HashMap<>();
+
         for (Map.Entry<String, String> entry : row.entrySet()) {
             String fileHeader = entry.getKey();
             String value = entry.getValue();
 
-            // Пропускаем пустые значения
             if (value == null || value.trim().isEmpty()) {
                 continue;
             }
 
             String entityField = fileHeaderToEntityField.get(fileHeader);
-            if (entityField != null && entityField.startsWith("competitor")) {
-                competitorDataMap.put(entityField, value);
+            if (entityField != null &&
+                    (entityField.startsWith(entityPrefix) ||
+                            entityPrefix.equals("region") && (entityField.equals("region") || entityField.equals("regionAddress")))) {
+                entityData.put(entityField, value);
             }
         }
 
-        if (!competitorDataMap.isEmpty()) {
-            competitorData.fillFromMap(competitorDataMap);
-        }
-
-        return !competitorDataMap.isEmpty();
+        return entityData;
     }
 
     /**

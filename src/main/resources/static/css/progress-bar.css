@@ -1,0 +1,174 @@
+/**
+ * progress-bar.css - Улучшенные стили для прогресс-бара
+ * Путь: /static/css/progress-bar.css
+ */
+
+/* Основной контейнер прогресс-бара */
+.progress-container {
+    margin: 1.5rem 0;
+}
+
+/* Прогресс-бар с улучшенной анимацией */
+.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+.progress-bar-animated.slow {
+    animation: progress-bar-stripes 2s linear infinite;
+}
+
+/* Индикатор процентов внутри прогресс-бара */
+.progress-bar .progress-percent {
+    position: absolute;
+    right: 10px;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+/* Размеры прогресс-бара */
+.progress.progress-lg {
+    height: 2rem;
+}
+
+.progress.progress-md {
+    height: 1.5rem;
+}
+
+.progress.progress-sm {
+    height: 0.75rem;
+}
+
+/* Улучшенная анимация для полосатого фона */
+@keyframes progress-bar-stripes {
+    from {
+        background-position: 1rem 0;
+    }
+    to {
+        background-position: 0 0;
+    }
+}
+
+/* Шаблон загрузки (для анимации волн) */
+.progress-wave {
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-wave .progress-bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.2) 50%,
+            rgba(255, 255, 255, 0) 100%
+    );
+    animation: wave 2s infinite linear;
+}
+
+@keyframes wave {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Стили для градиентного прогресс-бара */
+.progress-bar-gradient {
+    background: linear-gradient(
+            90deg,
+            var(--bs-primary) 0%,
+            var(--bs-info) 50%,
+            var(--bs-primary) 100%
+    );
+    background-size: 200% auto;
+    animation: gradient 3s ease infinite;
+}
+
+@keyframes gradient {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Стили для прогресс-бара с метками */
+.progress-with-labels {
+    height: 2rem;
+    margin-top: 2rem;
+    position: relative;
+}
+
+.progress-label {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    color: var(--bs-gray-600);
+    white-space: nowrap;
+}
+
+.progress-label::before {
+    content: "";
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 6px;
+    width: 1px;
+    background-color: var(--bs-gray-400);
+}
+
+/* Индикатор активного шага */
+.progress-step {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background-color: white;
+    border: 2px solid var(--bs-primary);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    top: 50%;
+}
+
+.progress-step.active {
+    background-color: var(--bs-primary);
+}
+
+.progress-step.completed {
+    background-color: var(--bs-success);
+    border-color: var(--bs-success);
+}
+
+/* Контейнер для сопроводительного текста */
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--bs-gray-600);
+}
+
+.progress-info .status {
+    font-weight: bold;
+}
+
+.progress-info .percentage {
+    font-weight: bold;
+}
+
+.progress-info .timing {
+    text-align: right;
+}

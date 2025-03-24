@@ -99,6 +99,16 @@ public class FileOperation {
     @Column(name = "duplicate_handling")
     private String duplicateHandling;
 
+    // Новые поля для экспорта
+    @Column(name = "entity_type")
+    private String entityType;
+
+    @Column(name = "export_filter_criteria", columnDefinition = "TEXT")
+    private String exportFilterCriteria;
+
+    @Column(name = "operation_description")
+    private String operationDescription;
+
     // Enum для типа операции
     public enum OperationType {
         IMPORT, EXPORT, PROCESS
@@ -157,6 +167,42 @@ public class FileOperation {
             long hours = durationSeconds / 3600;
             long minutes = (durationSeconds % 3600) / 60;
             return String.format("%d ч %d мин", hours, minutes);
+        }
+    }
+
+    // Новые методы для поддержки экспорта
+    /**
+     * Создает новую операцию экспорта
+     * @param client клиент
+     * @param fileName имя файла
+     * @param fileType тип файла
+     * @param entityType тип сущности
+     * @return новая операция экспорта
+     */
+    public static FileOperation createExportOperation(Client client, String fileName, String fileType, String entityType) {
+        FileOperation operation = new FileOperation();
+        operation.setClient(client);
+        operation.setOperationType(OperationType.EXPORT);
+        operation.setFileName(fileName);
+        operation.setFileType(fileType);
+        operation.setEntityType(entityType);
+        operation.setStatus(OperationStatus.PENDING);
+        operation.setStartedAt(ZonedDateTime.now());
+        operation.setProcessingProgress(0);
+        return operation;
+    }
+
+    /**
+     * Обновляет прогресс экспорта
+     * @param processed количество обработанных записей
+     * @param total общее количество записей
+     */
+    public void updateExportProgress(int processed, int total) {
+        this.processedRecords = processed;
+        this.totalRecords = total;
+
+        if (total > 0) {
+            this.processingProgress = Math.min(100, (int)((processed * 100.0) / total));
         }
     }
 }

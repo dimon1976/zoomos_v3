@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Экспорт данных</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+    <link rel="stylesheet" th:href="@{/css/progress-bar.css}">
+</head>
+<body>
+<div th:replace="layout/main :: header"></div>
+
+<div class="container mt-4">
+    <h1>Экспорт данных</h1>
+
+    <!-- Вкладки для разных типов экспорта -->
+    <ul class="nav nav-tabs mb-4" id="exportTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="standard-tab" data-bs-toggle="tab" data-bs-target="#standard" type="button" role="tab" aria-controls="standard" aria-selected="true">
+                Стандартный экспорт
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="import-based-tab" data-bs-toggle="tab" data-bs-target="#import-based" type="button" role="tab" aria-controls="import-based" aria-selected="false">
+                Экспорт из импорта
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="custom-tab" data-bs-toggle="tab" data-bs-target="#custom" type="button" role="tab" aria-controls="custom" aria-selected="false">
+                Настраиваемый экспорт
+            </button>
+        </li>
+    </ul>
+
+    <!-- Содержимое вкладок -->
+    <div class="tab-content" id="exportTabsContent">
+        <!-- Стандартный экспорт -->
+        <div class="tab-pane fade show active" id="standard" role="tabpanel" aria-labelledby="standard-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Параметры экспорта</h5>
+                </div>
+                <div class="card-body">
+                    <form id="exportForm">
+                        <div class="form-group row mb-3">
+                            <label for="clientSelect" class="col-sm-2 col-form-label">Клиент:</label>
+                            <div class="col-sm-10">
+                                <select id="clientSelect" name="clientId" class="form-control" required>
+                                    <option value="">-- Выберите клиента --</option>
+                                    <option th:each="client : ${clients}"
+                                            th:value="${client.id}"
+                                            th:text="${client.name}"></option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-3">
+                            <label for="entityType" class="col-sm-2 col-form-label">Тип данных:</label>
+                            <div class="col-sm-10">
+                                <select id="entityType" name="entityType" class="form-control" required>
+                                    <option value="">-- Выберите тип данных --</option>
+                                    <option value="product">Продукты</option>
+                                    <option value="competitor">Данные конкурентов</option>
+                                    <option value="region">Региональные данные</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-3">
+                            <label for="fileFormat" class="col-sm-2 col-form-label">Формат файла:</label>
+                            <div class="col-sm-10">
+                                <select id="fileFormat" name="format" class="form-control" required>
+                                    <option value="CSV">CSV</option>
+                                    <option value="EXCEL">Excel</option>
+                                    <option value="JSON">JSON</option>
+                                    <option value="XML">XML</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="filterSection" class="mb-3">
+                            <h5>Фильтры</h5>
+                            <div id="filters">
+                                <!-- Динамически добавляемые фильтры будут здесь -->
+                            </div>
+                            <button type="button" id="addFilterBtn" class="btn btn-outline-secondary btn-sm mt-2">
+                                <i class="bi bi-plus-circle"></i> Добавить фильтр
+                            </button>
+                        </div>
+
+                        <div class="form-group row">
+                            <div class="col-sm-10 offset-sm-2">
+                                <button type="button" id="exportBtn" class="btn btn-primary">
+                                    <i class="bi bi-download"></i> Экспортировать
+                                </button>
+                                <button type="button" id="asyncExportBtn" class="btn btn-outline-primary">
+                                    <i class="bi bi-cloud-download"></i> Асинхронный экспорт
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экспорт из импорта -->
+        <div class="tab-pane fade" id="import-based" role="tabpanel" aria-labelledby="import-based-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Экспорт данных из импорта</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Выберите операцию импорта, на основе которой нужно выполнить экспорт:</p>
+
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Дата</th>
+                                <th>Клиент</th>
+                                <th>Файл</th>
+                                <th>Статус</th>
+                                <th>Записей</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="operation : ${importOperations}">
+                                <td th:text="${operation.id}"></td>
+                                <td th:text="${#temporals.format(operation.startedAt, 'dd.MM.yyyy HH:mm')}"></td>
+                                <td th:text="${operation.client?.name}"></td>
+                                <td th:text="${operation.fileName}"></td>
+                                <td>
+                                            <span th:class="${'badge ' + (operation.status == 'COMPLETED' ? 'bg-success' : (operation.status == 'FAILED' ? 'bg-danger' : 'bg-warning'))}"
+                                                  th:text="${operation.status}"></span>
+                                </td>
+                                <td th:text="${operation.recordCount}"></td>
+                                <td>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                            Экспорт
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li>
+                                                <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='CSV')}">
+                                                    <i class="bi bi-filetype-csv"></i> CSV
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='EXCEL')}">
+                                                    <i class="bi bi-filetype-xlsx"></i> Excel
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='JSON')}">
+                                                    <i class="bi bi-filetype-json"></i> JSON
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='XML')}">
+                                                    <i class="bi bi-filetype-xml"></i> XML
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Настраиваемый экспорт -->
+        <div class="tab-pane fade" id="custom" role="tabpanel" aria-labelledby="custom-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Настраиваемый экспорт</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Настройте параметры экспорта:</p>
+
+                    <form id="customExportForm" class="needs-validation" novalidate>
+                        <!-- Базовые параметры (клиент, тип данных, формат) -->
+                        <div class="form-group row mb-3">
+                            <label for="customClientSelect" class="col-sm-3 col-form-label">Клиент:</label>
+                            <div class="col-sm-9">
+                                <select id="customClientSelect" name="clientId" class="form-control" required>
+                                    <option value="">-- Выберите клиента --</option>
+                                    <option th:each="client : ${clients}"
+                                            th:value="${client.id}"
+                                            th:text="${client.name}"></option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-3">
+                            <label for="customEntityType" class="col-sm-3 col-form-label">Тип данных:</label>
+                            <div class="col-sm-9">
+                                <select id="customEntityType" name="entityType" class="form-control" required>
+                                    <option value="">-- Выберите тип данных --</option>
+                                    <option value="product">Продукты</option>
+                                    <option value="competitor">Данные конкурентов</option>
+                                    <option value="region">Региональные данные</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-3">
+                            <label for="customFileFormat" class="col-sm-3 col-form-label">Формат файла:</label>
+                            <div class="col-sm-9">
+                                <select id="customFileFormat" name="format" class="form-control" required>
+                                    <option value="CSV">CSV</option>
+                                    <option value="EXCEL">Excel</option>
+                                    <option value="JSON">JSON</option>
+                                    <option value="XML">XML</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Настройки полей -->
+                        <h6>Выбор полей для экспорта</h6>
+                        <div id="fieldsSection" class="mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="selectAllFields" checked>
+                                <label class="form-check-label" for="selectAllFields">
+                                    Выбрать все поля
+                                </label>
+                            </div>
+
+                            <div id="fieldsList" class="row">
+                                <!-- Поля будут добавлены динамически -->
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Настройки форматирования -->
+                        <h6>Настройки форматирования</h6>
+                        <div class="form-group row mb-3">
+                            <label for="dateFormat" class="col-sm-3 col-form-label">Формат даты:</label>
+                            <div class="col-sm-9">
+                                <select id="dateFormat" name="dateFormat" class="form-control">
+                                    <option value="dd.MM.yyyy">ДД.ММ.ГГГГ</option>
+                                    <option value="dd.MM.yyyy HH:mm:ss">ДД.ММ.ГГГГ ЧЧ:ММ:СС</option>
+                                    <option value="yyyy-MM-dd">ГГГГ-ММ-ДД</option>
+                                    <option value="yyyy-MM-dd'T'HH:mm:ss">ГГГГ-ММ-ДД'T'ЧЧ:ММ:СС</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-3">
+                            <label for="numberFormat" class="col-sm-3 col-form-label">Формат чисел:</label>
+                            <div class="col-sm-9">
+                                <select id="numberFormat" name="numberFormat" class="form-control">
+                                    <option value="0">Целые числа</option>
+                                    <option value="0.00">Два десятичных знака</option>
+                                    <option value="#,##0.00">С разделителем групп разрядов</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-3">
+                            <label for="csvDelimiter" class="col-sm-3 col-form-label">Разделитель CSV:</label>
+                            <div class="col-sm-9">
+                                <select id="csvDelimiter" name="csvDelimiter" class="form-control">
+                                    <option value=";">Точка с запятой (;)</option>
+                                    <option value=",">Запятая (,)</option>
+                                    <option value="|">Вертикальная черта (|)</option>
+                                    <option value="tab">Табуляция</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="includeHeader" name="includeHeader" checked>
+                            <label class="form-check-label" for="includeHeader">
+                                Включить заголовок
+                            </label>
+                        </div>
+
+                        <!-- Кнопки действий -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" id="customExportBtn" class="btn btn-primary">
+                                <i class="bi bi-download"></i> Экспортировать
+                            </button>
+                            <button type="button" id="saveTemplateBtn" class="btn btn-outline-secondary">
+                                <i class="bi bi-save"></i> Сохранить шаблон
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для отображения прогресса экспорта -->
+<div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="progressModalLabel">Прогресс экспорта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="progress-container">
+                    <div class="progress mb-3">
+                        <div id="exportProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar" style="width: 0%;"
+                             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    </div>
+                    <p id="exportProgressStatus">Подготовка к экспорту...</p>
+                    <p id="exportProgressDetails" class="text-muted small"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <a id="downloadResultBtn" href="#" class="btn btn-primary d-none">Скачать результат</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для сохранения шаблона -->
+<div class="modal fade" id="saveTemplateModal" tabindex="-1" aria-labelledby="saveTemplateModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="saveTemplateModalLabel">Сохранение шаблона экспорта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="saveTemplateForm">
+                    <div class="mb-3">
+                        <label for="templateName" class="form-label">Название шаблона</label>
+                        <input type="text" class="form-control" id="templateName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="templateDescription" class="form-label">Описание</label>
+                        <textarea class="form-control" id="templateDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" id="confirmSaveTemplateBtn" class="btn btn-primary">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="layout/main :: footer"></div>
+
+<!-- Скрипты -->
+<script th:src="@{/js/lib/sockjs.min.js}"></script>
+<script th:src="@{/js/lib/stomp.min.js}"></script>
+<script th:src="@{/js/export.js}"></script>
+</body>
+</html>

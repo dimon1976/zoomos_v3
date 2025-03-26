@@ -50,8 +50,8 @@ public class FileExportController {
     // Карта соответствия строковых типов сущностей и классов
     private static final Map<String, Class<? extends ImportableEntity>> ENTITY_TYPES = Map.of(
             "product", Product.class,
-            "competitor", CompetitorData.class,
-            "region", RegionData.class
+            "competitordata", CompetitorData.class,
+            "regiondata", RegionData.class
     );
 
     /**

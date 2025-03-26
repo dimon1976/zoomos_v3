@@ -35,6 +35,7 @@ public class FileOperationDto {
     private String processingStrategy;
     private String errorHandling;
     private String duplicateHandling;
+    private String entityType;
 
     // Вспомогательные методы для форматирования дат
     public String getFormattedStartedAt() {

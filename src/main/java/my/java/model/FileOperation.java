@@ -1,19 +1,19 @@
 package my.java.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.proxy.HibernateProxy;
 
 import java.time.ZonedDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "file_operations")
 @Data
+@ToString
+@RequiredArgsConstructor
 @Builder
-@NoArgsConstructor
 @AllArgsConstructor
 public class FileOperation {
 
@@ -24,6 +24,7 @@ public class FileOperation {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id")
+    @ToString.Exclude
     private Client client;
 
     @Enumerated(EnumType.STRING)

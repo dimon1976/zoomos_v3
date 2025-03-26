@@ -1,13 +1,18 @@
 package my.java.service.file.exporter.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.model.Client;
 import my.java.model.FileOperation;
+import my.java.model.entity.CompetitorData;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.Product;
+import my.java.model.entity.RegionData;
+import my.java.repository.CompetitorDataRepository;
 import my.java.repository.FileOperationRepository;
+import my.java.repository.ProductRepository;
+import my.java.repository.RegionDataRepository;
 import my.java.service.file.exporter.ExportConfig;
 import my.java.service.file.exporter.FileExportService;
 import my.java.service.file.exporter.FileFormat;
@@ -15,14 +20,12 @@ import my.java.service.file.exporter.processor.FileExportProcessor;
 import my.java.service.file.exporter.processor.FileExportProcessorFactory;
 import my.java.service.file.exporter.tracker.ExportProgressTracker;
 import my.java.util.PathResolver;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -34,16 +37,60 @@ import java.util.Optional;
  * Путь: /java/my/java/service/file/exporter/impl/FileExportServiceImpl.java
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class FileExportServiceImpl implements FileExportService {
 
-    private final Map<Class<? extends ImportableEntity>, JpaRepository<? extends ImportableEntity, ?>> repositories;
+    private final Map<Class<? extends ImportableEntity>, JpaRepository<? extends ImportableEntity, ?>> repositories = new HashMap<>();
     private final FileOperationRepository fileOperationRepository;
     private final ExportProgressTracker progressTracker;
     private final FileExportProcessorFactory processorFactory;
     private final PathResolver pathResolver;
     private final ObjectMapper objectMapper;
+
+    // Добавляем репозитории
+    private final ProductRepository productRepository;
+    private final RegionDataRepository regionDataRepository;
+    private final CompetitorDataRepository competitorDataRepository;
+
+    // Обновляем конструктор, добавляя новые поля
+    @Autowired
+    public FileExportServiceImpl(
+            FileOperationRepository fileOperationRepository,
+            ExportProgressTracker progressTracker,
+            FileExportProcessorFactory processorFactory,
+            PathResolver pathResolver,
+            ObjectMapper objectMapper,
+            ProductRepository productRepository,
+            RegionDataRepository regionDataRepository,
+            CompetitorDataRepository competitorDataRepository) {
+        this.fileOperationRepository = fileOperationRepository;
+        this.progressTracker = progressTracker;
+        this.processorFactory = processorFactory;
+        this.pathResolver = pathResolver;
+        this.objectMapper = objectMapper;
+        this.productRepository = productRepository;
+        this.regionDataRepository = regionDataRepository;
+        this.competitorDataRepository = competitorDataRepository;
+
+        // Инициализируем карту репозиториев
+        initializeRepositoriesMap();
+    }
+
+    /**
+     * Инициализирует карту репозиториев.
+     * Вызывается после внедрения всех зависимостей через конструктор.
+     */
+    private void initializeRepositoriesMap() {
+        repositories.put(Product.class, productRepository);
+        repositories.put(RegionData.class, regionDataRepository);
+        repositories.put(CompetitorData.class, competitorDataRepository);
+
+        log.info("Инициализирована карта репозиториев: {} репозиториев", repositories.size());
+        // Выводим отладочную информацию для проверки
+        for (Class<?> cls : repositories.keySet()) {
+            log.debug("Зарегистрирован репозиторий для класса: {}", cls.getName());
+        }
+    }
 
     @Override
     @Transactional
@@ -336,31 +383,80 @@ public class FileExportServiceImpl implements FileExportService {
 
     /**
      * Загружает сущности из БД с применением фильтров
-     * Заглушка - в реальной реализации здесь будет логика фильтрации
      */
     private <T> List<T> loadEntitiesWithFilter(JpaRepository<T, ?> repository, Map<String, Object> filterCriteria) {
-        // Заглушка - в реальной реализации здесь будет логика применения фильтров
+        // Реализация фильтрации данных
+        // Пока используем простой findAll, в будущем здесь будет логика применения фильтров
+
+        // Если есть критерии фильтрации для clientId, применяем их
+        if (filterCriteria != null && filterCriteria.containsKey("clientId")) {
+            Long clientId = Long.valueOf(filterCriteria.get("clientId").toString());
+
+            // Проверяем, какой репозиторий используется и применяем соответствующий метод
+            if (repository instanceof ProductRepository) {
+                return (List<T>) ((ProductRepository) repository).findByClientId(clientId);
+            } else if (repository instanceof RegionDataRepository) {
+                return (List<T>) ((RegionDataRepository) repository).findByClientId(clientId);
+            } else if (repository instanceof CompetitorDataRepository) {
+                return (List<T>) ((CompetitorDataRepository) repository).findByClientId(clientId);
+            }
+        }
+
+        // Если нет подходящих критериев или репозиторий неизвестен, возвращаем все записи
         return repository.findAll();
     }
 
     /**
      * Определяет класс сущности по строковому типу
-     * Заглушка - в реальной реализации здесь будет логика определения класса
      */
     private Class<? extends ImportableEntity> determineEntityClass(String entityType) {
-        // Заглушка - в реальной реализации здесь будет логика определения класса
-        // по строковому типу сущности
-        throw new UnsupportedOperationException("Метод определения класса сущности не реализован");
+        if (entityType == null) {
+            throw new IllegalArgumentException("Тип сущности не указан");
+        }
+
+        // Приводим к нижнему регистру для единообразия
+        String type = entityType.toLowerCase();
+
+        // Определяем класс в зависимости от типа
+        switch (type) {
+            case "product":
+                return Product.class;
+            case "regiondata":
+            case "region":
+                return RegionData.class;
+            case "competitordata":
+            case "competitor":
+                return CompetitorData.class;
+            default:
+                throw new IllegalArgumentException("Неизвестный тип сущности: " + entityType);
+        }
     }
 
     /**
      * Маппит сущность FileOperation в DTO
      */
     private FileOperationDto mapToDto(FileOperation operation) {
-        // Заглушка - в реальной реализации здесь будет логика маппинга
         FileOperationDto dto = new FileOperationDto();
+        dto.setId(operation.getId());
+        dto.setFileName(operation.getFileName());
+        dto.setFileType(operation.getFileType());
+        dto.setStatus(operation.getStatus());
+        dto.setOperationType(operation.getOperationType());
+        dto.setEntityType(operation.getEntityType());
+        dto.setStartedAt(operation.getStartedAt());
+        dto.setCompletedAt(operation.getCompletedAt());
+        dto.setErrorMessage(operation.getErrorMessage());
+        dto.setProcessingProgress(operation.getProcessingProgress());
+        dto.setClientId(operation.getClient().getId());
+        dto.setProcessedRecords(operation.getProcessedRecords());
+        dto.setTotalRecords(operation.getTotalRecords());
 
-        // ... заполнение полей DTO ...
+        // Рассчитываем дополнительные поля
+//        if (operation.getStartedAt() != null && operation.getCompletedAt() != null) {
+//            long duration = operation.getCompletedAt().toInstant().toEpochMilli() -
+//                    operation.getStartedAt().toInstant().toEpochMilli();
+//            dto.setDuration(duration);
+//        }
 
         return dto;
     }

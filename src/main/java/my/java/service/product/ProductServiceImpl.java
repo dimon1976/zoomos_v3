@@ -8,6 +8,7 @@ import my.java.service.base.BaseEntityService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,7 +37,14 @@ public class ProductServiceImpl extends BaseEntityService<Product, Long, Product
     public int saveProducts(List<Product> products) {
         return saveAll(products);
     }
-
+    @Override
+    @Transactional(readOnly = true)
+    public List<Product> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return repository.findAllById(ids);
+    }
     @Override
     @Transactional(readOnly = true)
     public Optional<Product> findByProductIdAndClientId(String productId, Long clientId) {

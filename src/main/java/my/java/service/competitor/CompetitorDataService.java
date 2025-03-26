@@ -81,4 +81,6 @@ public interface CompetitorDataService {
      * @return обновленные или созданные данные конкурента
      */
     CompetitorData upsertCompetitorData(CompetitorData competitorData);
+
+    List<CompetitorData> findByIds(List<Long> ids);
 }

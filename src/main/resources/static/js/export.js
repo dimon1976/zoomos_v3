@@ -73,11 +73,25 @@ document.addEventListener('DOMContentLoaded', function() {
         // Запрашиваем поля для выбранного типа сущности
         const entityType = entityTypeSelect.value;
         if (entityType) {
+            // Показываем индикатор загрузки
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'text-center my-3';
+            loadingIndicator.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div>';
+            filtersContainer.appendChild(loadingIndicator);
+
             // Запрос доступных полей
             fetch(`/api/metadata/fields/${entityType}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    // Создаем datalist для полей
+                    // Удаляем индикатор загрузки
+                    filtersContainer.innerHTML = '';
+
+                    // Проверяем структуру данных и создаем datalist для полей
                     createFieldsDatalist(data);
 
                     // Добавляем начальный фильтр
@@ -85,9 +99,48 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .catch(error => {
                     console.error('Ошибка при загрузке полей:', error);
+
+                    // Удаляем индикатор загрузки
+                    filtersContainer.innerHTML = '';
+
+                    // Показываем сообщение об ошибке
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'alert alert-warning mt-2';
+                    errorMsg.textContent = `Не удалось загрузить список полей: ${error.message}`;
+                    filtersContainer.parentNode.insertBefore(errorMsg, filtersContainer);
+
+                    // Добавляем пустой фильтр
                     addFilterRow();
                 });
         }
+    }
+
+// Обновленная функция для создания datalist полей
+    function createFieldsDatalist(fields) {
+        let datalist = document.getElementById('fieldsList');
+        if (datalist) {
+            datalist.innerHTML = '';
+        } else {
+            datalist = document.createElement('datalist');
+            datalist.id = 'fieldsList';
+            document.body.appendChild(datalist);
+        }
+
+        // Добавляем опции
+        fields.forEach(field => {
+            const option = document.createElement('option');
+            if (typeof field === 'string') {
+                option.value = field;
+                option.textContent = field;
+            } else {
+                option.value = field.name;
+                option.textContent = field.displayName || field.name;
+            }
+            datalist.appendChild(option);
+        });
+
+        // Отладочный вывод в консоль для проверки
+        console.log(`Загружено ${fields.length} полей в datalist`);
     }
 
     // Добавление строки фильтра
@@ -167,26 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 valueInput.setAttribute('data-param-name', `${field}__${operator}`);
             }
         }
-    }
-
-    // Создание списка полей
-    function createFieldsDatalist(fields) {
-        let datalist = document.getElementById('fieldsList');
-        if (datalist) {
-            datalist.innerHTML = '';
-        } else {
-            datalist = document.createElement('datalist');
-            datalist.id = 'fieldsList';
-            document.body.appendChild(datalist);
-        }
-
-        // Добавляем опции
-        fields.forEach(field => {
-            const option = document.createElement('option');
-            option.value = field.name;
-            option.textContent = field.displayName || field.name;
-            datalist.appendChild(option);
-        });
     }
 
     // Обработчик стандартного экспорта

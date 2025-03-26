@@ -8,6 +8,7 @@ import my.java.service.base.BaseEntityService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -108,6 +109,15 @@ public class RegionDataServiceImpl extends BaseEntityService<RegionData, Long, R
         }
 
         return repository.save(regionData);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RegionData> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return repository.findAllById(ids);
     }
 
     /**

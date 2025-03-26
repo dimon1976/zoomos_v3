@@ -316,24 +316,44 @@ function loadFieldsForCustomExport() {
 
     // Очищаем список полей
     const fieldsListContainer = document.getElementById('fieldsList');
-    if (fieldsListContainer) fieldsListContainer.innerHTML = '';
+    if (fieldsListContainer) {
+        // Показываем индикатор загрузки
+        fieldsListContainer.innerHTML = `
+            <div class="col-12 text-center py-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+                <p class="mt-2">Загрузка доступных полей...</p>
+            </div>
+        `;
+    }
 
     // Запрашиваем поля для выбранного типа сущности
     fetch(`/api/metadata/fields/${entityType}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             // Отображаем поля
             displayEntityFields(data);
         })
         .catch(error => {
             console.error('Ошибка при загрузке полей:', error);
-            fieldsListContainer.innerHTML = `
-                <div class="col-12">
-                    <div class="alert alert-danger">
-                        Ошибка при загрузке полей: ${error.message}
+
+            if (fieldsListContainer) {
+                fieldsListContainer.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            Ошибка при загрузке полей: ${error.message}
+                        </div>
+                        <p>Пожалуйста, попробуйте выбрать другой тип данных или перезагрузите страницу.</p>
                     </div>
-                </div>
-            `;
+                `;
+            }
         });
 }
 
@@ -359,6 +379,10 @@ function displayEntityFields(fields) {
 
     // Добавляем поля
     fields.forEach(field => {
+        // Проверяем формат поля
+        const fieldName = typeof field === 'object' ? field.name : field;
+        const displayName = typeof field === 'object' ? (field.displayName || field.name) : field;
+
         // Создаем элемент с чекбоксом для каждого поля
         const fieldCol = document.createElement('div');
         fieldCol.className = 'col-md-4 mb-2';
@@ -366,15 +390,18 @@ function displayEntityFields(fields) {
         fieldCol.innerHTML = `
             <div class="form-check">
                 <input class="form-check-input field-checkbox" type="checkbox" 
-                       id="field_${field.name}" value="${field.name}" checked>
-                <label class="form-check-label" for="field_${field.name}">
-                    ${field.displayName || field.name}
+                       id="field_${fieldName}" value="${fieldName}" checked>
+                <label class="form-check-label" for="field_${fieldName}">
+                    ${displayName}
                 </label>
             </div>
         `;
 
         fieldsListContainer.appendChild(fieldCol);
     });
+
+    // Отладочный вывод
+    console.log(`Отображено ${fields.length} полей для экспорта`);
 }
 
 // Переключение всех полей

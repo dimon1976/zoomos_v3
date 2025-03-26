@@ -17,6 +17,8 @@ E:.
 |           +---controller
 |           |       ClientController.java
 |           |       EntityDataController.java
+|           |       ExportProgressController.java
+|           |       FileExportController.java
 |           |       FileImportController.java
 |           |       ImportProgressController.java
 |           |       MainController.java
@@ -73,6 +75,24 @@ E:.
 |           |   |   |       EntitySaverFactory.java
 |           |   |   |       EntitySaverFactoryImpl.java
 |           |   |   |       
+|           |   |   +---exporter
+|           |   |   |   |   ExportConfig.java
+|           |   |   |   |   FileExportService.java
+|           |   |   |   |   FileFormat.java
+|           |   |   |   |   
+|           |   |   |   +---impl
+|           |   |   |   |       FileExportServiceImpl.java
+|           |   |   |   |       
+|           |   |   |   +---processor
+|           |   |   |   |       AbstractFileExportProcessor.java
+|           |   |   |   |       CsvFileExportProcessor.java
+|           |   |   |   |       ExcelFileExportProcessor.java
+|           |   |   |   |       FileExportProcessor.java
+|           |   |   |   |       FileExportProcessorFactory.java
+|           |   |   |   |       
+|           |   |   |   \---tracker
+|           |   |   |           ExportProgressTracker.java
+|           |   |   |           
 |           |   |   +---importer
 |           |   |   |       FileImportService.java
 |           |   |   |       FileImportServiceImpl.java
@@ -144,10 +164,11 @@ E:.
     |           
     +---static
     |   +---css
-    |   |       progress-bar.css
     |   |       styles.css
     |   |       
     |   \---js
+    |       |   export-script.js
+    |       |   export.js
     |       |   import-progress.js
     |       |   main.js
     |       |   
@@ -168,6 +189,9 @@ E:.
         |       file-error.html
         |       general.html
         |       not-found.html
+        |       
+        +---export
+        |       index.html
         |       
         +---fragments
         |       notifications.html

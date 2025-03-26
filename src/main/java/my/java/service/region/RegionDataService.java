@@ -72,4 +72,6 @@ public interface RegionDataService {
      * @return обновленные или созданные данные региона
      */
     RegionData upsertRegionData(RegionData regionData);
+
+    List<RegionData> findByIds(List<Long> ids);
 }

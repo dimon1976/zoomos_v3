@@ -297,15 +297,15 @@ public class FileExportController {
 
             switch (entityType.toLowerCase()) {
                 case "product":
-//                    entities = productService.findByIds(ids);
+                    entities = productService.findByIds(ids);
                     entities = null;
                     break;
                 case "competitor":
-//                    entities = competitorDataService.findByIds(ids);
+                    entities = competitorDataService.findByIds(ids);
                     entities = null;
                     break;
                 case "region":
-//                    entities = regionDataService.findByIds(ids);
+                    entities = regionDataService.findByIds(ids);
                     entities = null;
                     break;
                 default:

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -115,6 +116,15 @@ public class CompetitorDataServiceImpl extends BaseEntityService<CompetitorData,
         }
 
         return repository.save(competitorData);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CompetitorData> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return repository.findAllById(ids);
     }
 
     /**

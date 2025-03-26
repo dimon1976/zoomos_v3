@@ -61,6 +61,9 @@ public interface ProductService {
      */
     void deleteProduct(Long id);
 
+
+    List<Product> findByIds(List<Long> ids);
+
     /**
      * Удаляет продукты по идентификатору файла и клиенту
      * @param fileId идентификатор файла

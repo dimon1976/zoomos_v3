@@ -1,5 +1,5 @@
 // src/main/java/my/java/service/competitor/CompetitorDataService.java
-package my.java.service.competitor;
+package my.java.service.entity.competitor;
 
 import my.java.model.entity.Competitor;
 

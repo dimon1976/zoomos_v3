@@ -1,5 +1,5 @@
 // src/main/java/my/java/service/region/RegionDataService.java
-package my.java.service.region;
+package my.java.service.entity.region;
 
 import my.java.model.entity.RegionData;
 

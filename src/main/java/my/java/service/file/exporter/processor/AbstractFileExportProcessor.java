@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.ImportableEntity;
 import my.java.service.file.exporter.ExportConfig;
 import my.java.service.file.exporter.tracker.ExportProgressTracker;
+import my.java.service.file.exporter.processor.composite.ProductWithRelatedEntitiesExporter.CompositeProductEntity;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -22,24 +23,99 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public abstract class AbstractFileExportProcessor<T extends ImportableEntity> implements FileExportProcessor<T> {
 
+    protected Class<T> entityClass;
+
+    /**
+     * Получает список полей для экспорта составной сущности
+     *
+     * @param compositeEntity составная сущность
+     * @param config          конфигурация экспорта
+     * @return список имен полей для экспорта
+     */
+    protected List<String> getCompositeFieldNames(CompositeProductEntity compositeEntity, ExportConfig config) {
+        List<String> result = new ArrayList<>();
+        Map<String, String> fieldMappings = compositeEntity.getFieldMappings();
+
+        // Если указаны конкретные поля для включения, используем их
+        if (!config.getIncludedFields().isEmpty()) {
+            for (String header : config.getIncludedFields()) {
+                String fieldName = fieldMappings.get(header);
+                if (fieldName != null) {
+                    result.add(fieldName);
+                } else {
+                    log.warn("Не найдено соответствие для заголовка: {}", header);
+                }
+            }
+        } else {
+            // Если поля не указаны, используем все поля из маппинга
+            result.addAll(fieldMappings.values());
+
+            // Фильтруем поля, которые указаны для исключения
+            if (!config.getExcludedFields().isEmpty()) {
+                result.removeAll(config.getExcludedFields());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Получает заголовки столбцов для экспорта составных сущностей
+     *
+     * @param fieldNames      список имен полей
+     * @param compositeEntity составная сущность для получения маппинга
+     * @param config          конфигурация экспорта
+     * @return список заголовков столбцов
+     */
+    protected List<String> getCompositeHeaderNames(
+            List<String> fieldNames,
+            CompositeProductEntity compositeEntity,
+            ExportConfig config) {
+
+        List<String> result = new ArrayList<>();
+        Map<String, String> fieldMappings = compositeEntity.getFieldMappings();
+
+        // Инвертируем маппинг для поиска заголовков по именам полей
+        Map<String, String> invertedMappings = new HashMap<>();
+        for (Map.Entry<String, String> entry : fieldMappings.entrySet()) {
+            invertedMappings.put(entry.getValue(), entry.getKey());
+        }
+
+        // Для каждого поля находим соответствующий заголовок
+        for (String fieldName : fieldNames) {
+            // Проверяем сначала конфигурацию экспорта
+            if (config.getFieldMappings().containsKey(fieldName)) {
+                result.add(config.getFieldMappings().get(fieldName));
+            } else {
+                // Затем проверяем инвертированный маппинг сущности
+                String header = invertedMappings.get(fieldName);
+                if (header != null) {
+                    result.add(header);
+                } else {
+                    // Если заголовок не найден, используем форматированное имя поля
+                    result.add(formatFieldName(fieldName));
+                }
+            }
+        }
+
+        return result;
+    }
+
+
     /**
      * Получает список полей для экспорта на основе класса сущности и конфигурации
      */
     protected List<String> getFieldNames(Class<T> entityClass, ExportConfig config) {
         List<String> result = new ArrayList<>();
 
-        // Если указаны конкретные поля для включения, используем их
-        if (!config.getIncludedFields().isEmpty()) {
-            // Создаем инстанс сущности для получения маппинга
-            try {
-                T entity = entityClass.getDeclaredConstructor().newInstance();
-                Map<String, String> fieldMappings = entity.getFieldMappings();
+        try {
+            // Создаем экземпляр сущности для получения маппинга полей
+            T entity = entityClass.getDeclaredConstructor().newInstance();
+            Map<String, String> fieldMappings = entity.getFieldMappings();
 
-                // Инвертируем маппинг для поиска (ключ -> имя поля, значение -> заголовок)
-                Map<String, String> invertedMappings = new HashMap<>();
-                invertedMappings.putAll(fieldMappings);
-
-                // Для каждого выбранного заголовка находим соответствующее имя поля
+            // Если указаны конкретные поля для включения, используем их
+            if (!config.getIncludedFields().isEmpty()) {
+                // Преобразуем заголовки из конфига в имена полей с помощью маппинга
                 for (String header : config.getIncludedFields()) {
                     String fieldName = fieldMappings.get(header);
                     if (fieldName != null) {
@@ -48,27 +124,42 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
                         log.warn("Не найдено соответствие для заголовка: {}", header);
                     }
                 }
+            } else {
+                // Если поля не указаны, используем все поля из FIELD_MAPPINGS
+                // Берем значения из маппинга (имена полей)
+                result.addAll(fieldMappings.values());
 
-                return result;
-            } catch (Exception e) {
-                log.error("Ошибка при создании инстанса сущности: {}", e.getMessage());
-            }
-        }
-
-        // Иначе получаем все доступные поля класса сущности
-        Field[] fields = entityClass.getDeclaredFields();
-        for (Field field : fields) {
-            String fieldName = field.getName();
-
-            // Пропускаем служебные поля и поля, указанные для исключения
-            if (isServiceField(fieldName) || config.getExcludedFields().contains(fieldName)) {
-                continue;
+                // Фильтруем поля, которые указаны для исключения
+                if (!config.getExcludedFields().isEmpty()) {
+                    result.removeAll(config.getExcludedFields());
+                }
             }
 
-            result.add(fieldName);
-        }
+            return result;
+        } catch (Exception e) {
+            log.error("Ошибка при получении полей из маппинга: {}", e.getMessage(), e);
 
-        return result;
+            // Запасной вариант: если не удалось создать экземпляр сущности,
+            // используем стандартную логику получения полей
+            if (!config.getIncludedFields().isEmpty()) {
+                return new ArrayList<>(config.getIncludedFields());
+            }
+
+            // Иначе получаем все доступные поля класса сущности
+            Field[] fields = entityClass.getDeclaredFields();
+            for (Field field : fields) {
+                String fieldName = field.getName();
+
+                // Пропускаем служебные поля и поля, указанные для исключения
+                if (isServiceField(fieldName) || config.getExcludedFields().contains(fieldName)) {
+                    continue;
+                }
+
+                result.add(fieldName);
+            }
+
+            return result;
+        }
     }
 
     /**
@@ -77,13 +168,45 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
     protected List<String> getHeaderNames(List<String> fieldNames, ExportConfig config) {
         List<String> result = new ArrayList<>();
 
-        for (String fieldName : fieldNames) {
-            // Если есть маппинг для этого поля, используем его
-            if (config.getFieldMappings().containsKey(fieldName)) {
-                result.add(config.getFieldMappings().get(fieldName));
-            } else {
-                // Иначе используем имя поля с большой буквы и разделением слов
-                result.add(formatFieldName(fieldName));
+        try {
+            // Создаем экземпляр сущности для получения маппинга полей
+            T entity = entityClass.getDeclaredConstructor().newInstance();
+            Map<String, String> fieldMappings = entity.getFieldMappings();
+
+            // Инвертируем маппинг для поиска заголовков по именам полей
+            Map<String, String> invertedMappings = new HashMap<>();
+            for (Map.Entry<String, String> entry : fieldMappings.entrySet()) {
+                invertedMappings.put(entry.getValue(), entry.getKey());
+            }
+
+            // Для каждого поля находим соответствующий заголовок
+            for (String fieldName : fieldNames) {
+                // Проверяем сначала конфигурацию экспорта
+                if (config.getFieldMappings().containsKey(fieldName)) {
+                    result.add(config.getFieldMappings().get(fieldName));
+                } else {
+                    // Затем проверяем инвертированный маппинг сущности
+                    String header = invertedMappings.get(fieldName);
+                    if (header != null) {
+                        result.add(header);
+                    } else {
+                        // Если заголовок не найден, используем форматированное имя поля
+                        result.add(formatFieldName(fieldName));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при получении заголовков: {}", e.getMessage(), e);
+
+            // Запасной вариант: стандартное форматирование полей
+            for (String fieldName : fieldNames) {
+                // Если есть маппинг для этого поля в конфигурации, используем его
+                if (config.getFieldMappings().containsKey(fieldName)) {
+                    result.add(config.getFieldMappings().get(fieldName));
+                } else {
+                    // Иначе используем имя поля с большой буквы и разделением слов
+                    result.add(formatFieldName(fieldName));
+                }
             }
         }
 
@@ -258,6 +381,7 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
         }
     }
 
+
     /**
      * Интерфейс для обработки одной сущности
      */
@@ -265,4 +389,5 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
     protected interface ProcessEntityCallback<T> {
         void process(T entity) throws Exception;
     }
+
 }

@@ -1,5 +1,5 @@
 // src/main/java/my/java/service/competitor/CompetitorDataServiceImpl.java
-package my.java.service.competitor;
+package my.java.service.entity.competitor;
 
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.Competitor;

@@ -18,6 +18,8 @@ import my.java.service.file.exporter.FileExportService;
 import my.java.service.file.exporter.FileFormat;
 import my.java.service.file.exporter.processor.FileExportProcessor;
 import my.java.service.file.exporter.processor.FileExportProcessorFactory;
+import my.java.service.file.exporter.processor.composite.ProductWithRelatedEntitiesExporter;
+import my.java.service.file.exporter.processor.composite.ProductWithRelatedEntitiesExporter.CompositeProductEntity;
 import my.java.service.file.exporter.tracker.ExportProgressTracker;
 import my.java.util.PathResolver;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +41,7 @@ public class FileExportServiceImpl implements FileExportService {
 
     private final Map<Class<? extends ImportableEntity>, JpaRepository<? extends ImportableEntity, ?>> repositories = new HashMap<>();
     private final FileOperationRepository fileOperationRepository;
+    private final ProductWithRelatedEntitiesExporter compositeExporter;
     private final ExportProgressTracker progressTracker;
     private final FileExportProcessorFactory processorFactory;
     private final PathResolver pathResolver;
@@ -69,6 +72,8 @@ public class FileExportServiceImpl implements FileExportService {
         this.regionDataRepository = regionDataRepository;
         this.competitorDataRepository = competitorDataRepository;
 
+        this.compositeExporter = new ProductWithRelatedEntitiesExporter(
+                regionDataRepository, competitorDataRepository);
         // Инициализируем карту репозиториев
         initializeRepositoriesMap();
     }
@@ -504,5 +509,197 @@ public class FileExportServiceImpl implements FileExportService {
 //        }
 
         return dto;
+    }
+
+    @Override
+    @Transactional
+    public FileOperationDto exportProductsWithRelatedEntities(
+            Client client,
+            Map<String, Object> filterCriteria,
+            OutputStream outputStream,
+            String fileFormat) {
+
+        log.info("Начат экспорт продуктов со связанными сущностями для клиента {}, формат: {}",
+                client.getName(), fileFormat);
+
+        try {
+            // Создаем запись в БД о новой операции экспорта
+            FileOperation operation = createExportOperation(client, fileFormat, "product_with_related");
+
+            // Инициализируем трекер прогресса
+            progressTracker.initializeOperation(operation.getId(),
+                    "Экспорт продуктов со связанными сущностями");
+
+            // Сохраняем критерии фильтрации в БД
+            if (filterCriteria != null && !filterCriteria.isEmpty()) {
+                String filterJson = objectMapper.writeValueAsString(filterCriteria);
+                operation.setExportFilterCriteria(filterJson);
+                operation = fileOperationRepository.save(operation);
+            }
+
+            // Получаем продукты на основе критериев фильтрации
+            List<Product> products = loadProductsWithFilter(filterCriteria);
+
+            // Обновляем информацию в трекере и операции
+            progressTracker.updateStatus(operation.getId(), "Найдено продуктов: " + products.size());
+            progressTracker.updateProgress(operation.getId(), 0);
+
+            // Преобразуем продукты в составные сущности
+            List<CompositeProductEntity> compositeEntities = compositeExporter.convertToCompositeEntities(products);
+
+            // Обновляем информацию о прогрессе
+            progressTracker.updateStatus(operation.getId(),
+                    "Подготовлено составных записей: " + compositeEntities.size());
+            progressTracker.updateTotal(operation.getId(), compositeEntities.size());
+
+            // Обновляем информацию в БД
+            operation.setTotalRecords(compositeEntities.size());
+            operation.markAsProcessing();
+            operation = fileOperationRepository.save(operation);
+
+            // Создаем конфигурацию экспорта
+            ExportConfig config = ExportConfig.createDefault();
+
+            // Получаем процессор для формата файла
+            FileFormat format = FileFormat.fromString(fileFormat);
+            FileExportProcessor<CompositeProductEntity> processor = processorFactory.createProcessor(format);
+
+            // Выполняем экспорт
+            processor.process(compositeEntities, config, outputStream, progressTracker, operation.getId());
+
+            // Обновляем статус операции в БД
+            operation.markAsCompleted(compositeEntities.size());
+            operation = fileOperationRepository.save(operation);
+
+            return mapToDto(operation);
+
+        } catch (Exception e) {
+            log.error("Ошибка при экспорте продуктов со связанными сущностями: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public FileOperationDto exportProductsWithRelatedEntities(
+            List<Product> products,
+            Client client,
+            OutputStream outputStream,
+            String fileFormat) {
+
+        log.info("Начат экспорт {} продуктов со связанными сущностями для клиента {}, формат: {}",
+                products.size(), client.getName(), fileFormat);
+
+        try {
+            // Создаем запись в БД о новой операции экспорта
+            FileOperation operation = createExportOperation(client, fileFormat, "product_with_related");
+
+            // Инициализируем трекер прогресса
+            progressTracker.initializeOperation(operation.getId(),
+                    "Экспорт " + products.size() + " продуктов со связанными сущностями");
+
+            // Преобразуем продукты в составные сущности
+            List<CompositeProductEntity> compositeEntities = compositeExporter.convertToCompositeEntities(products);
+
+            // Обновляем информацию о прогрессе
+            progressTracker.updateStatus(operation.getId(),
+                    "Подготовлено составных записей: " + compositeEntities.size());
+            progressTracker.updateTotal(operation.getId(), compositeEntities.size());
+
+            // Обновляем информацию в БД
+            operation.setTotalRecords(compositeEntities.size());
+            operation.markAsProcessing();
+            operation = fileOperationRepository.save(operation);
+
+            return exportCompositeEntities(compositeEntities, client, outputStream, fileFormat, operation);
+
+        } catch (Exception e) {
+            log.error("Ошибка при экспорте продуктов со связанными сущностями: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public FileOperationDto exportCompositeEntities(
+            List<CompositeProductEntity> compositeEntities,
+            Client client,
+            OutputStream outputStream,
+            String fileFormat) {
+
+        log.info("Начат экспорт {} составных сущностей для клиента {}, формат: {}",
+                compositeEntities.size(), client.getName(), fileFormat);
+
+        try {
+            // Создаем запись в БД о новой операции экспорта
+            FileOperation operation = createExportOperation(client, fileFormat, "product_with_related");
+
+            // Инициализируем трекер прогресса
+            progressTracker.initializeOperation(operation.getId(),
+                    "Экспорт " + compositeEntities.size() + " составных записей");
+            progressTracker.updateTotal(operation.getId(), compositeEntities.size());
+
+            // Обновляем информацию в БД
+            operation.setTotalRecords(compositeEntities.size());
+            operation.markAsProcessing();
+            operation = fileOperationRepository.save(operation);
+
+            return exportCompositeEntities(compositeEntities, client, outputStream, fileFormat, operation);
+
+        } catch (Exception e) {
+            log.error("Ошибка при экспорте составных сущностей: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Внутренний метод для экспорта составных сущностей с использованием существующей операции
+     */
+    private FileOperationDto exportCompositeEntities(
+            List<ProductWithRelatedEntitiesExporter.CompositeProductEntity> compositeEntities,
+            Client client,
+            OutputStream outputStream,
+            String fileFormat,
+            FileOperation operation) {
+
+        try {
+            // Создаем конфигурацию экспорта
+            ExportConfig config = ExportConfig.createDefault();
+
+            // Получаем процессор для формата файла
+            FileFormat format = FileFormat.fromString(fileFormat);
+            FileExportProcessor<ProductWithRelatedEntitiesExporter.CompositeProductEntity> processor = processorFactory.createProcessor(format);
+
+            // Выполняем экспорт
+            processor.process(compositeEntities, config, outputStream, progressTracker, operation.getId());
+
+            // Обновляем статус операции в БД
+            operation.markAsCompleted(compositeEntities.size());
+            operation = fileOperationRepository.save(operation);
+
+            return mapToDto(operation);
+
+        } catch (Exception e) {
+            // Обновляем статус операции на ошибку
+            operation.markAsFailed("Ошибка при экспорте: " + e.getMessage());
+            fileOperationRepository.save(operation);
+
+            log.error("Ошибка при экспорте составных сущностей: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Загружает продукты на основе критериев фильтрации
+     */
+    private List<Product> loadProductsWithFilter(Map<String, Object> filterCriteria) {
+        // Если есть критерии фильтрации для clientId, применяем их
+        if (filterCriteria != null && filterCriteria.containsKey("clientId")) {
+            Long clientId = Long.valueOf(filterCriteria.get("clientId").toString());
+            return productRepository.findByClientId(clientId);
+        }
+
+        // По умолчанию возвращаем все продукты
+        return productRepository.findAll();
     }
 }

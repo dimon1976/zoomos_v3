@@ -59,6 +59,7 @@ public class CsvFileExportProcessor<T extends ImportableEntity> extends Abstract
         }
 
         Class<T> entityClass = (Class<T>) entities.get(0).getClass();
+        this.entityClass = entityClass; // Сохраняем класс сущности для использования в getHeaderNames
 
         try (BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(outputStream, StandardCharsets.UTF_8))) {
@@ -66,6 +67,9 @@ public class CsvFileExportProcessor<T extends ImportableEntity> extends Abstract
             // Получение списка полей и заголовков
             List<String> fieldNames = getFieldNames(entityClass, config);
             List<String> headerNames = getHeaderNames(fieldNames, config);
+
+            log.debug("Экспорт CSV: выбрано {} полей: {}", fieldNames.size(), fieldNames);
+            log.debug("Экспорт CSV: заголовки: {}", headerNames);
 
             // Запись заголовка, если нужно
             if (config.isIncludeHeader()) {

@@ -17,6 +17,7 @@ E:.
 |           +---controller
 |           |       ClientController.java
 |           |       EntityDataController.java
+|           |       EntityMetadataController.java
 |           |       ExportProgressController.java
 |           |       FileExportController.java
 |           |       FileImportController.java
@@ -36,7 +37,7 @@ E:.
 |           |   |   FileOperation.java
 |           |   |   
 |           |   +---entity
-|           |   |       CompetitorData.java
+|           |   |       Competitor.java
 |           |   |       ImportableEntity.java
 |           |   |       Product.java
 |           |   |       RegionData.java
@@ -61,92 +62,93 @@ E:.
 |           |   |   \---impl
 |           |   |           ClientServiceImpl.java
 |           |   |           
-|           |   +---competitor
-|           |   |       CompetitorDataService.java
-|           |   |       CompetitorDataServiceImpl.java
-|           |   |       
-|           |   +---file
-|           |   |   +---builder
-|           |   |   |       EntitySetBuilder.java
-|           |   |   |       EntitySetBuilderFactory.java
-|           |   |   |       ProductWithRelatedEntitiesBuilder.java
+|           |   +---entity
+|           |   |   +---competitor
+|           |   |   |       CompetitorDataService.java
+|           |   |   |       CompetitorDataServiceImpl.java
 |           |   |   |       
-|           |   |   +---entity
-|           |   |   |       EntitySaverFactory.java
-|           |   |   |       EntitySaverFactoryImpl.java
+|           |   |   +---product
+|           |   |   |       ProductService.java
+|           |   |   |       ProductServiceImpl.java
 |           |   |   |       
-|           |   |   +---exporter
-|           |   |   |   |   ExportConfig.java
-|           |   |   |   |   FileExportService.java
-|           |   |   |   |   FileFormat.java
-|           |   |   |   |   
-|           |   |   |   +---impl
-|           |   |   |   |       FileExportServiceImpl.java
-|           |   |   |   |       
-|           |   |   |   +---processor
-|           |   |   |   |       AbstractFileExportProcessor.java
-|           |   |   |   |       CsvFileExportProcessor.java
-|           |   |   |   |       ExcelFileExportProcessor.java
-|           |   |   |   |       FileExportProcessor.java
-|           |   |   |   |       FileExportProcessorFactory.java
-|           |   |   |   |       
-|           |   |   |   \---tracker
-|           |   |   |           ExportProgressTracker.java
-|           |   |   |           
-|           |   |   +---importer
-|           |   |   |       FileImportService.java
-|           |   |   |       FileImportServiceImpl.java
+|           |   |   +---region
+|           |   |   |       RegionDataService.java
+|           |   |   |       RegionDataServiceImpl.java
 |           |   |   |       
-|           |   |   +---job
-|           |   |   |       FileImportJob.java
-|           |   |   |       
-|           |   |   +---mapping
-|           |   |   |       FieldMappingService.java
-|           |   |   |       FieldMappingServiceImpl.java
-|           |   |   |       
-|           |   |   +---metadata
-|           |   |   |       EntityFieldService.java
-|           |   |   |       
-|           |   |   +---processor
-|           |   |   |       AbstractFileProcessor.java
-|           |   |   |       CsvFileProcessor.java
-|           |   |   |       ExcelFileProcessor.java
-|           |   |   |       FileProcessor.java
-|           |   |   |       FileProcessorFactory.java
-|           |   |   |       
-|           |   |   +---repository
-|           |   |   |       RelatedEntitiesRepository.java
-|           |   |   |       
-|           |   |   +---strategy
-|           |   |   |       DefaultFileProcessingStrategy.java
-|           |   |   |       FileProcessingStrategy.java
-|           |   |   |       
-|           |   |   +---tracker
-|           |   |   |       ImportProgressTracker.java
-|           |   |   |       ProgressInfo.java
-|           |   |   |       WebSocketImportProgressTracker.java
-|           |   |   |       
-|           |   |   +---transformer
-|           |   |   |       AbstractValueTransformer.java
-|           |   |   |       BooleanTransformer.java
-|           |   |   |       DateTimeTransformer.java
-|           |   |   |       EnumTransformer.java
-|           |   |   |       NumberTransformer.java
-|           |   |   |       StringTransformer.java
-|           |   |   |       ValueTransformer.java
-|           |   |   |       ValueTransformerFactory.java
-|           |   |   |       
-|           |   |   \---util
-|           |   |           ImportParametersUtil.java
+|           |   |   \---repository
+|           |   |           RelatedEntitiesRepository.java
 |           |   |           
-|           |   +---product
-|           |   |       ProductService.java
-|           |   |       ProductServiceImpl.java
-|           |   |       
-|           |   \---region
-|           |           RegionDataService.java
-|           |           RegionDataServiceImpl.java
-|           |           
+|           |   \---file
+|           |       +---builder
+|           |       |       EntitySetBuilder.java
+|           |       |       EntitySetBuilderFactory.java
+|           |       |       ProductWithRelatedEntitiesBuilder.java
+|           |       |       
+|           |       +---entity
+|           |       |       EntitySaverFactory.java
+|           |       |       EntitySaverFactoryImpl.java
+|           |       |       
+|           |       +---exporter
+|           |       |   |   ExportConfig.java
+|           |       |   |   FileExportService.java
+|           |       |   |   FileFormat.java
+|           |       |   |   
+|           |       |   +---impl
+|           |       |   |       FileExportServiceImpl.java
+|           |       |   |       
+|           |       |   +---processor
+|           |       |   |       AbstractFileExportProcessor.java
+|           |       |   |       CsvFileExportProcessor.java
+|           |       |   |       ExcelFileExportProcessor.java
+|           |       |   |       FileExportProcessor.java
+|           |       |   |       FileExportProcessorFactory.java
+|           |       |   |       
+|           |       |   \---tracker
+|           |       |           ExportProgressTracker.java
+|           |       |           
+|           |       +---importer
+|           |       |       FileImportService.java
+|           |       |       FileImportServiceImpl.java
+|           |       |       
+|           |       +---job
+|           |       |       FileImportJob.java
+|           |       |       
+|           |       +---mapping
+|           |       |       FieldMappingService.java
+|           |       |       FieldMappingServiceImpl.java
+|           |       |       
+|           |       +---metadata
+|           |       |       EntityFieldService.java
+|           |       |       
+|           |       +---processor
+|           |       |       AbstractFileProcessor.java
+|           |       |       CsvFileProcessor.java
+|           |       |       ExcelFileProcessor.java
+|           |       |       FileProcessor.java
+|           |       |       FileProcessorFactory.java
+|           |       |       
+|           |       +---strategy
+|           |       |       DefaultFileProcessingStrategy.java
+|           |       |       FileProcessingStrategy.java
+|           |       |       
+|           |       +---tracker
+|           |       |       ImportProgressTracker.java
+|           |       |       ProgressInfo.java
+|           |       |       WebSocketImportProgressTracker.java
+|           |       |       
+|           |       +---transformer
+|           |       |       AbstractValueTransformer.java
+|           |       |       BooleanTransformer.java
+|           |       |       DateTimeTransformer.java
+|           |       |       EnumTransformer.java
+|           |       |       NumberTransformer.java
+|           |       |       StringTransformer.java
+|           |       |       ValueTransformer.java
+|           |       |       ValueTransformerFactory.java
+|           |       |       
+|           |       \---util
+|           |               ImportParametersUtil.java
+|           |               
 |           \---util
 |                   ApplicationContextProvider.java
 |                   PathResolver.java

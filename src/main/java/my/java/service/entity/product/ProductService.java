@@ -1,5 +1,5 @@
 // src/main/java/my/java/service/product/ProductService.java
-package my.java.service.product;
+package my.java.service.entity.product;
 
 import my.java.model.entity.Product;
 

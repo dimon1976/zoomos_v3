@@ -6,9 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.Competitor;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
-import my.java.service.competitor.CompetitorDataService;
-import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
+import my.java.service.entity.competitor.CompetitorDataService;
+import my.java.service.entity.product.ProductService;
+import my.java.service.entity.region.RegionDataService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

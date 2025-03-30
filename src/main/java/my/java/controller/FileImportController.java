@@ -50,12 +50,6 @@ public class FileImportController {
     private final Map<Long, CompletableFuture<FileOperationDto>> activeImports =
             Collections.synchronizedMap(new HashMap<>());
 
-    @GetMapping
-    public String showImportPage(Model model) {
-        log.debug("Запрос на отображение страницы импорта");
-        return "import/index";
-    }
-
     @GetMapping("/select-client")
     public String showSelectClientPage(Model model) {
         log.debug("Запрос на отображение страницы выбора клиента");

@@ -37,6 +37,7 @@ public class ExcelFileExportProcessor<T extends ImportableEntity> extends Abstra
         }
 
         Class<T> entityClass = (Class<T>) entities.get(0).getClass();
+        this.entityClass = entityClass; // Сохраняем класс сущности для использования в getHeaderNames
 
         try (Workbook workbook = new XSSFWorkbook()) {
             // Создаем лист для данных
@@ -45,6 +46,9 @@ public class ExcelFileExportProcessor<T extends ImportableEntity> extends Abstra
             // Получение списка полей и заголовков
             List<String> fieldNames = getFieldNames(entityClass, config);
             List<String> headerNames = getHeaderNames(fieldNames, config);
+
+            log.debug("Экспорт Excel: выбрано {} полей: {}", fieldNames.size(), fieldNames);
+            log.debug("Экспорт Excel: заголовки: {}", headerNames);
 
             // Создаем стили для заголовка и ячеек данных
             CellStyle headerStyle = createHeaderStyle(workbook);

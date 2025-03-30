@@ -1,5 +1,5 @@
 // src/main/java/my/java/service/region/RegionDataServiceImpl.java
-package my.java.service.region;
+package my.java.service.entity.region;
 
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.RegionData;

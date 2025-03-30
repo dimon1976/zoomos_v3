@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.model.Client;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -50,8 +50,8 @@ public class FileExportController {
     // Карта соответствия строковых типов сущностей и классов
     private static final Map<String, Class<? extends ImportableEntity>> ENTITY_TYPES = Map.of(
             "product", Product.class,
-            "competitordata", CompetitorData.class,
-            "regiondata", RegionData.class
+            "competitor", Competitor.class,
+            "region", RegionData.class
     );
 
     /**
@@ -159,10 +159,11 @@ public class FileExportController {
             @PathVariable String entityType,
             @RequestParam Long clientId,
             @RequestParam(required = false, defaultValue = "CSV") String format,
+            @RequestParam(required = false) List<String> fields, // Добавляем параметр полей
             @RequestParam(required = false) Map<String, Object> filters) {
 
-        log.info("Запрос на асинхронный экспорт данных типа {} для клиента {}, формат: {}",
-                entityType, clientId, format);
+        log.info("Запрос на асинхронный экспорт данных типа {} для клиента {}, формат: {}, выбранных полей: {}",
+                entityType, clientId, format, fields != null ? fields.size() : "все");
 
         try {
             // Получаем клиента
@@ -178,9 +179,21 @@ public class FileExportController {
             // Создаем потоки для временного хранения данных
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
-            // Создаем критерии фильтрации
-            Map<String, Object> filterCriteria = new HashMap<>(filters);
-            filterCriteria.put("clientId", clientId);
+            // Создаем параметры экспорта
+            Map<String, Object> exportParams = new HashMap<>();
+
+            // Добавляем базовые параметры
+            exportParams.put("clientId", clientId);
+
+            // Добавляем дополнительные фильтры, если они есть
+            if (filters != null && !filters.isEmpty()) {
+                exportParams.putAll(filters);
+            }
+
+            // Добавляем выбранные поля, если они указаны
+            if (fields != null && !fields.isEmpty()) {
+                exportParams.put("includedFields", fields);
+            }
 
             // Запускаем экспорт в отдельном потоке
             new Thread(() -> {
@@ -188,7 +201,7 @@ public class FileExportController {
                     FileOperationDto operation = exportService.exportData(
                             entityClass,
                             client,
-                            filterCriteria,
+                            exportParams,
                             outputStream,
                             format,
                             entityType);

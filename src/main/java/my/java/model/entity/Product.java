@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import my.java.model.enums.DataSourceType;
-import my.java.service.file.transformer.ValueTransformer;
 import my.java.service.file.transformer.ValueTransformerFactory;
 
 import java.util.*;
@@ -59,7 +58,7 @@ public class Product implements ImportableEntity {
     private List<RegionData> regionDataList = new ArrayList<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<CompetitorData> competitorDataList = new ArrayList<>();
+    private List<Competitor> competitorList = new ArrayList<>();
 
     // Статическая карта сопоставления заголовков файла с полями сущности
     private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
@@ -255,13 +254,13 @@ public class Product implements ImportableEntity {
         regionData.setProduct(null);
     }
 
-    public void addCompetitorData(CompetitorData competitorData) {
-        competitorDataList.add(competitorData);
-        competitorData.setProduct(this);
+    public void addCompetitorData(Competitor competitor) {
+        competitorList.add(competitor);
+        competitor.setProduct(this);
     }
 
-    public void removeCompetitorData(CompetitorData competitorData) {
-        competitorDataList.remove(competitorData);
-        competitorData.setProduct(null);
+    public void removeCompetitorData(Competitor competitor) {
+        competitorList.remove(competitor);
+        competitor.setProduct(null);
     }
 }

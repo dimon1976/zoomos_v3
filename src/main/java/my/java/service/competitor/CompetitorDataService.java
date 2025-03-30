@@ -1,7 +1,7 @@
 // src/main/java/my/java/service/competitor/CompetitorDataService.java
 package my.java.service.competitor;
 
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,38 +14,38 @@ public interface CompetitorDataService {
 
     /**
      * Сохраняет данные конкурента
-     * @param competitorData данные конкурента для сохранения
+     * @param competitor данные конкурента для сохранения
      * @return сохраненные данные конкурента
      */
-    CompetitorData saveCompetitorData(CompetitorData competitorData);
+    Competitor saveCompetitorData(Competitor competitor);
 
     /**
      * Сохраняет список данных конкурентов
-     * @param competitorDataList список данных конкурентов для сохранения
+     * @param competitorList список данных конкурентов для сохранения
      * @return количество сохраненных записей
      */
-    int saveCompetitorDataList(List<CompetitorData> competitorDataList);
+    int saveCompetitorDataList(List<Competitor> competitorList);
 
     /**
      * Находит данные конкурента по ID
      * @param id идентификатор данных конкурента
      * @return опциональные данные конкурента
      */
-    Optional<CompetitorData> findById(Long id);
+    Optional<Competitor> findById(Long id);
 
     /**
      * Находит данные конкурентов по продукту
      * @param productId идентификатор продукта
      * @return список данных конкурентов
      */
-    List<CompetitorData> findByProductId(Long productId);
+    List<Competitor> findByProductId(Long productId);
 
     /**
      * Находит данные конкурентов по клиенту
      * @param clientId идентификатор клиента
      * @return список данных конкурентов
      */
-    List<CompetitorData> findByClientId(Long clientId);
+    List<Competitor> findByClientId(Long clientId);
 
     /**
      * Находит данные конкурентов по дате
@@ -53,7 +53,7 @@ public interface CompetitorDataService {
      * @param clientId идентификатор клиента
      * @return список данных конкурентов
      */
-    List<CompetitorData> findByDateAfterAndClientId(LocalDateTime date, Long clientId);
+    List<Competitor> findByDateAfterAndClientId(LocalDateTime date, Long clientId);
 
     /**
      * Удаляет данные конкурента
@@ -77,10 +77,10 @@ public interface CompetitorDataService {
 
     /**
      * Обновляет существующие данные конкурента или создает новые
-     * @param competitorData данные конкурента
+     * @param competitor данные конкурента
      * @return обновленные или созданные данные конкурента
      */
-    CompetitorData upsertCompetitorData(CompetitorData competitorData);
+    Competitor upsertCompetitorData(Competitor competitor);
 
-    List<CompetitorData> findByIds(List<Long> ids);
+    List<Competitor> findByIds(List<Long> ids);
 }

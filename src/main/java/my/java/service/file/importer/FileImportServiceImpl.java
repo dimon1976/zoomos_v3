@@ -6,7 +6,7 @@ import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -445,9 +445,9 @@ public class FileImportServiceImpl implements FileImportService {
                 regionData.setTransformerFactory(transformerFactory);
                 return regionData;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
-                competitorData.setTransformerFactory(transformerFactory);
-                return competitorData;
+                Competitor competitor = new Competitor();
+                competitor.setTransformerFactory(transformerFactory);
+                return competitor;
             default:
                 log.warn("Неизвестный тип сущности: {}", entityType);
                 return null;
@@ -648,11 +648,11 @@ public class FileImportServiceImpl implements FileImportService {
                 break;
 
             case "competitordata":
-                List<CompetitorData> competitorDataList = entities.stream()
-                        .filter(e -> e instanceof CompetitorData)
-                        .map(e -> (CompetitorData) e)
+                List<Competitor> competitorList = entities.stream()
+                        .filter(e -> e instanceof Competitor)
+                        .map(e -> (Competitor) e)
                         .collect(Collectors.toList());
-                savedCount = competitorDataService.saveCompetitorDataList(competitorDataList);
+                savedCount = competitorDataService.saveCompetitorDataList(competitorList);
                 log.info("Сохранено {} данных конкурентов", savedCount);
                 break;
 

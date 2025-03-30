@@ -2,7 +2,7 @@
 package my.java.service.competitor;
 
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.repository.CompetitorDataRepository;
 import my.java.service.base.BaseEntityService;
 import org.springframework.stereotype.Service;
@@ -18,44 +18,44 @@ import java.util.Optional;
  */
 @Service
 @Slf4j
-public class CompetitorDataServiceImpl extends BaseEntityService<CompetitorData, Long, CompetitorDataRepository> implements CompetitorDataService {
+public class CompetitorDataServiceImpl extends BaseEntityService<Competitor, Long, CompetitorDataRepository> implements CompetitorDataService {
 
     public CompetitorDataServiceImpl(CompetitorDataRepository repository) {
         super(repository);
     }
 
     @Override
-    protected void logSave(CompetitorData entity) {
+    protected void logSave(Competitor entity) {
         log.debug("Сохранение данных конкурента: {}", entity.getCompetitorName());
     }
 
     @Override
-    public CompetitorData saveCompetitorData(CompetitorData competitorData) {
-        return save(competitorData);
+    public Competitor saveCompetitorData(Competitor competitor) {
+        return save(competitor);
     }
 
     @Override
-    public int saveCompetitorDataList(List<CompetitorData> competitorDataList) {
-        return saveAll(competitorDataList);
+    public int saveCompetitorDataList(List<Competitor> competitorList) {
+        return saveAll(competitorList);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<CompetitorData> findByProductId(Long productId) {
+    public List<Competitor> findByProductId(Long productId) {
         log.debug("Поиск данных конкурентов по productId: {}", productId);
         return repository.findByProductId(productId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<CompetitorData> findByClientId(Long clientId) {
+    public List<Competitor> findByClientId(Long clientId) {
         log.debug("Поиск данных конкурентов по clientId: {}", clientId);
         return repository.findByClientId(clientId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<CompetitorData> findByDateAfterAndClientId(LocalDateTime date, Long clientId) {
+    public List<Competitor> findByDateAfterAndClientId(LocalDateTime date, Long clientId) {
         log.debug("Поиск данных конкурентов по дате после {} и clientId: {}", date, clientId);
         return repository.findByCompetitorLocalDateTimeAfterAndClientId(date, clientId);
     }
@@ -88,9 +88,9 @@ public class CompetitorDataServiceImpl extends BaseEntityService<CompetitorData,
      * @param deleteOperation операция удаления
      * @return количество удаленных сущностей
      */
-    private int deleteEntitiesByCondition(java.util.function.Supplier<List<CompetitorData>> findEntities,
+    private int deleteEntitiesByCondition(java.util.function.Supplier<List<Competitor>> findEntities,
                                           Runnable deleteOperation) {
-        List<CompetitorData> recordsToDelete = findEntities.get();
+        List<Competitor> recordsToDelete = findEntities.get();
         if (recordsToDelete.isEmpty()) {
             return 0;
         }
@@ -101,26 +101,26 @@ public class CompetitorDataServiceImpl extends BaseEntityService<CompetitorData,
 
     @Override
     @Transactional
-    public CompetitorData upsertCompetitorData(CompetitorData competitorData) {
-        log.debug("Обновление/создание данных конкурента: {}", competitorData.getCompetitorName());
+    public Competitor upsertCompetitorData(Competitor competitor) {
+        log.debug("Обновление/создание данных конкурента: {}", competitor.getCompetitorName());
 
-        if (canFindExistingEntity(competitorData)) {
-            Optional<CompetitorData> existingData = repository.findByCompetitorNameAndProductId(
-                    competitorData.getCompetitorName(), competitorData.getProduct().getId());
+        if (canFindExistingEntity(competitor)) {
+            Optional<Competitor> existingData = repository.findByCompetitorNameAndProductId(
+                    competitor.getCompetitorName(), competitor.getProduct().getId());
 
             if (existingData.isPresent()) {
-                CompetitorData existing = existingData.get();
-                copyCompetitorDataFields(competitorData, existing);
+                Competitor existing = existingData.get();
+                copyCompetitorDataFields(competitor, existing);
                 return repository.save(existing);
             }
         }
 
-        return repository.save(competitorData);
+        return repository.save(competitor);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<CompetitorData> findByIds(List<Long> ids) {
+    public List<Competitor> findByIds(List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
@@ -130,12 +130,12 @@ public class CompetitorDataServiceImpl extends BaseEntityService<CompetitorData,
     /**
      * Проверяет возможность поиска существующей сущности
      *
-     * @param competitorData данные конкурента
+     * @param competitor данные конкурента
      * @return true, если возможно найти существующую сущность
      */
-    private boolean canFindExistingEntity(CompetitorData competitorData) {
-        return competitorData.getCompetitorName() != null &&
-                competitorData.getProduct() != null;
+    private boolean canFindExistingEntity(Competitor competitor) {
+        return competitor.getCompetitorName() != null &&
+                competitor.getProduct() != null;
     }
 
     /**
@@ -143,7 +143,7 @@ public class CompetitorDataServiceImpl extends BaseEntityService<CompetitorData,
      * @param source исходные данные конкурента
      * @param target целевые данные конкурента
      */
-    private void copyCompetitorDataFields(CompetitorData source, CompetitorData target) {
+    private void copyCompetitorDataFields(Competitor source, Competitor target) {
         target.setCompetitorName(source.getCompetitorName());
         target.setCompetitorPrice(source.getCompetitorPrice());
         target.setCompetitorPromotionalPrice(source.getCompetitorPromotionalPrice());

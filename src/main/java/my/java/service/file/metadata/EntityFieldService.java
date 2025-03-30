@@ -1,6 +1,6 @@
 package my.java.service.file.metadata;
 
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -42,13 +42,13 @@ public class EntityFieldService {
         RegionData regionData = new RegionData();
         regionData.setTransformerFactory(transformerFactory);
 
-        CompetitorData competitorData = new CompetitorData();
-        competitorData.setTransformerFactory(transformerFactory);
+        Competitor competitor = new Competitor();
+        competitor.setTransformerFactory(transformerFactory);
 
         // Сохраняем маппинги в кэше
         fieldMappingsCache.put("product", product.getFieldMappings());
         fieldMappingsCache.put("regiondata", regionData.getFieldMappings());
-        fieldMappingsCache.put("competitordata", competitorData.getFieldMappings());
+        fieldMappingsCache.put("competitordata", competitor.getFieldMappings());
 
         // Инициализируем группы полей для составного типа
         Map<String, List<Map.Entry<String, String>>> productWithRelatedGroups = new LinkedHashMap<>();
@@ -56,7 +56,7 @@ public class EntityFieldService {
         // Создаем списки полей для каждой группы
         List<Map.Entry<String, String>> productFields = new ArrayList<>(product.getFieldMappings().entrySet());
         List<Map.Entry<String, String>> regionFields = new ArrayList<>(regionData.getFieldMappings().entrySet());
-        List<Map.Entry<String, String>> competitorFields = new ArrayList<>(competitorData.getFieldMappings().entrySet());
+        List<Map.Entry<String, String>> competitorFields = new ArrayList<>(competitor.getFieldMappings().entrySet());
 
         // Сортируем поля по именам для удобства
         productFields.sort(Map.Entry.comparingByKey());
@@ -120,9 +120,9 @@ public class EntityFieldService {
                 regionData.setTransformerFactory(transformerFactory);
                 return regionData;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
-                competitorData.setTransformerFactory(transformerFactory);
-                return competitorData;
+                Competitor competitor = new Competitor();
+                competitor.setTransformerFactory(transformerFactory);
+                return competitor;
             default:
                 return null;
         }

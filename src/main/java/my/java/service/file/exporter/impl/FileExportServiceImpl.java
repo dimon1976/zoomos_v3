@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.model.Client;
 import my.java.model.FileOperation;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -27,10 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.OutputStream;
 import java.time.ZonedDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * Реализация сервиса экспорта файлов
@@ -83,7 +80,7 @@ public class FileExportServiceImpl implements FileExportService {
     private void initializeRepositoriesMap() {
         repositories.put(Product.class, productRepository);
         repositories.put(RegionData.class, regionDataRepository);
-        repositories.put(CompetitorData.class, competitorDataRepository);
+        repositories.put(Competitor.class, competitorDataRepository);
 
         log.info("Инициализирована карта репозиториев: {} репозиториев", repositories.size());
         // Выводим отладочную информацию для проверки
@@ -97,7 +94,7 @@ public class FileExportServiceImpl implements FileExportService {
     public <T extends ImportableEntity> FileOperationDto exportData(
             Class<T> entityClass,
             Client client,
-            Map<String, Object> filterCriteria,
+            Map<String, Object> exportParams,
             OutputStream outputStream,
             String fileFormat,
             String entityType) {
@@ -109,8 +106,33 @@ public class FileExportServiceImpl implements FileExportService {
             // Создаем запись в БД о новой операции экспорта
             FileOperation operation = createExportOperation(client, fileFormat, entityType);
 
-            // Сохраняем критерии фильтрации
-            if (filterCriteria != null && !filterCriteria.isEmpty()) {
+            // Создаем копию параметров для фильтрации (без параметров экспорта)
+            Map<String, Object> filterCriteria = new HashMap<>(exportParams);
+
+            // Извлекаем список полей для включения, если он есть
+            List<String> includedFields = null;
+            if (exportParams.containsKey("fields")) {
+                Object fieldsObj = exportParams.get("fields");
+                filterCriteria.remove("fields"); // Удаляем из фильтров
+
+                if (fieldsObj instanceof List) {
+                    // Если передан список полей
+                    includedFields = (List<String>) fieldsObj;
+                    log.debug("Экспорт будет включать выбранные поля из списка: {}", includedFields);
+                } else if (fieldsObj instanceof String) {
+                    // Если передана строка с запятыми
+                    String fieldsStr = (String) fieldsObj;
+                    if (!fieldsStr.isEmpty()) {
+                        includedFields = Arrays.asList(fieldsStr.split("\\s*,\\s*"));
+                        log.debug("Экспорт будет включать выбранные поля из строки: {}", includedFields);
+                    }
+                } else {
+                    log.warn("Параметр fields имеет неожиданный тип: {}", fieldsObj.getClass().getName());
+                }
+            }
+
+            // Сохраняем критерии фильтрации в БД (без параметров экспорта)
+            if (!filterCriteria.isEmpty()) {
                 String filterJson = objectMapper.writeValueAsString(filterCriteria);
                 operation.setExportFilterCriteria(filterJson);
                 operation = fileOperationRepository.save(operation);
@@ -135,8 +157,27 @@ public class FileExportServiceImpl implements FileExportService {
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
 
-            // Создаем конфигурацию экспорта
-            ExportConfig config = ExportConfig.createDefault();
+            // Создаем конфигурацию экспорта с учетом выбранных полей
+            ExportConfig config;
+            if (includedFields != null && !includedFields.isEmpty()) {
+                // Используем Builder для создания конфигурации с выбранными полями
+                ExportConfig.ExportConfigBuilder configBuilder = ExportConfig.builder()
+                        .includeHeader(true)
+                        .applyFormatting(true)
+                        .batchSize(1000)
+                        .asyncProcessing(false);
+
+                // Добавляем выбранные поля
+                configBuilder.includedFields(new ArrayList<>(includedFields));
+
+                // Создаем конфигурацию
+                config = configBuilder.build();
+                log.debug("Создана конфигурация экспорта с выбранными полями: {}", includedFields);
+            } else {
+                // Если поля не выбраны, используем конфигурацию по умолчанию
+                config = ExportConfig.createDefault();
+                log.debug("Используется конфигурация экспорта по умолчанию (все поля)");
+            }
 
             // Получаем процессор для формата файла
             FileFormat format = FileFormat.fromString(fileFormat);
@@ -214,6 +255,8 @@ public class FileExportServiceImpl implements FileExportService {
             exportOperation = fileOperationRepository.save(exportOperation);
 
             // Создаем конфигурацию экспорта
+            // Примечание: для экспорта из импорта обычно нужны все поля,
+            // поэтому специальной конфигурации полей не задаем
             ExportConfig config = ExportConfig.createDefault();
 
             // Получаем процессор для формата файла
@@ -265,7 +308,9 @@ public class FileExportServiceImpl implements FileExportService {
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
 
-            // Создаем конфигурацию экспорта
+            // Создаем конфигурацию экспорта по умолчанию
+            // Примечание: здесь мы можем добавить извлечение полей из параметров запроса,
+            // если это необходимо для выбранных сущностей
             ExportConfig config = ExportConfig.createDefault();
 
             // Получаем процессор для формата файла
@@ -426,7 +471,7 @@ public class FileExportServiceImpl implements FileExportService {
                 return RegionData.class;
             case "competitordata":
             case "competitor":
-                return CompetitorData.class;
+                return Competitor.class;
             default:
                 throw new IllegalArgumentException("Неизвестный тип сущности: " + entityType);
         }

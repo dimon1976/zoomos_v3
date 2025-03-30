@@ -1,7 +1,7 @@
 // src/main/java/my/java/repository/CompetitorDataRepository.java
 package my.java.repository;
 
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,31 +12,31 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CompetitorDataRepository extends JpaRepository<CompetitorData, Long> {
+public interface CompetitorDataRepository extends JpaRepository<Competitor, Long> {
 
     // Поиск данных конкурентов по продукту
-    List<CompetitorData> findByProductId(Long productId);
+    List<Competitor> findByProductId(Long productId);
 
     // Поиск данных конкурентов по клиенту
-    List<CompetitorData> findByClientId(Long clientId);
+    List<Competitor> findByClientId(Long clientId);
 
     // Поиск данных конкурента по названию и продукту
-    Optional<CompetitorData> findByCompetitorNameAndProductId(String competitorName, Long productId);
+    Optional<Competitor> findByCompetitorNameAndProductId(String competitorName, Long productId);
 
     // Поиск данных конкурентов по дате
-    List<CompetitorData> findByCompetitorLocalDateTimeAfterAndClientId(
+    List<Competitor> findByCompetitorLocalDateTimeAfterAndClientId(
             LocalDateTime date, Long clientId);
 
     // Поиск данных по клиенту, отсортированных по дате
-    List<CompetitorData> findByClientIdOrderByCompetitorLocalDateTimeDesc(Long clientId);
+    List<Competitor> findByClientIdOrderByCompetitorLocalDateTimeDesc(Long clientId);
 
     // Поиск по URL конкурента
-    List<CompetitorData> findByCompetitorUrlContainingAndClientId(String urlPart, Long clientId);
+    List<Competitor> findByCompetitorUrlContainingAndClientId(String urlPart, Long clientId);
 
     // Поиск по диапазону цен конкурентов
-    @Query("SELECT c FROM CompetitorData c WHERE c.clientId = :clientId AND " +
+    @Query("SELECT c FROM Competitor c WHERE c.clientId = :clientId AND " +
             "CAST(REPLACE(c.competitorPrice, ',', '.') AS double) BETWEEN :minPrice AND :maxPrice")
-    List<CompetitorData> findByPriceRange(
+    List<Competitor> findByPriceRange(
             @Param("clientId") Long clientId,
             @Param("minPrice") Double minPrice,
             @Param("maxPrice") Double maxPrice);
@@ -48,6 +48,6 @@ public interface CompetitorDataRepository extends JpaRepository<CompetitorData, 
     void deleteByClientId(Long clientId);
 
     // Получение списка уникальных названий конкурентов для клиента
-    @Query("SELECT DISTINCT c.competitorName FROM CompetitorData c WHERE c.clientId = :clientId")
+    @Query("SELECT DISTINCT c.competitorName FROM Competitor c WHERE c.clientId = :clientId")
     List<String> findDistinctCompetitorNamesByClientId(@Param("clientId") Long clientId);
 }

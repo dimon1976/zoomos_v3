@@ -16,7 +16,7 @@ import java.util.Map;
 @Getter
 @Entity
 @Table(name = "competitor_data")
-public class CompetitorData implements ImportableEntity {
+public class Competitor implements ImportableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

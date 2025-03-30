@@ -2,7 +2,7 @@ package my.java.service.file.repository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -117,10 +117,10 @@ public class RelatedEntitiesRepository {
         }
 
         // Сохраняем конкурентов
-        List<CompetitorData> competitorDataList = getEntitiesByType(groupedEntities, CompetitorData.class);
-        if (!competitorDataList.isEmpty()) {
-            savedCount += competitorDataService.saveCompetitorDataList(competitorDataList);
-            log.debug("Сохранено {} данных конкурентов", competitorDataList.size());
+        List<Competitor> competitorList = getEntitiesByType(groupedEntities, Competitor.class);
+        if (!competitorList.isEmpty()) {
+            savedCount += competitorDataService.saveCompetitorDataList(competitorList);
+            log.debug("Сохранено {} данных конкурентов", competitorList.size());
         }
 
         return savedCount;
@@ -159,14 +159,14 @@ public class RelatedEntitiesRepository {
         }
 
         // Обрабатываем и сохраняем связанных конкурентов
-        List<CompetitorData> competitorDataList = getEntitiesByType(groupedEntities, CompetitorData.class);
-        if (!competitorDataList.isEmpty()) {
+        List<Competitor> competitorList = getEntitiesByType(groupedEntities, Competitor.class);
+        if (!competitorList.isEmpty()) {
             savedCount += processAndSaveRelatedEntities(
-                    competitorDataList,
+                    competitorList,
                     savedProducts,
                     productRelations,
-                    CompetitorData::getProduct,
-                    CompetitorData::setProduct,
+                    Competitor::getProduct,
+                    Competitor::setProduct,
                     competitorDataService::saveCompetitorDataList,
                     "конкурентов"
             );

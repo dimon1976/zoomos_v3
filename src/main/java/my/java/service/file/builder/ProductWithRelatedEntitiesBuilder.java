@@ -1,7 +1,7 @@
 package my.java.service.file.builder;
 
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -22,7 +22,7 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
 
     private Product product;
     private RegionData regionData;
-    private CompetitorData competitorData;
+    private Competitor competitor;
 
     private Long clientId;
     private Long fileId;
@@ -163,7 +163,7 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         initializeCompetitorData();
 
         // Заполняем поля конкурента
-        competitorData.fillFromMap(competitorDataMap);
+        competitor.fillFromMap(competitorDataMap);
 
         return true;
     }
@@ -195,13 +195,13 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
      * Инициализирует данные о конкуренте, если они еще не созданы
      */
     private void initializeCompetitorData() {
-        if (competitorData == null) {
-            competitorData = new CompetitorData();
-            competitorData.setTransformerFactory(transformerFactory);
+        if (competitor == null) {
+            competitor = new Competitor();
+            competitor.setTransformerFactory(transformerFactory);
         }
 
         if (clientId != null) {
-            competitorData.setClientId(clientId);
+            competitor.setClientId(clientId);
         }
     }
 
@@ -299,9 +299,9 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
                 entities.add(regionData);
             }
 
-            if (competitorData != null) {
-                competitorData.setProduct(product);
-                entities.add(competitorData);
+            if (competitor != null) {
+                competitor.setProduct(product);
+                entities.add(competitor);
             }
         }
 
@@ -329,8 +329,8 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
         }
 
         // Проверяем данные о конкуренте, если они есть
-        if (competitorData != null) {
-            String competitorValidation = competitorData.validate();
+        if (competitor != null) {
+            String competitorValidation = competitor.validate();
             if (competitorValidation != null) {
                 return competitorValidation;
             }
@@ -343,6 +343,6 @@ public class ProductWithRelatedEntitiesBuilder implements EntitySetBuilder {
     public void reset() {
         product = null;
         regionData = null;
-        competitorData = null;
+        competitor = null;
     }
 }

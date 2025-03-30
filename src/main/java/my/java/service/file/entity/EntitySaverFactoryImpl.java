@@ -2,7 +2,7 @@ package my.java.service.file.entity;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
@@ -100,8 +100,8 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
      * @return количество сохраненных сущностей
      */
     private int saveCompetitorData(List<ImportableEntity> entities) {
-        List<CompetitorData> competitorDataList = filterEntitiesByType(entities, CompetitorData.class);
-        return competitorDataService.saveCompetitorDataList(competitorDataList);
+        List<Competitor> competitorList = filterEntitiesByType(entities, Competitor.class);
+        return competitorDataService.saveCompetitorDataList(competitorList);
     }
 
     /**

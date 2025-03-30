@@ -3,7 +3,7 @@ package my.java.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
 import my.java.service.competitor.CompetitorDataService;
@@ -52,9 +52,9 @@ public class EntityDataController {
      * Получение данных конкурентов по клиенту
      */
     @GetMapping("/competitors/client/{clientId}")
-    public ResponseEntity<List<CompetitorData>> getCompetitorsByClient(@PathVariable Long clientId) {
+    public ResponseEntity<List<Competitor>> getCompetitorsByClient(@PathVariable Long clientId) {
         log.debug("GET request to get competitors by client: {}", clientId);
-        List<CompetitorData> competitors = competitorDataService.findByClientId(clientId);
+        List<Competitor> competitors = competitorDataService.findByClientId(clientId);
         return ResponseEntity.ok(competitors);
     }
 

@@ -12,9 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -32,7 +30,29 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
 
         // Если указаны конкретные поля для включения, используем их
         if (!config.getIncludedFields().isEmpty()) {
-            return new ArrayList<>(config.getIncludedFields());
+            // Создаем инстанс сущности для получения маппинга
+            try {
+                T entity = entityClass.getDeclaredConstructor().newInstance();
+                Map<String, String> fieldMappings = entity.getFieldMappings();
+
+                // Инвертируем маппинг для поиска (ключ -> имя поля, значение -> заголовок)
+                Map<String, String> invertedMappings = new HashMap<>();
+                invertedMappings.putAll(fieldMappings);
+
+                // Для каждого выбранного заголовка находим соответствующее имя поля
+                for (String header : config.getIncludedFields()) {
+                    String fieldName = fieldMappings.get(header);
+                    if (fieldName != null) {
+                        result.add(fieldName);
+                    } else {
+                        log.warn("Не найдено соответствие для заголовка: {}", header);
+                    }
+                }
+
+                return result;
+            } catch (Exception e) {
+                log.error("Ошибка при создании инстанса сущности: {}", e.getMessage());
+            }
         }
 
         // Иначе получаем все доступные поля класса сущности

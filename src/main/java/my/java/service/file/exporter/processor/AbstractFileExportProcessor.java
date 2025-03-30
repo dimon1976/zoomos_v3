@@ -216,7 +216,7 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
     /**
      * Форматирует имя поля для отображения в заголовке
      */
-    private String formatFieldName(String fieldName) {
+    protected String formatFieldName(String fieldName) {
         if (fieldName == null || fieldName.isEmpty()) {
             return "";
         }
@@ -246,9 +246,89 @@ public abstract class AbstractFileExportProcessor<T extends ImportableEntity> im
     }
 
     /**
+     * Получает значение поля из составной сущности
+     *
+     * @param compositeEntity составная сущность
+     * @param fieldName имя поля (может содержать префикс сущности, например "product.name")
+     * @return значение поля
+     */
+    protected Object getCompositeFieldValue(CompositeProductEntity compositeEntity, String fieldName) {
+        if (fieldName == null) {
+            return null;
+        }
+
+        try {
+            // Разбиваем имя поля по первой точке, если она есть
+            String[] parts = fieldName.split("\\.", 2);
+
+            // Определяем, какую сущность использовать и какое поле запрашивать
+            if (parts.length == 1) {
+                // Если нет префикса, считаем что поле относится к продукту
+                return getFieldValueFromObject(compositeEntity.getProduct(), parts[0]);
+            } else if (parts[0].equals("product")) {
+                return getFieldValueFromObject(compositeEntity.getProduct(), parts[1]);
+            } else if (parts[0].equals("region")) {
+                return compositeEntity.getRegion() != null
+                        ? getFieldValueFromObject(compositeEntity.getRegion(), parts[1])
+                        : null;
+            } else if (parts[0].equals("competitor")) {
+                return compositeEntity.getCompetitor() != null
+                        ? getFieldValueFromObject(compositeEntity.getCompetitor(), parts[1])
+                        : null;
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при получении значения поля {} из составной сущности: {}",
+                    fieldName, e.getMessage());
+        }
+
+        return null;
+    }
+
+
+    /**
+     * Получает значение поля из объекта через рефлексию
+     * Публичный метод для использования в различных частях процессора
+     */
+    protected Object getFieldValueFromObject(Object entity, String fieldName) {
+        if (entity == null || fieldName == null) {
+            return null;
+        }
+
+        try {
+            // Сначала пытаемся найти геттер для поля
+            String getterName = "get" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+            Method getter = entity.getClass().getMethod(getterName);
+            return getter.invoke(entity);
+        } catch (Exception e) {
+            try {
+                // Если геттер не найден, пытаемся обратиться к полю напрямую
+                Field field = findField(entity.getClass(), fieldName);
+                if (field != null) {
+                    field.setAccessible(true);
+                    return field.get(entity);
+                }
+            } catch (Exception ex) {
+                log.error("Ошибка при получении значения поля {}: {}", fieldName, ex.getMessage());
+            }
+            return null;
+        }
+    }
+
+
+    /**
+     * Получает значение поля из продукта
+     */
+    private Object getProductFieldValue(Object product, String fieldName) {
+        if (product == null) {
+            return null;
+        }
+        return getFieldValue(product, fieldName);
+    }
+
+    /**
      * Получает значение поля из сущности
      */
-    protected Object getFieldValue(T entity, String fieldName) {
+    private Object getFieldValue(Object entity, String fieldName) {
         try {
             // Сначала пытаемся найти геттер для поля
             String getterName = "get" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);

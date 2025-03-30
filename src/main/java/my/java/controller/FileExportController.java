@@ -11,15 +11,14 @@ import my.java.model.entity.Product;
 import my.java.model.entity.RegionData;
 import my.java.service.client.ClientService;
 import my.java.service.entity.competitor.CompetitorDataService;
+import my.java.service.entity.product.ProductService;
+import my.java.service.entity.region.RegionDataService;
 import my.java.service.file.exporter.FileExportService;
 import my.java.service.file.exporter.FileFormat;
 import my.java.service.file.exporter.tracker.ExportProgressTracker;
-import my.java.service.entity.product.ProductService;
-import my.java.service.entity.region.RegionDataService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
@@ -51,18 +50,9 @@ public class FileExportController {
     private static final Map<String, Class<? extends ImportableEntity>> ENTITY_TYPES = Map.of(
             "product", Product.class,
             "competitor", Competitor.class,
-            "region", RegionData.class
+            "region", RegionData.class,
+            "product_with_related", Product.class
     );
-
-    /**
-     * Показывает страницу экспорта
-     */
-    @GetMapping
-    public String showExportPage(Model model) {
-        log.debug("Запрос на отображение страницы экспорта");
-        model.addAttribute("clients", clientService.getAllClients());
-        return "export/index";
-    }
 
     /**
      * Экспортирует данные указанного типа сущности
@@ -97,14 +87,15 @@ public class FileExportController {
                 "attachment; filename=" + URLEncoder.encode(filename, StandardCharsets.UTF_8));
 
         // Выполняем экспорт
-        Map<String, Object> filterCriteria = new HashMap<>(filters);
-        filterCriteria.put("clientId", clientId);
+        Map<String, Object> exportParams = new HashMap<>(filters != null ? filters : new HashMap<>());
+        exportParams.put("clientId", clientId);
 
         try {
+            // Применяем единый метод экспорта для всех типов сущностей
             exportService.exportData(
                     entityClass,
                     client,
-                    filterCriteria,
+                    exportParams,
                     response.getOutputStream(),
                     format,
                     entityType);
@@ -159,7 +150,7 @@ public class FileExportController {
             @PathVariable String entityType,
             @RequestParam Long clientId,
             @RequestParam(required = false, defaultValue = "CSV") String format,
-            @RequestParam(required = false) List<String> fields, // Добавляем параметр полей
+            @RequestParam(required = false) List<String> fields,
             @RequestParam(required = false) Map<String, Object> filters) {
 
         log.info("Запрос на асинхронный экспорт данных типа {} для клиента {}, формат: {}, выбранных полей: {}",

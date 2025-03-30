@@ -35,10 +35,43 @@ public class EntityMetadataController {
     public ResponseEntity<List<Map<String, String>>> getEntityFields(@PathVariable String entityType) {
         log.debug("GET запрос на получение полей для типа сущности: {}", entityType);
 
-        // Маппинг типов сущностей с фронтенда в ключи EntityFieldService
-        String serviceEntityType = mapEntityType(entityType);
+        // Проверяем, является ли это запросом для составного типа
+        if ("product_with_related".equalsIgnoreCase(entityType)) {
+            // Для составного типа нужно вернуть поля из всех связанных сущностей
+            List<Map<String, String>> result = new ArrayList<>();
 
-        // Получаем доступные поля из сервиса
+            // Получаем поля продукта
+            Map<String, String> productFields = entityFieldService.getFieldMappings("product");
+            for (Map.Entry<String, String> entry : productFields.entrySet()) {
+                Map<String, String> field = new HashMap<>();
+                field.put("name", entry.getKey());
+                field.put("displayName", entry.getValue());
+                result.add(field);
+            }
+
+            // Получаем поля региона с префиксом
+            Map<String, String> regionFields = entityFieldService.getFieldMappings("regiondata");
+            for (Map.Entry<String, String> entry : regionFields.entrySet()) {
+                Map<String, String> field = new HashMap<>();
+                field.put("name", "region." + entry.getKey());
+                field.put("displayName", "Регион: " + entry.getValue());
+                result.add(field);
+            }
+
+            // Получаем поля конкурента с префиксом
+            Map<String, String> competitorFields = entityFieldService.getFieldMappings("competitordata");
+            for (Map.Entry<String, String> entry : competitorFields.entrySet()) {
+                Map<String, String> field = new HashMap<>();
+                field.put("name", "competitor." + entry.getKey());
+                field.put("displayName", "Конкурент: " + entry.getValue());
+                result.add(field);
+            }
+
+            return ResponseEntity.ok(result);
+        }
+
+        // Стандартная обработка для других типов
+        String serviceEntityType = mapEntityType(entityType);
         Map<String, String> fieldMappings = entityFieldService.getFieldMappings(serviceEntityType);
 
         // Проверка на пустой результат
@@ -51,7 +84,6 @@ public class EntityMetadataController {
 
         // Преобразуем в формат, ожидаемый фронтендом
         List<Map<String, String>> result = new ArrayList<>();
-
         for (Map.Entry<String, String> entry : fieldMappings.entrySet()) {
             Map<String, String> field = new HashMap<>();
             field.put("name", entry.getKey());
@@ -95,22 +127,34 @@ public class EntityMetadataController {
         log.debug("API запрос на получение структуры полей для сущности: {}", entityType);
 
         try {
+            // Проверяем, является ли это запросом для составного типа
+            if ("product_with_related".equalsIgnoreCase(entityType)) {
+                Map<String, Object> structure = new HashMap<>();
+                Map<String, List<Map.Entry<String, String>>> groups = new HashMap<>();
+
+                // Получаем поля для каждого типа сущностей
+                List<Map.Entry<String, String>> productEntries = getEntriesFromFieldMappings("product");
+                List<Map.Entry<String, String>> regionEntries = getEntriesFromFieldMappings("regiondata");
+                List<Map.Entry<String, String>> competitorEntries = getEntriesFromFieldMappings("competitordata");
+
+                // Формируем группы
+                groups.put("product", productEntries);
+                groups.put("region", regionEntries);
+                groups.put("competitor", competitorEntries);
+
+                // Добавляем структуру групп
+                structure.put("groups", groups);
+
+                return ResponseEntity.ok(structure);
+            }
+
             // Маппинг типа сущности в правильный формат
             String serviceEntityType = mapEntityType(entityType);
-            log.debug("Преобразован тип сущности из {} в {}", entityType, serviceEntityType);
-
             Map<String, Object> structure = new HashMap<>();
 
             // Получаем обычные поля
             Map<String, String> fieldMappings = entityFieldService.getFieldMappings(serviceEntityType);
             structure.put("fields", fieldMappings);
-
-            // Если это составной тип, получаем группы полей
-            if (serviceEntityType.contains("_with_")) {
-                Map<String, List<Map.Entry<String, String>>> fieldGroups =
-                        entityFieldService.getFieldGroups(serviceEntityType);
-                structure.put("groups", fieldGroups);
-            }
 
             return ResponseEntity.ok(structure);
         } catch (Exception e) {
@@ -171,5 +215,11 @@ public class EntityMetadataController {
                 // Возвращаем оригинальное значение для остальных типов
                 return type;
         }
+    }
+
+    // Вспомогательный метод для получения записей из маппинга полей
+    private List<Map.Entry<String, String>> getEntriesFromFieldMappings(String entityType) {
+        Map<String, String> fieldMappings = entityFieldService.getFieldMappings(entityType);
+        return new ArrayList<>(fieldMappings.entrySet());
     }
 }

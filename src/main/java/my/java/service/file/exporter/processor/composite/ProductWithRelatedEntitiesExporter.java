@@ -1,5 +1,6 @@
 package my.java.service.file.exporter.processor.composite;
 
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
@@ -20,6 +21,12 @@ public class ProductWithRelatedEntitiesExporter {
 
     private final RegionDataRepository regionDataRepository;
     private final CompetitorDataRepository competitorDataRepository;
+
+    @Setter
+    private boolean includeRegions = true;
+
+    @Setter
+    private boolean includeCompetitors = true;
 
     /**
      * Конструктор для создания экспортера связанных сущностей
@@ -53,11 +60,12 @@ public class ProductWithRelatedEntitiesExporter {
                 .map(Product::getId)
                 .collect(Collectors.toList());
 
-        // Загружаем все связанные данные о регионах по идентификаторам продуктов
-        Map<Long, List<RegionData>> productToRegionsMap = loadRegionsForProducts(productIds);
+        // Загружаем все связанные данные о регионах и конкурентах
+        Map<Long, List<RegionData>> productToRegionsMap = includeRegions ?
+                loadRegionsForProducts(productIds) : new HashMap<>();
 
-        // Загружаем все связанные данные о конкурентах по идентификаторам продуктов
-        Map<Long, List<Competitor>> productToCompetitorsMap = loadCompetitorsForProducts(productIds);
+        Map<Long, List<Competitor>> productToCompetitorsMap = includeCompetitors ?
+                loadCompetitorsForProducts(productIds) : new HashMap<>();
 
         // Создаем составные сущности для каждого продукта
         List<CompositeProductEntity> result = new ArrayList<>();
@@ -66,23 +74,34 @@ public class ProductWithRelatedEntitiesExporter {
             Long productId = product.getId();
 
             // Получаем связанные регионы и конкуренты
-            List<RegionData> regions = productToRegionsMap.getOrDefault(productId, Collections.emptyList());
-            List<Competitor> competitors = productToCompetitorsMap.getOrDefault(productId, Collections.emptyList());
+            List<RegionData> regions = includeRegions ?
+                    productToRegionsMap.getOrDefault(productId, Collections.emptyList()) :
+                    Collections.emptyList();
+
+            List<Competitor> competitors = includeCompetitors ?
+                    productToCompetitorsMap.getOrDefault(productId, Collections.emptyList()) :
+                    Collections.emptyList();
+
+            // Если и регионы, и конкуренты отключены, создаем одну сущность только с продуктом
+            if (!includeRegions && !includeCompetitors) {
+                result.add(new CompositeProductEntity(product, null, null));
+                continue;
+            }
 
             // Если у продукта нет связанных данных, создаем одну составную сущность только с продуктом
             if (regions.isEmpty() && competitors.isEmpty()) {
                 result.add(new CompositeProductEntity(product, null, null));
-            } else if (regions.isEmpty()) {
+            } else if (regions.isEmpty() && includeCompetitors) {
                 // Если есть только конкуренты
                 for (Competitor competitor : competitors) {
                     result.add(new CompositeProductEntity(product, null, competitor));
                 }
-            } else if (competitors.isEmpty()) {
+            } else if (competitors.isEmpty() && includeRegions) {
                 // Если есть только регионы
                 for (RegionData region : regions) {
                     result.add(new CompositeProductEntity(product, region, null));
                 }
-            } else {
+            } else if (includeRegions && includeCompetitors) {
                 // Если есть и регионы, и конкуренты, создаем комбинации
                 for (RegionData region : regions) {
                     for (Competitor competitor : competitors) {
@@ -233,7 +252,7 @@ public class ProductWithRelatedEntitiesExporter {
         }
 
         @Override
-        public void fillFromMap(Map<String, String> data) {
+        public boolean fillFromMap(Map<String, String> data) {
             // Этот метод не используется при экспорте
             throw new UnsupportedOperationException("Метод не поддерживается для экспорта");
         }

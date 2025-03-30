@@ -13,6 +13,13 @@ public interface RegionDataRepository extends JpaRepository<RegionData, Long> {
 
     // Поиск данных региона по продукту
     List<RegionData> findByProductId(Long productId);
+    /**
+     * Находит все регионы для списка продуктов
+     *
+     * @param productIds список идентификаторов продуктов
+     * @return список регионов
+     */
+    List<RegionData> findByProductIdIn(List<Long> productIds);
 
     // Поиск данных региона по клиенту
     List<RegionData> findByClientId(Long clientId);

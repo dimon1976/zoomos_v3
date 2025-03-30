@@ -17,6 +17,14 @@ public interface CompetitorDataRepository extends JpaRepository<Competitor, Long
     // Поиск данных конкурентов по продукту
     List<Competitor> findByProductId(Long productId);
 
+    /**
+     * Находит всех конкурентов для списка продуктов
+     *
+     * @param productIds список идентификаторов продуктов
+     * @return список конкурентов
+     */
+    List<Competitor> findByProductIdIn(List<Long> productIds);
+
     // Поиск данных конкурентов по клиенту
     List<Competitor> findByClientId(Long clientId);
 

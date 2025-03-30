@@ -108,6 +108,11 @@ public class FileExportServiceImpl implements FileExportService {
                 entityClass.getSimpleName(), client.getName(), fileFormat);
 
         try {
+            // Проверяем, является ли это экспортом связанных сущностей
+            if ("product_with_related".equalsIgnoreCase(entityType)) {
+                return exportProductsWithRelatedEntities(client, exportParams, outputStream, fileFormat);
+            }
+
             // Создаем запись в БД о новой операции экспорта
             FileOperation operation = createExportOperation(client, fileFormat, entityType);
 
@@ -115,26 +120,7 @@ public class FileExportServiceImpl implements FileExportService {
             Map<String, Object> filterCriteria = new HashMap<>(exportParams);
 
             // Извлекаем список полей для включения, если он есть
-            List<String> includedFields = null;
-            if (exportParams.containsKey("fields")) {
-                Object fieldsObj = exportParams.get("fields");
-                filterCriteria.remove("fields"); // Удаляем из фильтров
-
-                if (fieldsObj instanceof List) {
-                    // Если передан список полей
-                    includedFields = (List<String>) fieldsObj;
-                    log.debug("Экспорт будет включать выбранные поля из списка: {}", includedFields);
-                } else if (fieldsObj instanceof String) {
-                    // Если передана строка с запятыми
-                    String fieldsStr = (String) fieldsObj;
-                    if (!fieldsStr.isEmpty()) {
-                        includedFields = Arrays.asList(fieldsStr.split("\\s*,\\s*"));
-                        log.debug("Экспорт будет включать выбранные поля из строки: {}", includedFields);
-                    }
-                } else {
-                    log.warn("Параметр fields имеет неожиданный тип: {}", fieldsObj.getClass().getName());
-                }
-            }
+            List<String> includedFields = extractIncludedFields(exportParams, filterCriteria);
 
             // Сохраняем критерии фильтрации в БД (без параметров экспорта)
             if (!filterCriteria.isEmpty()) {
@@ -163,26 +149,7 @@ public class FileExportServiceImpl implements FileExportService {
             operation = fileOperationRepository.save(operation);
 
             // Создаем конфигурацию экспорта с учетом выбранных полей
-            ExportConfig config;
-            if (includedFields != null && !includedFields.isEmpty()) {
-                // Используем Builder для создания конфигурации с выбранными полями
-                ExportConfig.ExportConfigBuilder configBuilder = ExportConfig.builder()
-                        .includeHeader(true)
-                        .applyFormatting(true)
-                        .batchSize(1000)
-                        .asyncProcessing(false);
-
-                // Добавляем выбранные поля
-                configBuilder.includedFields(new ArrayList<>(includedFields));
-
-                // Создаем конфигурацию
-                config = configBuilder.build();
-                log.debug("Создана конфигурация экспорта с выбранными полями: {}", includedFields);
-            } else {
-                // Если поля не выбраны, используем конфигурацию по умолчанию
-                config = ExportConfig.createDefault();
-                log.debug("Используется конфигурация экспорта по умолчанию (все поля)");
-            }
+            ExportConfig config = createExportConfig(includedFields);
 
             // Получаем процессор для формата файла
             FileFormat format = FileFormat.fromString(fileFormat);
@@ -201,6 +168,47 @@ public class FileExportServiceImpl implements FileExportService {
             log.error("Ошибка при экспорте данных: {}", e.getMessage(), e);
             throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Извлекает список полей для включения из параметров экспорта
+     */
+    private List<String> extractIncludedFields(Map<String, Object> exportParams, Map<String, Object> filterCriteria) {
+        List<String> includedFields = null;
+
+        if (exportParams.containsKey("fields")) {
+            Object fieldsObj = exportParams.get("fields");
+            filterCriteria.remove("fields"); // Удаляем из фильтров
+
+            if (fieldsObj instanceof List) {
+                // Если передан список полей
+                includedFields = (List<String>) fieldsObj;
+                log.debug("Экспорт будет включать выбранные поля из списка: {}", includedFields);
+            } else if (fieldsObj instanceof String) {
+                // Если передана строка с запятыми
+                String fieldsStr = (String) fieldsObj;
+                if (!fieldsStr.isEmpty()) {
+                    includedFields = Arrays.asList(fieldsStr.split("\\s*,\\s*"));
+                    log.debug("Экспорт будет включать выбранные поля из строки: {}", includedFields);
+                }
+            } else {
+                log.warn("Параметр fields имеет неожиданный тип: {}", fieldsObj.getClass().getName());
+            }
+        }
+
+        // Также проверяем параметр includedFields
+        if (exportParams.containsKey("includedFields")) {
+            Object fieldsObj = exportParams.get("includedFields");
+            filterCriteria.remove("includedFields"); // Удаляем из фильтров
+
+            if (fieldsObj instanceof List) {
+                // Если передан список полей
+                includedFields = (List<String>) fieldsObj;
+                log.debug("Экспорт будет включать выбранные поля из списка includedFields: {}", includedFields);
+            }
+        }
+
+        return includedFields;
     }
 
     @Override
@@ -511,11 +519,18 @@ public class FileExportServiceImpl implements FileExportService {
         return dto;
     }
 
-    @Override
-    @Transactional
+    /**
+     * Экспортирует продукты вместе со связанными сущностями
+     *
+     * @param client клиент
+     * @param exportParams параметры экспорта
+     * @param outputStream выходной поток
+     * @param fileFormat формат файла
+     * @return информация об операции экспорта
+     */
     public FileOperationDto exportProductsWithRelatedEntities(
             Client client,
-            Map<String, Object> filterCriteria,
+            Map<String, Object> exportParams,
             OutputStream outputStream,
             String fileFormat) {
 
@@ -526,23 +541,47 @@ public class FileExportServiceImpl implements FileExportService {
             // Создаем запись в БД о новой операции экспорта
             FileOperation operation = createExportOperation(client, fileFormat, "product_with_related");
 
-            // Инициализируем трекер прогресса
-            progressTracker.initializeOperation(operation.getId(),
-                    "Экспорт продуктов со связанными сущностями");
+            // Создаем копию параметров для фильтрации
+            Map<String, Object> filterCriteria = new HashMap<>(exportParams);
+
+            // Извлекаем настройки для связанных сущностей
+            boolean includeRegions = true; // По умолчанию включаем регионы
+            boolean includeCompetitors = true; // По умолчанию включаем конкурентов
+
+            if (exportParams.containsKey("includeRegions")) {
+                includeRegions = Boolean.parseBoolean(exportParams.get("includeRegions").toString());
+                filterCriteria.remove("includeRegions");
+            }
+
+            if (exportParams.containsKey("includeCompetitors")) {
+                includeCompetitors = Boolean.parseBoolean(exportParams.get("includeCompetitors").toString());
+                filterCriteria.remove("includeCompetitors");
+            }
+
+            // Извлекаем список полей для включения
+            List<String> includedFields = extractIncludedFields(exportParams, filterCriteria);
 
             // Сохраняем критерии фильтрации в БД
-            if (filterCriteria != null && !filterCriteria.isEmpty()) {
+            if (!filterCriteria.isEmpty()) {
                 String filterJson = objectMapper.writeValueAsString(filterCriteria);
                 operation.setExportFilterCriteria(filterJson);
                 operation = fileOperationRepository.save(operation);
             }
 
+            // Инициализируем трекер прогресса
+            progressTracker.initializeOperation(operation.getId(),
+                    "Экспорт продуктов со связанными сущностями");
+
             // Получаем продукты на основе критериев фильтрации
             List<Product> products = loadProductsWithFilter(filterCriteria);
 
-            // Обновляем информацию в трекере и операции
+            // Обновляем информацию в трекере
             progressTracker.updateStatus(operation.getId(), "Найдено продуктов: " + products.size());
             progressTracker.updateProgress(operation.getId(), 0);
+
+            // Настраиваем параметры для экспортера связанных сущностей
+            compositeExporter.setIncludeRegions(includeRegions);
+            compositeExporter.setIncludeCompetitors(includeCompetitors);
 
             // Преобразуем продукты в составные сущности
             List<CompositeProductEntity> compositeEntities = compositeExporter.convertToCompositeEntities(products);
@@ -557,8 +596,8 @@ public class FileExportServiceImpl implements FileExportService {
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
 
-            // Создаем конфигурацию экспорта
-            ExportConfig config = ExportConfig.createDefault();
+            // Создаем конфигурацию экспорта с учетом выбранных полей
+            ExportConfig config = createExportConfig(includedFields);
 
             // Получаем процессор для формата файла
             FileFormat format = FileFormat.fromString(fileFormat);
@@ -576,6 +615,29 @@ public class FileExportServiceImpl implements FileExportService {
         } catch (Exception e) {
             log.error("Ошибка при экспорте продуктов со связанными сущностями: {}", e.getMessage(), e);
             throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Создает конфигурацию экспорта с учетом выбранных полей
+     */
+    private ExportConfig createExportConfig(List<String> includedFields) {
+        if (includedFields != null && !includedFields.isEmpty()) {
+            // Используем Builder для создания конфигурации с выбранными полями
+            ExportConfig.ExportConfigBuilder configBuilder = ExportConfig.builder()
+                    .includeHeader(true)
+                    .applyFormatting(true)
+                    .batchSize(1000)
+                    .asyncProcessing(false);
+
+            // Добавляем выбранные поля
+            configBuilder.includedFields(new ArrayList<>(includedFields));
+
+            // Создаем конфигурацию
+            return configBuilder.build();
+        } else {
+            // Если поля не выбраны, используем конфигурацию по умолчанию
+            return ExportConfig.createDefault();
         }
     }
 

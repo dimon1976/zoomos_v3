@@ -460,117 +460,20 @@
 
         <!-- Вкладка экспорта данных -->
         <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
-            <!-- Проверка наличия активной операции экспорта -->
-            <div th:if="${activeExportOperation}" class="export-progress-section">
-                <!-- Секция прогресса экспорта -->
-                <div class="progress-container">
-                    <h5>Экспорт данных</h5>
-                    <p>
-                <span class="badge" th:classappend="${activeExportOperation.getStatusClass()}"
-                      th:text="${activeExportOperation.getStatusDisplay()}">Статус</span>
-                        <span th:text="${activeExportOperation.fileName}">filename.csv</span>
-                    </p>
-
-                    <!-- Прогресс-бар -->
-                    <div class="progress mb-3">
-                        <div id="exportProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                             role="progressbar"
-                             th:style="'width: ' + ${activeExportOperation.processingProgress != null ? activeExportOperation.processingProgress : 0} + '%'"
-                             th:aria-valuenow="${activeExportOperation.processingProgress != null ? activeExportOperation.processingProgress : 0}"
-                             aria-valuemin="0" aria-valuemax="100"
-                             th:text="${activeExportOperation.processingProgress != null ? activeExportOperation.processingProgress : 0} + '%'">
-                            0%
-                        </div>
-                    </div>
-
-                    <!-- Текст прогресса -->
-                    <p id="exportProgressText" class="text-muted">
-                <span th:if="${activeExportOperation.recordCount != null}">
-                    Обработано <span th:text="${activeExportOperation.recordCount}">0</span> записей
-                </span>
-                        <span th:unless="${activeExportOperation.recordCount != null}">
-                    Экспорт в процессе...
-                </span>
-                    </p>
-
-                    <!-- Сообщение об ошибке -->
-                    <div th:if="${activeExportOperation.errorMessage}" class="alert alert-danger">
-                        <i class="fas fa-exclamation-circle me-2"></i>
-                        <span th:text="${activeExportOperation.errorMessage}">Сообщение об ошибке</span>
-                    </div>
-
-                    <!-- Журнал операции -->
-                    <div class="card mt-3">
-                        <div class="card-header bg-light">
-                            <h6 class="card-title mb-0">
-                                <i class="fas fa-list-alt me-2"></i>Журнал операции
-                            </h6>
-                        </div>
-                        <div class="card-body p-0">
-                            <div id="exportLogContainer" class="log-container">
-                                <div class="log-entry">
-                            <span class="log-time"
-                                  th:text="${#temporals.format(activeExportOperation.startedAt, 'HH:mm:ss')}">12:00:00</span>
-                                    <span class="log-info">Операция экспорта инициализирована.</span>
-                                </div>
-                                <div class="log-entry"
-                                     th:if="${activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING}">
-                            <span class="log-time"
-                                  th:text="${#temporals.format(#temporals.createNow(), 'HH:mm:ss')}">12:01:00</span>
-                                    <span class="log-info">Выполняется экспорт данных.</span>
-                                </div>
-                                <div class="log-entry"
-                                     th:if="${activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
-                            <span class="log-time"
-                                  th:text="${#temporals.format(activeExportOperation.completedAt, 'HH:mm:ss')}">12:05:00</span>
-                                    <span class="log-success">Экспорт успешно завершен. Экспортировано записей: <span
-                                            th:text="${activeExportOperation.recordCount}">0</span></span>
-                                </div>
-                                <div class="log-entry"
-                                     th:if="${activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}">
-                            <span class="log-time"
-                                  th:text="${#temporals.format(activeExportOperation.completedAt, 'HH:mm:ss')}">12:05:00</span>
-                                    <span class="log-error">Экспорт завершился с ошибкой: <span
-                                            th:text="${activeExportOperation.errorMessage}">Ошибка</span></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Кнопки действий -->
-                    <div class="mt-3">
-                        <a th:if="${activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}"
-                           class="btn btn-success"
-                           th:href="@{/export/result/{operationId}(operationId=${activeExportOperation.id})}">
-                            <i class="fas fa-download me-1"></i>Скачать результат
-                        </a>
-                        <a th:if="${activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED ||
-                            activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).FAILED}"
-                           class="btn btn-primary ms-2" href="#"
-                           onclick="refreshExportTab(); return false;">
-                            <i class="fas fa-file-export me-1"></i>Новый экспорт
-                        </a>
-                        <button th:if="${activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).PROCESSING ||
-                               activeExportOperation.status == T(my.java.model.FileOperation.OperationStatus).PENDING}"
-                                id="cancelExportBtn" class="btn btn-danger">
-                            <i class="fas fa-stop-circle me-1"></i>Отменить экспорт
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Основная форма экспорта, если нет активной операции -->
-            <div th:unless="${activeExportOperation}">
+            <!-- Основная форма экспорта -->
+            <div>
                 <!-- Вкладки для разных типов экспорта -->
                 <ul class="nav nav-tabs mb-3" id="exportTypeTabs" role="tablist">
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="standard-export-tab" data-bs-toggle="tab" data-bs-target="#standard-export"
+                        <button class="nav-link active" id="standard-export-tab" data-bs-toggle="tab"
+                                data-bs-target="#standard-export"
                                 type="button" role="tab" aria-controls="standard-export" aria-selected="true">
                             <i class="fas fa-table me-1"></i>Стандартный экспорт
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="custom-export-tab" data-bs-toggle="tab" data-bs-target="#custom-export"
+                        <button class="nav-link" id="custom-export-tab" data-bs-toggle="tab"
+                                data-bs-target="#custom-export"
                                 type="button" role="tab" aria-controls="custom-export" aria-selected="false">
                             <i class="fas fa-sliders-h me-1"></i>Настраиваемый экспорт
                         </button>
@@ -585,7 +488,8 @@
 
                 <div class="tab-content" id="exportTypeTabsContent">
                     <!-- Стандартный экспорт -->
-                    <div class="tab-pane fade show active" id="standard-export" role="tabpanel" aria-labelledby="standard-export-tab">
+                    <div class="tab-pane fade show active" id="standard-export" role="tabpanel"
+                         aria-labelledby="standard-export-tab">
                         <div class="card">
                             <div class="card-body">
                                 <h5 class="card-title">Экспорт данных</h5>
@@ -599,6 +503,8 @@
                                         <div class="col-sm-9">
                                             <select id="entityType" name="entityType" class="form-control" required>
                                                 <option value="">-- Выберите тип данных --</option>
+                                                <option value="product_with_related">Продукты со связанными сущностями
+                                                </option>
                                                 <option value="product">Продукты</option>
                                                 <option value="competitor">Данные конкурентов</option>
                                                 <option value="region">Региональные данные</option>
@@ -626,7 +532,8 @@
                                         <div id="filters">
                                             <!-- Динамически добавляемые фильтры будут здесь -->
                                         </div>
-                                        <button type="button" id="addFilterBtn" class="btn btn-outline-secondary btn-sm mt-2">
+                                        <button type="button" id="addFilterBtn"
+                                                class="btn btn-outline-secondary btn-sm mt-2">
                                             <i class="fas fa-filter me-1"></i>Добавить фильтр
                                         </button>
                                     </div>
@@ -655,10 +562,14 @@
                                     <input type="hidden" name="clientId" th:value="${client.id}">
 
                                     <div class="mb-3 row">
-                                        <label for="customEntityType" class="col-sm-3 col-form-label">Тип данных:</label>
+                                        <label for="customEntityType" class="col-sm-3 col-form-label">Тип
+                                            данных:</label>
                                         <div class="col-sm-9">
-                                            <select id="customEntityType" name="entityType" class="form-control" required>
+                                            <select id="customEntityType" name="entityType" class="form-control"
+                                                    required>
                                                 <option value="">-- Выберите тип данных --</option>
+                                                <option value="product_with_related">Продукты со связанными сущностями
+                                                </option>
                                                 <option value="product">Продукты</option>
                                                 <option value="competitor">Данные конкурентов</option>
                                                 <option value="region">Региональные данные</option>
@@ -667,7 +578,8 @@
                                     </div>
 
                                     <div class="mb-3 row">
-                                        <label for="customFileFormat" class="col-sm-3 col-form-label">Формат файла:</label>
+                                        <label for="customFileFormat" class="col-sm-3 col-form-label">Формат
+                                            файла:</label>
                                         <div class="col-sm-9">
                                             <select id="customFileFormat" name="format" class="form-control" required>
                                                 <option value="CSV">CSV</option>
@@ -726,7 +638,8 @@
                                     </div>
 
                                     <div class="mb-3 row">
-                                        <label for="csvDelimiter" class="col-sm-3 col-form-label">Разделитель CSV:</label>
+                                        <label for="csvDelimiter" class="col-sm-3 col-form-label">Разделитель
+                                            CSV:</label>
                                         <div class="col-sm-9">
                                             <select id="csvDelimiter" name="csvDelimiter" class="form-control">
                                                 <option value=";">Точка с запятой (;)</option>
@@ -738,7 +651,8 @@
                                     </div>
 
                                     <div class="form-check mb-3">
-                                        <input class="form-check-input" type="checkbox" id="includeHeader" name="includeHeader" checked>
+                                        <input class="form-check-input" type="checkbox" id="includeHeader"
+                                               name="includeHeader" checked>
                                         <label class="form-check-label" for="includeHeader">
                                             Включить заголовок
                                         </label>
@@ -762,10 +676,13 @@
                         <div class="card">
                             <div class="card-body">
                                 <h5 class="card-title">Экспорт на основе импорта</h5>
-                                <p class="card-text">Выберите операцию импорта, на основе которой нужно выполнить экспорт:</p>
+                                <p class="card-text">Выберите операцию импорта, на основе которой нужно выполнить
+                                    экспорт:</p>
 
-                                <div th:if="${#lists.isEmpty(recentImportOperations)}" class="alert alert-warning" role="alert">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>У этого клиента нет завершенных операций импорта
+                                <div th:if="${#lists.isEmpty(recentImportOperations)}" class="alert alert-warning"
+                                     role="alert">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>У этого клиента нет завершенных
+                                    операций импорта
                                 </div>
 
                                 <div th:unless="${#lists.isEmpty(recentImportOperations)}" class="table-responsive">
@@ -782,7 +699,9 @@
                                         <tbody>
                                         <tr th:each="operation : ${recentImportOperations}"
                                             th:if="${operation.status == T(my.java.model.FileOperation.OperationStatus).COMPLETED}">
-                                            <td th:text="${#temporals.format(operation.startedAt, 'dd.MM.yyyy HH:mm')}">01.01.2025</td>
+                                            <td th:text="${#temporals.format(operation.startedAt, 'dd.MM.yyyy HH:mm')}">
+                                                01.01.2025
+                                            </td>
                                             <td th:text="${operation.fileName}">file.csv</td>
                                             <td>
                                                 <span class="badge bg-success">Завершено</span>
@@ -791,27 +710,32 @@
                                             <td>
                                                 <div class="dropdown">
                                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                            type="button" data-bs-toggle="dropdown"
+                                                            aria-expanded="false">
                                                         Экспорт
                                                     </button>
                                                     <ul class="dropdown-menu">
                                                         <li>
-                                                            <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='CSV')}">
+                                                            <a class="dropdown-item"
+                                                               th:href="@{/export/from-import/{id}(id=${operation.id}, format='CSV')}">
                                                                 <i class="fas fa-file-csv me-1"></i> CSV
                                                             </a>
                                                         </li>
                                                         <li>
-                                                            <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='EXCEL')}">
+                                                            <a class="dropdown-item"
+                                                               th:href="@{/export/from-import/{id}(id=${operation.id}, format='EXCEL')}">
                                                                 <i class="fas fa-file-excel me-1"></i> Excel
                                                             </a>
                                                         </li>
                                                         <li>
-                                                            <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='JSON')}">
+                                                            <a class="dropdown-item"
+                                                               th:href="@{/export/from-import/{id}(id=${operation.id}, format='JSON')}">
                                                                 <i class="fas fa-file-code me-1"></i> JSON
                                                             </a>
                                                         </li>
                                                         <li>
-                                                            <a class="dropdown-item" th:href="@{/export/from-import/{id}(id=${operation.id}, format='XML')}">
+                                                            <a class="dropdown-item"
+                                                               th:href="@{/export/from-import/{id}(id=${operation.id}, format='XML')}">
                                                                 <i class="fas fa-file-code me-1"></i> XML
                                                             </a>
                                                         </li>
@@ -831,7 +755,8 @@
     </div>
 
     <!-- Модальное окно для сохранения шаблона экспорта -->
-    <div class="modal fade" id="saveTemplateModal" tabindex="-1" aria-labelledby="saveTemplateModalLabel" aria-hidden="true">
+    <div class="modal fade" id="saveTemplateModal" tabindex="-1" aria-labelledby="saveTemplateModalLabel"
+         aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -852,7 +777,9 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" id="confirmSaveTemplateBtn" class="btn btn-primary" onclick="saveExportTemplate()">Сохранить</button>
+                    <button type="button" id="confirmSaveTemplateBtn" class="btn btn-primary"
+                            onclick="saveExportTemplate()">Сохранить
+                    </button>
                 </div>
             </div>
         </div>
@@ -1177,6 +1104,361 @@
         // Простой способ - перезагрузить страницу
         window.location.reload();
     }
+</script>
+<script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', function () {
+        // Обработчики для показа/скрытия дополнительных настроек связанных сущностей
+        $('#entityType, #customEntityType').on('change', function () {
+            if ($(this).val() === 'product_with_related') {
+                // Показываем панель с настройками для связанных сущностей
+                showRelatedEntitiesSettings(this);
+            } else {
+                // Скрываем панель с настройками для связанных сущностей
+                hideRelatedEntitiesSettings(this);
+            }
+        });
+
+        // Проверяем начальные значения селекторов
+        if ($('#entityType').val() === 'product_with_related') {
+            showRelatedEntitiesSettings('#entityType');
+        }
+        if ($('#customEntityType').val() === 'product_with_related') {
+            showRelatedEntitiesSettings('#customEntityType');
+        }
+    });
+
+    /**
+     * Показывает настройки для связанных сущностей
+     */
+    function showRelatedEntitiesSettings(selector) {
+        // Определяем, какой селектор был выбран
+        const isCustom = $(selector).attr('id') === 'customEntityType';
+        const containerId = isCustom ? 'customRelatedEntitiesSettings' : 'relatedEntitiesSettings';
+
+        // Проверяем, существует ли контейнер настроек
+        let container = $('#' + containerId);
+        if (container.length === 0) {
+            // Если контейнер не существует, создаем его
+            const formGroup = $(selector).closest('.form-group').parent();
+            container = $('<div class="related-entities-settings mb-3"></div>');
+            container.attr('id', containerId);
+
+            // Добавляем элементы управления
+            container.html(`
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">Настройки связанных сущностей</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input related-entities-toggle" type="checkbox"
+                                id="${containerId}_includeRegions" name="includeRegions" checked>
+                            <label class="form-check-label" for="${containerId}_includeRegions">
+                                Включить данные о регионах
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input related-entities-toggle" type="checkbox"
+                                id="${containerId}_includeCompetitors" name="includeCompetitors" checked>
+                            <label class="form-check-label" for="${containerId}_includeCompetitors">
+                                Включить данные о конкурентах
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `);
+
+            // Вставляем контейнер после текущего селектора
+            formGroup.after(container);
+        } else {
+            // Если контейнер существует, показываем его
+            container.show();
+        }
+    }
+
+    /**
+     * Скрывает настройки для связанных сущностей
+     */
+    function hideRelatedEntitiesSettings(selector) {
+        // Определяем, какой селектор был выбран
+        const isCustom = $(selector).attr('id') === 'customEntityType';
+        const containerId = isCustom ? 'customRelatedEntitiesSettings' : 'relatedEntitiesSettings';
+
+        // Скрываем контейнер настроек если он существует
+        $('#' + containerId).hide();
+    }
+</script>
+
+<!-- Обновления для выбора полей при экспорте -->
+<script type="text/javascript">
+    // Глобальная переменная для хранения метаданных полей
+    const entityFieldsCache = {};
+
+    /**
+     * Загружает поля для выбранного типа сущности
+     */
+    function loadEntityFields(entityType, container) {
+        // Если это составной тип, загружаем поля для всех связанных типов
+        if (entityType === 'product_with_related') {
+            loadCompositeEntityFields(container);
+            return;
+        }
+
+        // Проверяем кэш
+        if (entityFieldsCache[entityType]) {
+            renderFieldsInContainer(entityFieldsCache[entityType], container);
+            return;
+        }
+
+        // Загружаем поля с сервера
+        $.ajax({
+            url: '/api/metadata/fields/' + entityType,
+            method: 'GET',
+            success: function (fields) {
+                // Сохраняем в кэш
+                entityFieldsCache[entityType] = fields;
+                // Отображаем поля
+                renderFieldsInContainer(fields, container);
+            },
+            error: function (xhr, status, error) {
+                console.error('Ошибка при загрузке полей:', error);
+                $(container).html('<div class="alert alert-danger">Ошибка при загрузке полей</div>');
+            }
+        });
+    }
+
+    /**
+     * Загружает поля для составного типа сущности
+     */
+    function loadCompositeEntityFields(container) {
+        // Загружаем структуру полей для составного типа
+        $.ajax({
+            url: '/api/metadata/structure/product_with_related',
+            method: 'GET',
+            success: function (structure) {
+                // Отображаем структуру полей
+                renderCompositeFieldsInContainer(structure, container);
+            },
+            error: function (xhr, status, error) {
+                console.error('Ошибка при загрузке структуры полей:', error);
+
+                // Если структура недоступна, загружаем отдельные типы
+                Promise.all([
+                    fetchEntityFields('product'),
+                    fetchEntityFields('region'),
+                    fetchEntityFields('competitor')
+                ]).then(function ([productFields, regionFields, competitorFields]) {
+                    // Создаем структуру вручную
+                    const structure = {
+                        fields: {},
+                        groups: {
+                            'product': productFields,
+                            'region': regionFields,
+                            'competitor': competitorFields
+                        }
+                    };
+                    renderCompositeFieldsInContainer(structure, container);
+                }).catch(function (error) {
+                    console.error('Ошибка при загрузке полей:', error);
+                    $(container).html('<div class="alert alert-danger">Ошибка при загрузке полей</div>');
+                });
+            }
+        });
+    }
+
+    /**
+     * Загружает поля для отдельного типа сущности
+     */
+    function fetchEntityFields(entityType) {
+        return new Promise((resolve, reject) => {
+            // Проверяем кэш
+            if (entityFieldsCache[entityType]) {
+                resolve(entityFieldsCache[entityType]);
+                return;
+            }
+
+            // Загружаем поля с сервера
+            $.ajax({
+                url: '/api/metadata/fields/' + entityType,
+                method: 'GET',
+                success: function (fields) {
+                    // Сохраняем в кэш
+                    entityFieldsCache[entityType] = fields;
+                    resolve(fields);
+                },
+                error: function (xhr, status, error) {
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    /**
+     * Отображает поля в контейнере
+     */
+    function renderFieldsInContainer(fields, container) {
+        $(container).empty();
+
+        if (!fields || fields.length === 0) {
+            $(container).html('<div class="alert alert-info">Нет доступных полей</div>');
+            return;
+        }
+
+        // Сортируем поля по имени для отображения
+        fields.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        // Создаем чекбоксы для каждого поля
+        fields.forEach(function (field) {
+            const fieldId = 'field_' + field.name.replace(/\./g, '_');
+
+            const checkboxDiv = $('<div class="form-check"></div>');
+            const checkbox = $('<input class="form-check-input field-checkbox" type="checkbox" checked>');
+
+            checkbox.attr('id', fieldId);
+            checkbox.attr('name', 'fields[]');
+            checkbox.attr('value', field.name);
+
+            const label = $('<label class="form-check-label"></label>');
+            label.attr('for', fieldId);
+            label.text(field.displayName);
+
+            checkboxDiv.append(checkbox);
+            checkboxDiv.append(label);
+
+            $(container).append(checkboxDiv);
+        });
+    }
+
+    /**
+     * Отображает структуру полей составного типа в контейнере
+     */
+    function renderCompositeFieldsInContainer(structure, container) {
+        $(container).empty();
+
+        // Создаем контейнер для группировки полей
+        const row = $('<div class="row"></div>');
+
+        // Создаем секцию для полей продукта
+        const productCol = $('<div class="col-md-4"></div>');
+        const productCard = $('<div class="card h-100"></div>');
+        productCard.append('<div class="card-header"><h6 class="mb-0">Продукты</h6></div>');
+        const productCardBody = $('<div class="card-body"></div>');
+        const productFieldsList = $('<div id="productFieldsList"></div>');
+        productCardBody.append(productFieldsList);
+        productCard.append(productCardBody);
+        productCol.append(productCard);
+        row.append(productCol);
+
+        // Создаем секцию для полей региона
+        const regionCol = $('<div class="col-md-4"></div>');
+        const regionCard = $('<div class="card h-100"></div>');
+        regionCard.append('<div class="card-header"><h6 class="mb-0">Регионы</h6></div>');
+        const regionCardBody = $('<div class="card-body"></div>');
+        const regionFieldsList = $('<div id="regionFieldsList"></div>');
+        regionCardBody.append(regionFieldsList);
+        regionCard.append(regionCardBody);
+        regionCol.append(regionCard);
+        row.append(regionCol);
+
+        // Создаем секцию для полей конкурента
+        const competitorCol = $('<div class="col-md-4"></div>');
+        const competitorCard = $('<div class="card h-100"></div>');
+        competitorCard.append('<div class="card-header"><h6 class="mb-0">Конкуренты</h6></div>');
+        const competitorCardBody = $('<div class="card-body"></div>');
+        const competitorFieldsList = $('<div id="competitorFieldsList"></div>');
+        competitorCardBody.append(competitorFieldsList);
+        competitorCard.append(competitorCardBody);
+        competitorCol.append(competitorCard);
+        row.append(competitorCol);
+
+        // Добавляем строку в контейнер
+        $(container).append(row);
+
+        // Отображаем поля в соответствующих секциях
+        if (structure.groups) {
+            if (structure.groups.product) {
+                renderFieldsInGroup(structure.groups.product, 'product', '#productFieldsList');
+            }
+            if (structure.groups.region) {
+                renderFieldsInGroup(structure.groups.region, 'region', '#regionFieldsList');
+            }
+            if (structure.groups.competitor) {
+                renderFieldsInGroup(structure.groups.competitor, 'competitor', '#competitorFieldsList');
+            }
+        } else {
+            // Если групп нет, отображаем доступные поля из общего списка
+            fetchEntityFields('product').then(fields => {
+                renderFieldsInGroup(fields, 'product', '#productFieldsList');
+            });
+            fetchEntityFields('region').then(fields => {
+                renderFieldsInGroup(fields, 'region', '#regionFieldsList');
+            });
+            fetchEntityFields('competitor').then(fields => {
+                renderFieldsInGroup(fields, 'competitor', '#competitorFieldsList');
+            });
+        }
+    }
+
+    /**
+     * Отображает поля группы
+     */
+    function renderFieldsInGroup(fields, prefix, container) {
+        $(container).empty();
+
+        if (!fields || fields.length === 0) {
+            $(container).html('<div class="alert alert-info">Нет доступных полей</div>');
+            return;
+        }
+
+        // Сортируем поля по имени для отображения
+        fields.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        // Создаем чекбоксы для каждого поля
+        fields.forEach(function (field) {
+            const fieldId = prefix + '_' + field.name.replace(/\./g, '_');
+            const fieldValue = prefix + '.' + field.name;
+
+            const checkboxDiv = $('<div class="form-check"></div>');
+            const checkbox = $('<input class="form-check-input field-checkbox" type="checkbox" checked>');
+
+            checkbox.attr('id', fieldId);
+            checkbox.attr('name', 'fields[]');
+            checkbox.attr('value', fieldValue);
+
+            const label = $('<label class="form-check-label"></label>');
+            label.attr('for', fieldId);
+            label.text(field.displayName);
+
+            checkboxDiv.append(checkbox);
+            checkboxDiv.append(label);
+
+            $(container).append(checkboxDiv);
+        });
+    }
+
+    // Добавьте вызов loadEntityFields при загрузке страницы и при изменении селектора типа сущности
+    $(document).ready(function () {
+        // Инициализация полей при загрузке страницы
+        const entityType = $('#entityType').val();
+        if (entityType) {
+            loadEntityFields(entityType, '#fieldsList');
+        }
+
+        // Обработчики изменения типа сущности
+        $('#entityType').on('change', function () {
+            loadEntityFields($(this).val(), '#fieldsList');
+        });
+
+        $('#customEntityType').on('change', function () {
+            loadEntityFields($(this).val(), '#customFieldsList');
+        });
+
+        // Обработчик для "Выбрать все поля"
+        $('#selectAllFields').on('change', function () {
+            const checked = $(this).prop('checked');
+            $('.field-checkbox').prop('checked', checked);
+        });
+    });
 </script>
 </body>
 </html>

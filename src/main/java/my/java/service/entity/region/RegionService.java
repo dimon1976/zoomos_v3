@@ -1,7 +1,7 @@
 // src/main/java/my/java/service/region/RegionDataService.java
-package my.java.service.region;
+package my.java.service.entity.region;
 
-import my.java.model.entity.RegionData;
+import my.java.model.entity.Region;
 
 import java.util.List;
 import java.util.Optional;
@@ -9,48 +9,48 @@ import java.util.Optional;
 /**
  * Сервис для управления данными регионов
  */
-public interface RegionDataService {
+public interface RegionService {
 
     /**
      * Сохраняет данные региона
-     * @param regionData данные региона для сохранения
+     * @param region данные региона для сохранения
      * @return сохраненные данные региона
      */
-    RegionData saveRegionData(RegionData regionData);
+    Region saveRegion(Region region);
 
     /**
      * Сохраняет список данных регионов
-     * @param regionDataList список данных регионов для сохранения
+     * @param regionList список данных регионов для сохранения
      * @return количество сохраненных записей
      */
-    int saveRegionDataList(List<RegionData> regionDataList);
+    int saveRegionList(List<Region> regionList);
 
     /**
      * Находит данные региона по ID
      * @param id идентификатор данных региона
      * @return опциональные данные региона
      */
-    Optional<RegionData> findById(Long id);
+    Optional<Region> findById(Long id);
 
     /**
      * Находит данные регионов по продукту
      * @param productId идентификатор продукта
      * @return список данных регионов
      */
-    List<RegionData> findByProductId(Long productId);
+    List<Region> findByProductId(Long productId);
 
     /**
      * Находит данные регионов по клиенту
      * @param clientId идентификатор клиента
      * @return список данных регионов
      */
-    List<RegionData> findByClientId(Long clientId);
+    List<Region> findByClientId(Long clientId);
 
     /**
      * Удаляет данные региона
      * @param id идентификатор данных региона
      */
-    void deleteRegionData(Long id);
+    void deleteRegion(Long id);
 
     /**
      * Удаляет данные регионов по продукту
@@ -68,8 +68,8 @@ public interface RegionDataService {
 
     /**
      * Обновляет существующие данные региона или создает новые
-     * @param regionData данные региона
+     * @param region данные региона
      * @return обновленные или созданные данные региона
      */
-    RegionData upsertRegionData(RegionData regionData);
+    Region upsertRegion(Region region);
 }

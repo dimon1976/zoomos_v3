@@ -6,19 +6,19 @@ import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
+import my.java.model.entity.Region;
 import my.java.repository.FileOperationRepository;
-import my.java.service.competitor.CompetitorDataService;
+import my.java.service.entity.competitor.CompetitorService;
 import my.java.service.file.mapping.FieldMappingService;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
 import my.java.service.file.strategy.FileProcessingStrategy;
 import my.java.service.file.transformer.ValueTransformerFactory;
-import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
+import my.java.service.entity.product.ProductService;
+import my.java.service.entity.region.RegionService;
 import my.java.util.PathResolver;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -48,8 +48,8 @@ public class FileImportServiceImpl implements FileImportService {
     private final FieldMappingService fieldMappingService;
     private final ValueTransformerFactory transformerFactory;
     private final ProductService productService;
-    private final RegionDataService regionDataService;
-    private final CompetitorDataService competitorDataService;
+    private final RegionService regionService;
+    private final CompetitorService competitorService;
 
     // Пул потоков для асинхронной обработки файлов
     @Qualifier("fileProcessingExecutor")
@@ -326,13 +326,13 @@ public class FileImportServiceImpl implements FileImportService {
                 product.setTransformerFactory(transformerFactory);
                 return product;
             case "regiondata":
-                RegionData regionData = new RegionData();
-                regionData.setTransformerFactory(transformerFactory);
-                return regionData;
+                Region region = new Region();
+                region.setTransformerFactory(transformerFactory);
+                return region;
             case "competitordata":
-                CompetitorData competitorData = new CompetitorData();
-                competitorData.setTransformerFactory(transformerFactory);
-                return competitorData;
+                Competitor competitor = new Competitor();
+                competitor.setTransformerFactory(transformerFactory);
+                return competitor;
             default:
                 log.warn("Неизвестный тип сущности: {}", entityType);
                 return null;
@@ -478,20 +478,20 @@ public class FileImportServiceImpl implements FileImportService {
                 break;
 
             case "regiondata":
-                List<RegionData> regionDataList = entities.stream()
-                        .filter(e -> e instanceof RegionData)
-                        .map(e -> (RegionData) e)
+                List<Region> regionList = entities.stream()
+                        .filter(e -> e instanceof Region)
+                        .map(e -> (Region) e)
                         .toList();
-                savedCount = regionDataService.saveRegionDataList(regionDataList);
+                savedCount = regionService.saveRegionList(regionList);
                 log.info("Сохранено {} данных регионов", savedCount);
                 break;
 
             case "competitordata":
-                List<CompetitorData> competitorDataList = entities.stream()
-                        .filter(e -> e instanceof CompetitorData)
-                        .map(e -> (CompetitorData) e)
+                List<Competitor> competitorList = entities.stream()
+                        .filter(e -> e instanceof Competitor)
+                        .map(e -> (Competitor) e)
                         .toList();
-                savedCount = competitorDataService.saveCompetitorDataList(competitorDataList);
+                savedCount = competitorService.saveCompetitorList(competitorList);
                 log.info("Сохранено {} данных конкурентов", savedCount);
                 break;
 

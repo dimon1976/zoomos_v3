@@ -1,5 +1,5 @@
 // src/main/java/my/java/service/product/ProductServiceImpl.java
-package my.java.service.product;
+package my.java.service.entity.product;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -2,13 +2,13 @@
 package my.java.service.file.entity;
 
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.CompetitorData;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
-import my.java.model.entity.RegionData;
-import my.java.service.competitor.CompetitorDataService;
-import my.java.service.product.ProductService;
-import my.java.service.region.RegionDataService;
+import my.java.model.entity.Region;
+import my.java.service.entity.competitor.CompetitorService;
+import my.java.service.entity.product.ProductService;
+import my.java.service.entity.region.RegionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -26,8 +26,8 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
     @Autowired
     public EntitySaverFactoryImpl(
             ProductService productService,
-            RegionDataService regionDataService,
-            CompetitorDataService competitorDataService) {
+            RegionService regionService,
+            CompetitorService competitorService) {
 
         // Регистрируем обработчики для стандартных типов сущностей
         registerSaver("product", entities -> {
@@ -39,19 +39,19 @@ public class EntitySaverFactoryImpl implements EntitySaverFactory {
         });
 
         registerSaver("regiondata", entities -> {
-            List<RegionData> regionDataList = entities.stream()
-                    .filter(e -> e instanceof RegionData)
-                    .map(e -> (RegionData) e)
+            List<Region> regionList = entities.stream()
+                    .filter(e -> e instanceof Region)
+                    .map(e -> (Region) e)
                     .toList();
-            return regionDataService.saveRegionDataList(regionDataList);
+            return regionService.saveRegionList(regionList);
         });
 
         registerSaver("competitordata", entities -> {
-            List<CompetitorData> competitorDataList = entities.stream()
-                    .filter(e -> e instanceof CompetitorData)
-                    .map(e -> (CompetitorData) e)
+            List<Competitor> competitorList = entities.stream()
+                    .filter(e -> e instanceof Competitor)
+                    .map(e -> (Competitor) e)
                     .toList();
-            return competitorDataService.saveCompetitorDataList(competitorDataList);
+            return competitorService.saveCompetitorList(competitorList);
         });
     }
 

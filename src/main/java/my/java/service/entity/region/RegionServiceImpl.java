@@ -1,10 +1,10 @@
 // src/main/java/my/java/service/region/RegionDataServiceImpl.java
-package my.java.service.region;
+package my.java.service.entity.region;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.RegionData;
-import my.java.repository.RegionDataRepository;
+import my.java.model.entity.Region;
+import my.java.repository.RegionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,55 +14,55 @@ import java.util.Optional;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class RegionDataServiceImpl implements RegionDataService {
+public class RegionServiceImpl implements RegionService {
 
-    private final RegionDataRepository regionDataRepository;
+    private final RegionRepository regionRepository;
 
     @Override
     @Transactional
-    public RegionData saveRegionData(RegionData regionData) {
-        log.debug("Сохранение данных региона: {}", regionData.getRegion());
-        return regionDataRepository.save(regionData);
+    public Region saveRegion(Region region) {
+        log.debug("Сохранение данных региона: {}", region.getRegion());
+        return regionRepository.save(region);
     }
 
     @Override
     @Transactional
-    public int saveRegionDataList(List<RegionData> regionDataList) {
-        if (regionDataList == null || regionDataList.isEmpty()) {
+    public int saveRegionList(List<Region> regionList) {
+        if (regionList == null || regionList.isEmpty()) {
             return 0;
         }
 
-        log.debug("Сохранение {} записей данных регионов", regionDataList.size());
-        List<RegionData> savedRegionData = regionDataRepository.saveAll(regionDataList);
+        log.debug("Сохранение {} записей данных регионов", regionList.size());
+        List<Region> savedRegionData = regionRepository.saveAll(regionList);
         return savedRegionData.size();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<RegionData> findById(Long id) {
+    public Optional<Region> findById(Long id) {
         log.debug("Поиск данных региона по ID: {}", id);
-        return regionDataRepository.findById(id);
+        return regionRepository.findById(id);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<RegionData> findByProductId(Long productId) {
+    public List<Region> findByProductId(Long productId) {
         log.debug("Поиск данных регионов по productId: {}", productId);
-        return regionDataRepository.findByProductId(productId);
+        return regionRepository.findByProductId(productId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<RegionData> findByClientId(Long clientId) {
+    public List<Region> findByClientId(Long clientId) {
         log.debug("Поиск данных регионов по clientId: {}", clientId);
-        return regionDataRepository.findByClientId(clientId);
+        return regionRepository.findByClientId(clientId);
     }
 
     @Override
     @Transactional
-    public void deleteRegionData(Long id) {
+    public void deleteRegion(Long id) {
         log.debug("Удаление данных региона по ID: {}", id);
-        regionDataRepository.deleteById(id);
+        regionRepository.deleteById(id);
     }
 
     @Override
@@ -71,13 +71,13 @@ public class RegionDataServiceImpl implements RegionDataService {
         log.debug("Удаление данных регионов по productId: {}", productId);
 
         // Сначала подсчитываем количество записей для удаления
-        List<RegionData> recordsToDelete = regionDataRepository.findByProductId(productId);
+        List<Region> recordsToDelete = regionRepository.findByProductId(productId);
         if (recordsToDelete.isEmpty()) {
             return 0;
         }
 
         // Удаляем записи
-        regionDataRepository.deleteByProductId(productId);
+        regionRepository.deleteByProductId(productId);
         return recordsToDelete.size();
     }
 
@@ -87,37 +87,37 @@ public class RegionDataServiceImpl implements RegionDataService {
         log.debug("Удаление данных регионов по clientId: {}", clientId);
 
         // Сначала подсчитываем количество записей для удаления
-        List<RegionData> recordsToDelete = regionDataRepository.findByClientId(clientId);
+        List<Region> recordsToDelete = regionRepository.findByClientId(clientId);
         if (recordsToDelete.isEmpty()) {
             return 0;
         }
 
         // Удаляем записи
-        regionDataRepository.deleteByClientId(clientId);
+        regionRepository.deleteByClientId(clientId);
         return recordsToDelete.size();
     }
 
     @Override
     @Transactional
-    public RegionData upsertRegionData(RegionData regionData) {
-        log.debug("Обновление/создание данных региона: {}", regionData.getRegion());
+    public Region upsertRegion(Region region) {
+        log.debug("Обновление/создание данных региона: {}", region.getRegion());
 
         // Проверяем существование данных региона по региону и продукту
-        if (regionData.getRegion() != null && regionData.getProduct() != null) {
-            Optional<RegionData> existingData = regionDataRepository.findByRegionAndProductId(
-                    regionData.getRegion(), regionData.getProduct().getId());
+        if (region.getRegion() != null && region.getProduct() != null) {
+            Optional<Region> existingData = regionRepository.findByRegionAndProductId(
+                    region.getRegion(), region.getProduct().getId());
 
             if (existingData.isPresent()) {
                 // Обновляем существующие данные
-                RegionData existing = existingData.get();
+                Region existing = existingData.get();
                 // Обновляем все поля, кроме ID и продукта
-                copyRegionDataFields(regionData, existing);
-                return regionDataRepository.save(existing);
+                copyRegionDataFields(region, existing);
+                return regionRepository.save(existing);
             }
         }
 
         // Создаем новые данные региона
-        return regionDataRepository.save(regionData);
+        return regionRepository.save(region);
     }
 
     /**
@@ -125,7 +125,7 @@ public class RegionDataServiceImpl implements RegionDataService {
      * @param source исходные данные региона
      * @param target целевые данные региона
      */
-    private void copyRegionDataFields(RegionData source, RegionData target) {
+    private void copyRegionDataFields(Region source, Region target) {
         target.setRegion(source.getRegion());
         target.setRegionAddress(source.getRegionAddress());
         target.setClientId(source.getClientId());

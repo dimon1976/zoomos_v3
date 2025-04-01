@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import my.java.model.enums.DataSourceType;
-import my.java.service.file.transformer.ValueTransformer;
 import my.java.service.file.transformer.ValueTransformerFactory;
 
 import java.util.*;
@@ -56,10 +55,10 @@ public class Product implements ImportableEntity {
     private String productAdditional5;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RegionData> regionDataList = new ArrayList<>();
+    private List<Region> regionList = new ArrayList<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<CompetitorData> competitorDataList = new ArrayList<>();
+    private List<Competitor> competitorList = new ArrayList<>();
 
     // Статическая карта сопоставления заголовков файла с полями сущности
     private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
@@ -237,23 +236,23 @@ public class Product implements ImportableEntity {
     /**
      * Вспомогательные методы для установки отношений
      */
-    public void addRegionData(RegionData regionData) {
-        regionDataList.add(regionData);
-        regionData.setProduct(this);
+    public void addRegionData(Region region) {
+        regionList.add(region);
+        region.setProduct(this);
     }
 
-    public void removeRegionData(RegionData regionData) {
-        regionDataList.remove(regionData);
-        regionData.setProduct(null);
+    public void removeRegionData(Region region) {
+        regionList.remove(region);
+        region.setProduct(null);
     }
 
-    public void addCompetitorData(CompetitorData competitorData) {
-        competitorDataList.add(competitorData);
-        competitorData.setProduct(this);
+    public void addCompetitorData(Competitor competitor) {
+        competitorList.add(competitor);
+        competitor.setProduct(this);
     }
 
-    public void removeCompetitorData(CompetitorData competitorData) {
-        competitorDataList.remove(competitorData);
-        competitorData.setProduct(null);
+    public void removeCompetitorData(Competitor competitor) {
+        competitorList.remove(competitor);
+        competitor.setProduct(null);
     }
 }

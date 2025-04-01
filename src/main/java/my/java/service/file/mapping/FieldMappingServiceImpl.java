@@ -3,7 +3,9 @@ package my.java.service.file.mapping;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.Region;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -321,9 +323,9 @@ public class FieldMappingServiceImpl implements FieldMappingService {
                 case "product":
                     return new my.java.model.entity.Product();
                 case "regiondata":
-                    return new my.java.model.entity.RegionData();
+                    return new Region();
                 case "competitordata":
-                    return new my.java.model.entity.CompetitorData();
+                    return new Competitor();
                 default:
                     log.warn("Неизвестный тип сущности: {}", entityType);
                     return null;

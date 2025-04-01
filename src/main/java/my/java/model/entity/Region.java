@@ -5,50 +5,27 @@ import lombok.Getter;
 import lombok.Setter;
 import my.java.service.file.transformer.ValueTransformerFactory;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Сущность, представляющая данные о конкуренте.
+ * Сущность, представляющая региональные данные.
  */
 @Setter
 @Getter
 @Entity
-@Table(name = "competitor_data")
-public class CompetitorData implements ImportableEntity {
+@Table(name = "region_data")
+public class Region implements ImportableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private Long clientId;
+    private String region;
 
     @Column(length = 400)
-    private String competitorName;
-
-    private String competitorPrice;
-    private String competitorPromotionalPrice;
-    private String competitorTime;
-    private String competitorDate;
-    private LocalDateTime competitorLocalDateTime;
-    private String competitorStockStatus;
-    private String competitorAdditionalPrice;
-
-    @Column(length = 1000)
-    private String competitorCommentary;
-
-    @Column(length = 400)
-    private String competitorProductName;
-
-    private String competitorAdditional;
-    private String competitorAdditional2;
-
-    @Column(length = 1200)
-    private String competitorUrl;
-
-    @Column(length = 1200)
-    private String competitorWebCacheUrl;
+    private String regionAddress;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")
@@ -59,20 +36,8 @@ public class CompetitorData implements ImportableEntity {
 
     static {
         // Инициализация маппинга заголовков и полей
-        FIELD_MAPPINGS.put("Сайт", "competitorName");
-        FIELD_MAPPINGS.put("Цена конкурента", "competitorPrice");
-        FIELD_MAPPINGS.put("Акционная цена", "competitorPromotionalPrice");
-        FIELD_MAPPINGS.put("Время", "competitorTime");
-        FIELD_MAPPINGS.put("Дата", "competitorDate");
-        FIELD_MAPPINGS.put("Дата:Время", "competitorLocalDateTime");
-        FIELD_MAPPINGS.put("Статус", "competitorStockStatus");
-        FIELD_MAPPINGS.put("Дополнительная цена конкурента", "competitorAdditionalPrice");
-        FIELD_MAPPINGS.put("Комментарий", "competitorCommentary");
-        FIELD_MAPPINGS.put("Наименование товара конкурента", "competitorProductName");
-        FIELD_MAPPINGS.put("Дополнительное поле", "competitorAdditional");
-        FIELD_MAPPINGS.put("Дополнительное поле 2", "competitorAdditional2");
-        FIELD_MAPPINGS.put("Ссылка", "competitorUrl");
-        FIELD_MAPPINGS.put("Скриншот", "competitorWebCacheUrl");
+        FIELD_MAPPINGS.put("Город", "region");
+        FIELD_MAPPINGS.put("Адрес", "regionAddress");
     }
 
     // Транзитивные поля, не сохраняемые в БД
@@ -96,10 +61,6 @@ public class CompetitorData implements ImportableEntity {
      */
     @Override
     public boolean fillFromMap(Map<String, String> data) {
-        if (transformerFactory == null) {
-            throw new IllegalStateException("TransformerFactory не установлен");
-        }
-
         boolean success = true;
 
         for (Map.Entry<String, String> entry : data.entrySet()) {
@@ -145,47 +106,11 @@ public class CompetitorData implements ImportableEntity {
     private boolean setFieldValue(String fieldName, String value) {
         try {
             switch (fieldName) {
-                case "competitorName":
-                    this.competitorName = value;
+                case "region":
+                    this.region = value;
                     break;
-                case "competitorPrice":
-                    this.competitorPrice = value;
-                    break;
-                case "competitorPromotionalPrice":
-                    this.competitorPromotionalPrice = value;
-                    break;
-                case "competitorTime":
-                    this.competitorTime = value;
-                    break;
-                case "competitorDate":
-                    this.competitorDate = value;
-                    break;
-                case "competitorLocalDateTime":
-                    this.competitorLocalDateTime = transformerFactory.transform(value, LocalDateTime.class, null);
-                    break;
-                case "competitorStockStatus":
-                    this.competitorStockStatus = value;
-                    break;
-                case "competitorAdditionalPrice":
-                    this.competitorAdditionalPrice = value;
-                    break;
-                case "competitorCommentary":
-                    this.competitorCommentary = value;
-                    break;
-                case "competitorProductName":
-                    this.competitorProductName = value;
-                    break;
-                case "competitorAdditional":
-                    this.competitorAdditional = value;
-                    break;
-                case "competitorAdditional2":
-                    this.competitorAdditional2 = value;
-                    break;
-                case "competitorUrl":
-                    this.competitorUrl = value;
-                    break;
-                case "competitorWebCacheUrl":
-                    this.competitorWebCacheUrl = value;
+                case "regionAddress":
+                    this.regionAddress = value;
                     break;
                 default:
                     return false;
@@ -213,8 +138,8 @@ public class CompetitorData implements ImportableEntity {
      */
     @Override
     public String validate() {
-        if (competitorName == null || competitorName.trim().isEmpty()) {
-            return "Не указано название сайта конкурента";
+        if (region == null || region.trim().isEmpty()) {
+            return "Не указан город";
         }
         return null;
     }

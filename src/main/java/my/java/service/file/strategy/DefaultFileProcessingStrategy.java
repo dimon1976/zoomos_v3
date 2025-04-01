@@ -8,7 +8,7 @@ import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
-import my.java.service.file.tracker.ImportProgressTracker;
+
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
@@ -25,7 +25,7 @@ import java.util.*;
 public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
     private final FileProcessorFactory processorFactory;
-    private final ImportProgressTracker progressTracker;
+
 
     @Override
     public String getStrategyId() {
@@ -68,11 +68,6 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
         FileProcessor processor = processorFactory.createProcessor(filePath)
                 .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
 
-        // Инициализируем отслеживание прогресса
-        int totalRecords = processor.estimateRecordCount(filePath);
-        if (totalRecords > 0) {
-            progressTracker.initProgress(operation.getId(), totalRecords);
-        }
 
         // Определяем параметры обработки
         Map<String, String> processingParams = new HashMap<>();
@@ -87,13 +82,6 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
             // Обрабатываем файл и получаем сущности
             List<ImportableEntity> entities = processor.processFile(
                     filePath, entityType, client, fieldMapping, processingParams, operation);
-
-            // Обновляем прогресс
-            if (entities != null && !entities.isEmpty() && operation != null) {
-                operation.setTotalRecords(totalRecords > 0 ? totalRecords : entities.size());
-                operation.setProcessedRecords(entities.size());
-                operation.setProcessingProgress(100);
-            }
 
             log.info("Файл успешно обработан, создано {} сущностей", entities.size());
             return entities;

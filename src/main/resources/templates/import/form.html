@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Импорт данных - Обработка файлов',
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        ${client.name + ' - Импорт данных'},
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Импорт данных - Обработка файлов</title>
+    <style>
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #0d6efd;
+            background-color: #f1f8ff;
+        }
+        .upload-area.dragging {
+            border-color: #0d6efd;
+            background-color: #e8f0fe;
+        }
+        .upload-icon {
+            font-size: 48px;
+            color: #0d6efd;
+            margin-bottom: 20px;
+        }
+        .entity-type-card {
+            cursor: pointer;
+            transition: all 0.2s;
+            height: 100%;
+        }
+        .entity-type-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .entity-type-card.selected {
+            border-color: #0d6efd;
+            background-color: #f0f7ff;
+        }
+        .progress-container {
+            margin-top: 20px;
+        }
+        #filePreview {
+            display: none;
+            margin-top: 20px;
+        }
+        .preview-table {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary me-2">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-primary me-2">
+        <i class="fas fa-history me-1"></i>Операции
+    </a>
+    <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-success">
+        <i class="fas fa-file-export me-1"></i>Экспорт
+    </a>
+</div>
+
+<section>
+    <!-- Информация о клиенте -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Импорт данных для клиента</h5>
+        </div>
+        <div class="card-body">
+            <p>Загрузите файл CSV или Excel для импорта данных в систему.</p>
+
+            <form id="importForm" th:action="@{/clients/{id}/import(id=${client.id})}" method="post" enctype="multipart/form-data">
+                <!-- Выбор типа сущности -->
+                <div class="mb-4">
+                    <h5>1. Выберите тип импортируемых данных</h5>
+                    <div class="row row-cols-1 row-cols-md-3 g-4 mt-2">
+                        <div class="col">
+                            <div class="card entity-type-card" data-entity-type="product">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-box fa-3x mb-3 text-primary"></i>
+                                    <h5 class="card-title">Товары</h5>
+                                    <p class="card-text small">Базовая информация о товарах</p>
+                                    <input type="radio" name="entityType" value="product" id="entityProduct" class="d-none" checked>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card entity-type-card" data-entity-type="regiondata">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-map-marker-alt fa-3x mb-3 text-success"></i>
+                                    <h5 class="card-title">Регионы</h5>
+                                    <p class="card-text small">Данные о регионах и адресах</p>
+                                    <input type="radio" name="entityType" value="regiondata" id="entityRegion" class="d-none">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="card entity-type-card" data-entity-type="competitordata">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-user-tie fa-3x mb-3 text-warning"></i>
+                                    <h5 class="card-title">Конкуренты</h5>
+                                    <p class="card-text small">Данные о конкурентах и ценах</p>
+                                    <input type="radio" name="entityType" value="competitordata" id="entityCompetitor" class="d-none">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Загрузка файла -->
+                <div class="mb-4">
+                    <h5>2. Загрузите файл</h5>
+                    <div class="upload-area mt-2" id="dropArea">
+                        <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <h5>Перетащите файл сюда или кликните для выбора</h5>
+                        <p class="text-muted">Поддерживаемые форматы: CSV, Excel (.xlsx, .xls)</p>
+                    </div>
+
+                    <!-- Предпросмотр файла -->
+                    <div id="filePreview" class="card mt-3">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Предпросмотр файла</h5>
+                                <button type="button" id="removeFile" class="btn btn-sm btn-outline-danger">
+                                    <i class="fas fa-times me-1"></i>Удалить
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <strong>Имя файла:</strong> <span id="fileName"></span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>Размер:</strong> <span id="fileSize"></span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>Тип:</strong> <span id="fileType"></span>
+                            </div>
+                            <div class="mb-3">
+                                <h6>Обнаруженные столбцы:</h6>
+                                <div class="preview-table">
+                                    <table class="table table-sm table-bordered" id="previewTable">
+                                        <thead>
+                                        <tr id="headerRow"></tr>
+                                        </thead>
+                                        <tbody id="previewBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Параметры импорта -->
+                <div id="importOptions" class="mb-4 d-none">
+                    <h5>3. Настройте параметры импорта</h5>
+                    <div class="card mt-2">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mappingId" class="form-label">Сопоставление полей</label>
+                                    <select class="form-select" id="mappingId" name="mappingId">
+                                        <option value="">Автоматическое</option>
+                                        <!-- Опции будут добавлены динамически -->
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="strategyId" class="form-label">Стратегия импорта</label>
+                                    <select class="form-select" id="strategyId" name="strategyId">
+                                        <option value="">По умолчанию</option>
+                                        <!-- Опции будут добавлены динамически -->
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="errorHandling" class="form-label">Обработка ошибок</label>
+                                    <select class="form-select" id="errorHandling" name="params[errorHandling]">
+                                        <option value="continue">Продолжать при ошибках</option>
+                                        <option value="stop">Остановить при первой ошибке</option>
+                                        <option value="report">Собирать отчет об ошибках</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="duplicateHandling" class="form-label">Обработка дубликатов</label>
+                                    <select class="form-select" id="duplicateHandling" name="params[duplicateHandling]">
+                                        <option value="skip">Пропускать дубликаты</option>
+                                        <option value="update">Обновлять существующие записи</option>
+                                        <option value="error">Выдавать ошибку при дубликатах</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="validateData" name="params[validateData]" value="true" checked>
+                                        <label class="form-check-label" for="validateData">
+                                            Валидировать данные перед импортом
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="trimWhitespace" name="params[trimWhitespace]" value="true" checked>
+                                        <label class="form-check-label" for="trimWhitespace">
+                                            Удалять лишние пробелы
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="mt-4 text-center">
+                    <button type="submit" id="startImportBtn" class="btn btn-primary btn-lg px-4" disabled>
+                        <i class="fas fa-file-import me-1"></i>Начать импорт
+                    </button>
+                    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-secondary btn-lg px-4 ms-2">
+                        <i class="fas fa-times me-1"></i>Отмена
+                    </a>
+                </div>
+
+                <!-- Прогресс импорта -->
+                <div id="importProgress" class="progress-container d-none">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="mb-3">Прогресс импорта</h5>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                     role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
+                                     aria-valuemax="100">0%</div>
+                            </div>
+                            <div id="importStatus">Подготовка к импорту...</div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Выбор типа сущности
+        const entityCards = document.querySelectorAll('.entity-type-card');
+        entityCards.forEach(card => {
+            card.addEventListener('click', function() {
+                // Снимаем выделение со всех карточек
+                entityCards.forEach(c => c.classList.remove('selected'));
+
+                // Выделяем текущую карточку
+                this.classList.add('selected');
+
+                // Устанавливаем соответствующий radio
+                const entityType = this.dataset.entityType;
+                document.getElementById(`entity${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`).checked = true;
+            });
+        });
+
+        // Установка выбранной карточки по умолчанию
+        document.querySelector('[data-entity-type="product"]').classList.add('selected');
+
+        // Область загрузки файла
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+
+        // Обработка клика по области загрузки
+        dropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Обработка перетаскивания файла
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight() {
+            dropArea.classList.add('dragging');
+        }
+
+        function unhighlight() {
+            dropArea.classList.remove('dragging');
+        }
+
+        // Обработка выбора файла
+        fileInput.addEventListener('change', handleFileSelect, false);
+        dropArea.addEventListener('drop', handleFileDrop, false);
+
+        function handleFileDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFile(file) {
+            // Показываем превью файла
+            document.getElementById('filePreview').style.display = 'block';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('fileType').textContent = file.type || getFileExtension(file.name);
+
+            // Активируем кнопку импорта
+            document.getElementById('startImportBtn').disabled = false;
+
+            // Показываем параметры импорта
+            document.getElementById('importOptions').classList.remove('d-none');
+
+            // Анализируем файл (здесь будет AJAX-запрос к серверу)
+            analyzeFile(file);
+        }
+
+        // Удаление файла
+        document.getElementById('removeFile').addEventListener('click', function() {
+            fileInput.value = '';
+            document.getElementById('filePreview').style.display = 'none';
+            document.getElementById('startImportBtn').disabled = true;
+            document.getElementById('importOptions').classList.add('d-none');
+        });
+
+        // Форматирование размера файла
+        function formatFileSize(size) {
+            const kb = 1024;
+            const mb = kb * 1024;
+
+            if (size < kb) {
+                return size + ' B';
+            } else if (size < mb) {
+                return (size / kb).toFixed(2) + ' KB';
+            } else {
+                return (size / mb).toFixed(2) + ' MB';
+            }
+        }
+
+        // Получение расширения файла
+        function getFileExtension(filename) {
+            return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
+        }
+
+        // Анализ файла (заглушка)
+        function analyzeFile(file) {
+            // Заглушка для демонстрации интерфейса
+            // В реальной реализации здесь должен быть AJAX-запрос к серверу
+
+            // Очищаем таблицу предпросмотра
+            const headerRow = document.getElementById('headerRow');
+            const previewBody = document.getElementById('previewBody');
+            headerRow.innerHTML = '';
+            previewBody.innerHTML = '';
+
+            // Имитация загрузки
+            setTimeout(() => {
+                // Имитация заголовков файла
+                const headers = ['ID товара', 'Модель', 'Бренд', 'Штрихкод', 'Описание', 'Цена'];
+
+                // Заполняем заголовки
+                headers.forEach(header => {
+                    const th = document.createElement('th');
+                    th.textContent = header;
+                    headerRow.appendChild(th);
+                });
+
+// Имитация данных для предпросмотра
+                const sampleData = [
+                    ['1001', 'iPhone 13', 'Apple', '123456789012', 'Смартфон с дисплеем 6.1"', '79990'],
+                    ['1002', 'Galaxy S21', 'Samsung', '987654321098', 'Флагманский смартфон с тройной камерой', '69990'],
+                    ['1003', 'Redmi Note 10', 'Xiaomi', '456789012345', 'Доступный смартфон с хорошей камерой', '19990']
+                ];
+
+                // Заполняем тело таблицы
+                sampleData.forEach(rowData => {
+                    const tr = document.createElement('tr');
+                    rowData.forEach(cellData => {
+                        const td = document.createElement('td');
+                        td.textContent = cellData;
+                        tr.appendChild(td);
+                    });
+                    previewBody.appendChild(tr);
+                });
+
+                // Имитация получения доступных маппингов и стратегий
+                const mappingSelect = document.getElementById('mappingId');
+                const strategySelect = document.getElementById('strategyId');
+
+                // Очищаем селекты
+                mappingSelect.innerHTML = '<option value="">Автоматическое</option>';
+                strategySelect.innerHTML = '<option value="">По умолчанию</option>';
+
+                // Добавляем маппинги
+                const mappings = [
+                    { id: 1, name: 'Стандартное сопоставление товаров' },
+                    { id: 2, name: 'Сопоставление с дополнительными полями' }
+                ];
+
+                mappings.forEach(mapping => {
+                    const option = document.createElement('option');
+                    option.value = mapping.id;
+                    option.textContent = mapping.name;
+                    mappingSelect.appendChild(option);
+                });
+
+                // Добавляем стратегии
+                const strategies = [
+                    { id: 1, name: 'Стандартная стратегия импорта' },
+                    { id: 2, name: 'Обновление существующих записей' }
+                ];
+
+                strategies.forEach(strategy => {
+                    const option = document.createElement('option');
+                    option.value = strategy.id;
+                    option.textContent = strategy.name;
+                    strategySelect.appendChild(option);
+                });
+            }, 1000);
+        }
+
+        // Отправка формы
+        document.getElementById('importForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Показываем прогресс импорта
+            document.getElementById('importProgress').classList.remove('d-none');
+
+            // Блокируем кнопку импорта
+            document.getElementById('startImportBtn').disabled = true;
+
+            // Имитация процесса импорта с обновлением прогресса
+            simulateImport();
+        });
+
+        // Имитация процесса импорта
+        function simulateImport() {
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('importStatus');
+            let progress = 0;
+
+            const interval = setInterval(() => {
+                progress += 5;
+                progressBar.style.width = progress + '%';
+                progressBar.setAttribute('aria-valuenow', progress);
+                progressBar.textContent = progress + '%';
+
+                // Обновляем текст статуса
+                if (progress < 25) {
+                    statusText.textContent = 'Анализ файла...';
+                } else if (progress < 50) {
+                    statusText.textContent = 'Валидация данных...';
+                } else if (progress < 75) {
+                    statusText.textContent = 'Импорт записей...';
+                } else {
+                    statusText.textContent = 'Завершение импорта...';
+                }
+
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    statusText.textContent = 'Импорт успешно завершен!';
+                    progressBar.classList.remove('progress-bar-animated');
+
+                    // Перенаправление на страницу операций
+                    setTimeout(() => {
+                        window.location.href = `/clients/${clientId}/operations`;
+                    }, 2000);
+                }
+            }, 200);
+        }
+    });
+</script>
+</body>
+</html>

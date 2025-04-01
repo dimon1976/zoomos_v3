@@ -11,6 +11,8 @@ import java.util.Optional;
  */
 public interface RegionService {
 
+    Optional<Region> findByRegionAndProductId(String regionName, Long productId);
+
     /**
      * Сохраняет данные региона
      * @param region данные региона для сохранения

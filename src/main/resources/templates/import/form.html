@@ -440,8 +440,17 @@
                         updateMappingOptions(data.availableMappings);
                     }
 
-                    // Сохраняем метаданные полей для использования при создании маппинга
+                    // Сохраняем заголовки и данные для использования при создании маппинга
+                    window.fileHeaders = data.headers || [];
                     window.fieldsMetadata = data.fieldsMetadata;
+
+                    const event = new CustomEvent('fileAnalyzed', {
+                        detail: {
+                            headers: data.headers || [],
+                            metadata: data.fieldsMetadata
+                        }
+                    });
+                    document.dispatchEvent(event);
 
                     // Если нет данных для предпросмотра
                     if ((!data.headers || data.headers.length === 0) &&

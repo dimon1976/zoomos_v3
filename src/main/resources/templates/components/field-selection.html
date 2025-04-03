@@ -180,7 +180,8 @@
                         </div>
                         <div class="mb-3">
                             <label for="mappingDescription" class="form-label">Описание</label>
-                            <textarea class="form-control" id="mappingDescription" name="description" rows="2"></textarea>
+                            <textarea class="form-control" id="mappingDescription" name="description"
+                                      rows="2"></textarea>
                         </div>
 
                         <input type="hidden" name="clientId" th:value="${clientId}">
@@ -261,7 +262,16 @@
         let currentMapping = null;
         let fieldsMetadata = null;
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
+            // Инициализация обработчика события после анализа файла
+            document.addEventListener('fileAnalyzed', function (event) {
+                if (event.detail && event.detail.headers) {
+                    window.fileHeaders = event.detail.headers;
+                }
+                if (event.detail && event.detail.metadata) {
+                    window.fieldsMetadata = event.detail.metadata;
+                }
+            });
             // Инициализация обработчиков событий
             initEntityTypeSelection();
             initCompositeToggle();
@@ -283,7 +293,7 @@
         function initEntityTypeSelection() {
             const entityCards = document.querySelectorAll('.entity-type-card');
             entityCards.forEach(card => {
-                card.addEventListener('click', function() {
+                card.addEventListener('click', function () {
                     // Снимаем выделение со всех карточек
                     entityCards.forEach(c => c.classList.remove('selected'));
 
@@ -309,7 +319,7 @@
         // Инициализация переключателя составных сущностей
         function initCompositeToggle() {
             const compositeToggle = document.getElementById('useComposite');
-            compositeToggle.addEventListener('change', function() {
+            compositeToggle.addEventListener('change', function () {
                 isComposite = this.checked;
                 document.getElementById('isComposite').value = isComposite;
                 document.getElementById('mappingComposite').value = isComposite;
@@ -327,7 +337,7 @@
         // Инициализация выбора маппинга
         function initMappingSelection() {
             const mappingSelect = document.getElementById('mappingSelect');
-            mappingSelect.addEventListener('change', function() {
+            mappingSelect.addEventListener('change', function () {
                 const mappingId = this.value;
                 document.getElementById('selectedMappingId').value = mappingId;
 
@@ -346,7 +356,7 @@
             });
 
             // Обработчик для кнопки просмотра маппинга
-            document.getElementById('viewMappingBtn').addEventListener('click', function() {
+            document.getElementById('viewMappingBtn').addEventListener('click', function () {
                 if (currentMapping) {
                     showCurrentMapping();
                 }
@@ -355,27 +365,27 @@
 
         // Инициализация модального окна создания маппинга
         function initCreateMappingModal() {
-            document.getElementById('createMappingBtn').addEventListener('click', function() {
+            document.getElementById('createMappingBtn').addEventListener('click', function () {
                 prepareCreateMappingModal();
                 const modal = new bootstrap.Modal(document.getElementById('createMappingModal'));
                 modal.show();
             });
 
-            document.getElementById('saveMappingBtn').addEventListener('click', function() {
+            document.getElementById('saveMappingBtn').addEventListener('click', function () {
                 saveNewMapping();
             });
         }
 
         // Инициализация выбора полей для экспорта
         function initExportFieldsSelection() {
-            document.getElementById('selectAllFields').addEventListener('click', function() {
+            document.getElementById('selectAllFields').addEventListener('click', function () {
                 const checkboxes = document.querySelectorAll('input[name="fields[]"]');
                 checkboxes.forEach(checkbox => {
                     checkbox.checked = true;
                 });
             });
 
-            document.getElementById('deselectAllFields').addEventListener('click', function() {
+            document.getElementById('deselectAllFields').addEventListener('click', function () {
                 const checkboxes = document.querySelectorAll('input[name="fields[]"]');
                 checkboxes.forEach(checkbox => {
                     checkbox.checked = false;
@@ -520,24 +530,62 @@
             document.getElementById('mappingDescription').value = '';
             document.getElementById('mappingTableBody').innerHTML = '';
 
-            // Добавляем поля для маппинга
-            addMappingFields();
+            // Проверяем наличие заголовков
+            const headers = window.fileHeaders || [];
+            if (headers.length === 0) {
+                const tableBody = document.getElementById('mappingTableBody');
+                tableBody.innerHTML = '<tr><td colspan="2" class="text-center text-warning"><i class="fas fa-exclamation-triangle me-2"></i>Загрузите и проанализируйте файл для автоматического заполнения заголовков</td></tr>';
+                addMappingRow();
+                return;
+            }
+
+            // Если метаданные уже загружены, используем их
+            if (window.fieldsMetadata) {
+                addMappingFieldsFromHeaders(headers);
+            } else {
+                // Показываем индикатор загрузки
+                const tableBody = document.getElementById('mappingTableBody');
+                tableBody.innerHTML = '<tr><td colspan="2" class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Загрузка метаданных...</span></div></td></tr>';
+
+                // Получаем текущие настройки
+                const entityType = document.getElementById('selectedEntityType').value;
+                const isComposite = document.getElementById('useComposite').checked;
+
+                // Загружаем метаданные полей
+                const endpoint = isComposite
+                    ? `/api/fields/composite/${entityType}`
+                    : `/api/fields/entity/${entityType}`;
+
+                fetch(endpoint)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Ошибка HTTP: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        window.fieldsMetadata = data;
+                        addMappingFieldsFromHeaders(headers);
+                    })
+                    .catch(error => {
+                        console.error('Ошибка при загрузке метаданных полей:', error);
+                        tableBody.innerHTML = '<tr><td colspan="2" class="text-center text-danger"><i class="fas fa-exclamation-circle me-2"></i>Ошибка загрузки полей</td></tr>';
+
+                        // Все равно добавляем поля для заголовков
+                        setTimeout(() => addMappingFieldsFromHeaders(headers), 1000);
+                    });
+            }
         }
 
-        // Добавление полей для маппинга
-        function addMappingFields() {
+        // Добавление полей для маппинга из заголовков файла
+        function addMappingFieldsFromHeaders(headers) {
             const tableBody = document.getElementById('mappingTableBody');
             tableBody.innerHTML = '';
 
-            // Добавляем основные поля для файла
-            const sampleHeaders = [
-                'ID товара', 'Название', 'Бренд', 'Цена', 'Категория',
-                'Город', 'Адрес', 'Сайт', 'Цена конкурента'
-            ];
-
-            sampleHeaders.forEach((header, index) => {
+            headers.forEach((header, index) => {
                 const row = document.createElement('tr');
 
+                // Ячейка с заголовком из файла
                 const headerCell = document.createElement('td');
                 const headerInput = document.createElement('input');
                 headerInput.type = 'text';
@@ -546,6 +594,7 @@
                 headerInput.value = header;
                 headerCell.appendChild(headerInput);
 
+                // Ячейка с селектором поля сущности
                 const fieldCell = document.createElement('td');
                 const fieldSelect = document.createElement('select');
                 fieldSelect.className = 'form-select';
@@ -557,37 +606,8 @@
                 emptyOption.textContent = '-- Не выбрано --';
                 fieldSelect.appendChild(emptyOption);
 
-                // Добавляем опции полей
-                if (fieldsMetadata) {
-                    if (isComposite) {
-                        const entities = fieldsMetadata.entities || [];
-                        entities.forEach(entity => {
-                            const fields = entity.fields || [];
-                            if (fields.length > 0) {
-                                // Создаем группу опций для сущности
-                                const optgroup = document.createElement('optgroup');
-                                optgroup.label = entity.displayName;
-
-                                fields.forEach(field => {
-                                    const option = document.createElement('option');
-                                    option.value = field.name;
-                                    option.textContent = field.displayName;
-                                    optgroup.appendChild(option);
-                                });
-
-                                fieldSelect.appendChild(optgroup);
-                            }
-                        });
-                    } else {
-                        const fields = fieldsMetadata.fields || {};
-                        Object.values(fields).forEach(field => {
-                            const option = document.createElement('option');
-                            option.value = field.name;
-                            option.textContent = field.displayName;
-                            fieldSelect.appendChild(option);
-                        });
-                    }
-                }
+                // Добавляем опции полей на основе метаданных
+                populateFieldOptions(fieldSelect);
 
                 // Устанавливаем автоматически подходящее поле
                 const suggestedField = suggestFieldForHeader(header);
@@ -618,6 +638,69 @@
             tableBody.appendChild(row);
         }
 
+        // Заполнение селектора полей на основе метаданных
+        function populateFieldOptions(fieldSelect) {
+            const isComposite = document.getElementById('useComposite').checked;
+            const fieldsMetadata = window.fieldsMetadata;
+
+            // Добавим очистку содержимого после пустой опции
+            while (fieldSelect.options.length > 1) {
+                fieldSelect.remove(1);
+            }
+
+            // Проверяем наличие метаданных
+            if (!fieldsMetadata) {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "Метаданные не загружены";
+                fieldSelect.appendChild(option);
+                return;
+            }
+
+            try {
+                // Проверяем структуру метаданных
+                if (fieldsMetadata.fields && fieldsMetadata.fields.allFields) {
+                    const allFields = fieldsMetadata.fields.allFields;
+
+                    // Добавляем все поля в селектор
+                    allFields.forEach(field => {
+                        const option = document.createElement('option');
+                        option.value = field.name;
+                        option.textContent = field.displayName || field.name;
+                        fieldSelect.appendChild(option);
+                    });
+                } else if (fieldsMetadata.entities) {
+                    // Альтернативная структура для составных сущностей
+                    fieldsMetadata.entities.forEach(entity => {
+                        if (entity.fields && entity.fields.length > 0) {
+                            const optgroup = document.createElement('optgroup');
+                            optgroup.label = entity.displayName || entity.type;
+
+                            entity.fields.forEach(field => {
+                                const option = document.createElement('option');
+                                option.value = field.name;
+                                option.textContent = field.displayName || field.name;
+                                optgroup.appendChild(option);
+                            });
+
+                            fieldSelect.appendChild(optgroup);
+                        }
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "Неизвестный формат данных";
+                    fieldSelect.appendChild(option);
+                }
+            } catch (error) {
+                console.error("Ошибка при обработке метаданных полей:", error);
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "Ошибка обработки полей";
+                fieldSelect.appendChild(option);
+            }
+        }
+
         // Добавление строки маппинга
         function addMappingRow() {
             const tableBody = document.getElementById('mappingTableBody');
@@ -639,7 +722,7 @@
             fieldSelect.name = 'mapping.';
 
             // Обновляем name поля при изменении заголовка
-            headerInput.addEventListener('change', function() {
+            headerInput.addEventListener('change', function () {
                 fieldSelect.name = 'mapping.' + this.value;
             });
 
@@ -649,44 +732,21 @@
             emptyOption.textContent = '-- Не выбрано --';
             fieldSelect.appendChild(emptyOption);
 
-            // Добавляем опции полей (аналогично addMappingFields)
-            if (fieldsMetadata) {
-                if (isComposite) {
-                    const entities = fieldsMetadata.entities || [];
-                    entities.forEach(entity => {
-                        const fields = entity.fields || [];
-                        if (fields.length > 0) {
-                            const optgroup = document.createElement('optgroup');
-                            optgroup.label = entity.displayName;
-
-                            fields.forEach(field => {
-                                const option = document.createElement('option');
-                                option.value = field.name;
-                                option.textContent = field.displayName;
-                                optgroup.appendChild(option);
-                            });
-
-                            fieldSelect.appendChild(optgroup);
-                        }
-                    });
-                } else {
-                    const fields = fieldsMetadata.fields || {};
-                    Object.values(fields).forEach(field => {
-                        const option = document.createElement('option');
-                        option.value = field.name;
-                        option.textContent = field.displayName;
-                        fieldSelect.appendChild(option);
-                    });
-                }
-            }
+            // Добавляем опции полей из метаданных
+            populateFieldOptions(fieldSelect);
 
             fieldCell.appendChild(fieldSelect);
 
             row.appendChild(headerCell);
             row.appendChild(fieldCell);
 
-            // Вставляем перед строкой с кнопкой
-            tableBody.insertBefore(row, tableBody.lastElementChild);
+            // Вставляем перед строкой с кнопкой или добавляем в конец
+            const lastRow = tableBody.lastElementChild;
+            if (lastRow && lastRow.querySelector('button')) {
+                tableBody.insertBefore(row, lastRow);
+            } else {
+                tableBody.appendChild(row);
+            }
         }
 
         // Предложение поля для заголовка
@@ -729,54 +789,124 @@
 
         // Сохранение нового маппинга
         function saveNewMapping() {
-            const form = document.getElementById('createMappingForm');
-            const formData = new FormData(form);
+            console.log("Вызвана функция saveNewMapping");
 
-            // Получаем связанные сущности
-            const relatedEntities = [];
-            if (isComposite) {
-                if (currentEntityType === 'product') {
-                    relatedEntities.push('region', 'competitor');
-                } else if (currentEntityType === 'region') {
-                    relatedEntities.push('product');
-                } else if (currentEntityType === 'competitor') {
-                    relatedEntities.push('product');
+            try {
+                // Проверяем обязательные поля
+                const mappingName = document.getElementById('mappingName').value;
+                if (!mappingName) {
+                    alert('Пожалуйста, введите название сопоставления');
+                    return;
                 }
-            }
 
-            // Добавляем связанные сущности
-            if (relatedEntities.length > 0) {
-                relatedEntities.forEach(entity => {
-                    formData.append('relatedEntities', entity);
-                });
-            }
+                const clientId = document.querySelector('input[name="clientId"]').value;
+                const entityType = document.getElementById('mappingEntityType').value;
+                const isComposite = document.getElementById('useComposite').checked;
+                const description = document.getElementById('mappingDescription').value || '';
 
-            // Отправляем запрос
-            fetch('/api/fields/mappings', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert('Ошибка при сохранении маппинга: ' + data.error);
+                console.log("Базовые данные:", { mappingName, clientId, entityType, isComposite });
+
+                // Собираем данные маппинга полей из таблицы
+                const rows = document.getElementById('mappingTableBody').querySelectorAll('tr');
+                console.log("Найдено строк:", rows.length);
+
+                // Создаем FormData для отправки
+                const formData = new FormData();
+                formData.append('name', mappingName);
+                formData.append('description', description);
+                formData.append('clientId', clientId);
+                formData.append('entityType', entityType);
+                formData.append('composite', isComposite);
+
+                // Добавляем маппинги полей
+                let mappingCounter = 0;
+                rows.forEach((row, index) => {
+                    // Пропускаем последнюю строку с кнопкой добавления
+                    if (row.querySelector('button')) {
+                        console.log(`Строка ${index}: содержит кнопку, пропускаем`);
                         return;
                     }
 
-                    // Закрываем модальное окно
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('createMappingModal'));
-                    modal.hide();
+                    const headerInput = row.querySelector('input[type="text"]');
+                    const fieldSelect = row.querySelector('select');
 
-                    // Обновляем список маппингов
-                    loadAvailableMappings();
-
-                    // Показываем сообщение об успехе
-                    alert('Маппинг успешно создан!');
-                })
-                .catch(error => {
-                    console.error('Ошибка при сохранении маппинга:', error);
-                    alert('Произошла ошибка при сохранении маппинга');
+                    if (headerInput && fieldSelect && headerInput.value && fieldSelect.value) {
+                        const key = 'mapping.' + headerInput.value;
+                        const value = fieldSelect.value;
+                        console.log(`Добавляем маппинг: ${key} = ${value}`);
+                        formData.append(key, value);
+                        mappingCounter++;
+                    } else {
+                        console.log(`Строка ${index}: пропускаем неполное сопоставление`);
+                    }
                 });
+
+                console.log(`Всего добавлено ${mappingCounter} маппингов`);
+
+                if (mappingCounter === 0) {
+                    alert('Необходимо выбрать хотя бы одно сопоставление полей');
+                    return;
+                }
+
+                // Добавляем связанные сущности
+                const relatedEntities = [];
+                if (isComposite) {
+                    if (entityType === 'product') {
+                        relatedEntities.push('region', 'competitor');
+                    } else if (entityType === 'region') {
+                        relatedEntities.push('product');
+                    } else if (entityType === 'competitor') {
+                        relatedEntities.push('product');
+                    }
+                }
+
+                relatedEntities.forEach(entity => {
+                    console.log(`Добавляем связанную сущность: ${entity}`);
+                    formData.append('relatedEntities', entity);
+                });
+
+                // Выводим все данные для отправки
+                console.log("Данные формы для отправки:");
+                for (let [key, value] of formData.entries()) {
+                    console.log(`${key}: ${value}`);
+                }
+
+                // Отправляем запрос
+                console.log("Отправка запроса на сервер...");
+                fetch('/api/fields/mappings', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => {
+                        console.log("Получен ответ от сервера:", response.status, response.statusText);
+                        if (!response.ok) {
+                            return response.text().then(text => {
+                                throw new Error(`Ошибка ${response.status}: ${text}`);
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log("Успешный ответ:", data);
+                        alert('Маппинг успешно создан!');
+
+                        // Закрываем модальное окно
+                        const modalEl = document.getElementById('createMappingModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        modal.hide();
+
+                        // Обновляем список маппингов
+                        loadAvailableMappings();
+                    })
+                    .catch(error => {
+                        console.error("Ошибка при выполнении запроса:", error);
+                        alert(`Ошибка: ${error.message}`);
+                    });
+
+            } catch (e) {
+                console.error("Ошибка в функции saveNewMapping:", e);
+                alert(`Произошла ошибка: ${e.message}`);
+            }
         }
 
         // Показ текущего маппинга

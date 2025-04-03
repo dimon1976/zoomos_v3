@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
-import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
 import my.java.service.file.entity.CompositeEntityService;
 import my.java.service.file.importer.FileImportService;

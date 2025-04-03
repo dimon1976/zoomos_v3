@@ -72,46 +72,9 @@
             <p>Экспортируйте данные клиента в нужном формате.</p>
 
             <form id="exportForm" th:action="@{/clients/{id}/export(id=${client.id})}" method="post">
-                <!-- Выбор типа данных -->
-                <div class="mb-4">
-                    <h5>1. Выберите тип данных для экспорта</h5>
-                    <div class="row row-cols-1 row-cols-md-3 g-4 mt-2">
-                        <div class="col">
-                            <div class="card entity-type-card" data-entity-type="product">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-box fa-3x mb-3 text-primary"></i>
-                                    <h5 class="card-title">Товары</h5>
-                                    <p class="card-text small">Базовая информация о товарах</p>
-                                    <input type="radio" name="entityType" value="product" id="entityProduct" class="d-none" checked>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="card entity-type-card" data-entity-type="regiondata">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-map-marker-alt fa-3x mb-3 text-success"></i>
-                                    <h5 class="card-title">Регионы</h5>
-                                    <p class="card-text small">Данные о регионах и адресах</p>
-                                    <input type="radio" name="entityType" value="regiondata" id="entityRegion" class="d-none">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="card entity-type-card" data-entity-type="competitordata">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-user-tie fa-3x mb-3 text-warning"></i>
-                                    <h5 class="card-title">Конкуренты</h5>
-                                    <p class="card-text small">Данные о конкурентах и ценах</p>
-                                    <input type="radio" name="entityType" value="competitordata" id="entityCompetitor" class="d-none">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Выбор формата экспорта -->
                 <div class="mb-4">
-                    <h5>2. Выберите формат экспорта</h5>
+                    <h5>Выберите формат экспорта</h5>
                     <div class="row row-cols-1 row-cols-md-4 g-4 mt-2">
                         <div class="col">
                             <div class="card format-card" data-format="csv">
@@ -155,29 +118,14 @@
                         </div>
                     </div>
                 </div>
-
+                <!-- Включение компонента выбора полей -->
+                <div th:replace="components/field-selection :: fieldSelection(${client.id}, 'export')"></div>
                 <!-- Настройки экспорта -->
                 <div class="mb-4">
                     <h5>3. Настройте параметры экспорта</h5>
                     <div class="card mt-2">
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Поля для экспорта</h6>
-                                    <div class="field-list">
-                                        <div class="field-item" id="fieldsContainer">
-                                            <!-- Поля будут добавлены динамически -->
-                                        </div>
-                                    </div>
-                                    <div class="mt-2">
-                                        <button type="button" id="selectAllFields" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-check-square me-1"></i>Выбрать все
-                                        </button>
-                                        <button type="button" id="deselectAllFields" class="btn btn-sm btn-outline-secondary">
-                                            <i class="fas fa-square me-1"></i>Снять все
-                                        </button>
-                                    </div>
-                                </div>
                                 <div class="col-md-6">
                                     <h6>Дополнительные параметры</h6>
                                     <div class="mb-3">

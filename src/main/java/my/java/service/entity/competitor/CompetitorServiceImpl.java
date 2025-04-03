@@ -20,6 +20,12 @@ public class CompetitorServiceImpl implements CompetitorService {
     private final CompetitorRepository competitorRepository;
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Competitor> findByCompetitorNameAndProductId(String competitorName, Long productId) {
+        return competitorRepository.findByCompetitorNameAndProductId(competitorName, productId);
+    }
+
+    @Override
     @Transactional
     public Competitor saveCompetitor(Competitor competitor) {
         log.debug("Сохранение данных конкурента: {}", competitor.getCompetitorName());

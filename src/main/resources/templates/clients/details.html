@@ -11,33 +11,21 @@
 <head>
     <title th:text="${client.name + ' - Обработка файлов'}">Клиент - Обработка файлов</title>
     <style>
-        .badge-operation {
-            font-size: 85%;
+        .stats-card {
+            transition: all 0.3s ease;
         }
-        .status-pending {
-            background-color: #ffc107;
-        }
-        .status-processing {
-            background-color: #17a2b8;
-            color: white;
-        }
-        .status-success {
-            background-color: #28a745;
-            color: white;
-        }
-        .status-error {
-            background-color: #dc3545;
-            color: white;
-        }
-        .operation-card {
-            transition: transform 0.2s;
-        }
-        .operation-card:hover {
-            transform: translateY(-3px);
+        .stats-card:hover {
+            transform: translateY(-5px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-        .tab-content {
-            padding: 20px 0;
+        .action-card {
+            cursor: pointer;
+            transition: all 0.2s;
+            height: 100%;
+        }
+        .action-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
     </style>
 </head>
@@ -71,77 +59,113 @@
                 <div class="col-md-6">
                     <p><strong>Описание:</strong></p>
                     <p th:text="${client.description != null && !client.description.isEmpty() ? client.description : 'Описание отсутствует'}">
-                        Описание клиента.
-                    </p>
+                        Описание клиента</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Вкладки с операциями -->
-    <ul class="nav nav-tabs" id="clientTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations"
-                    type="button" role="tab" aria-controls="operations" aria-selected="true">
-                <i class="fas fa-history me-1"></i>Операции
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import"
-                    type="button" role="tab" aria-controls="import" aria-selected="false">
-                <i class="fas fa-file-import me-1"></i>Импорт файлов
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="export-tab" data-bs-toggle="tab" data-bs-target="#export"
-                    type="button" role="tab" aria-controls="export" aria-selected="false">
-                <i class="fas fa-file-export me-1"></i>Экспорт данных
-            </button>
-        </li>
-    </ul>
-
-    <div class="tab-content" id="clientTabsContent">
-        <!-- Вкладка операций -->
-        <div class="tab-pane fade show active" id="operations" role="tabpanel" aria-labelledby="operations-tab">
-            <div class="alert alert-info" role="alert">
-                <i class="fas fa-info-circle me-2"></i>У этого клиента пока нет файловых операций
-            </div>
-            <!-- Здесь будет список операций -->
-        </div>
-
-        <!-- Вкладка импорта файлов -->
-        <div class="tab-pane fade" id="import" role="tabpanel" aria-labelledby="import-tab">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Импорт данных из файла</h5>
-                    <p class="card-text">Загрузите файл CSV или Excel для импорта данных.</p>
-
-                    <form action="#" method="post" enctype="multipart/form-data">
-                        <!-- Форма импорта файла будет здесь -->
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность импорта будет добавлена позже
-                        </div>
-                    </form>
+    <!-- Статистика и основные показатели -->
+    <div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
+        <div class="col">
+            <div class="card stats-card h-100 bg-light">
+                <div class="card-body text-center">
+                    <i class="fas fa-file-import fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Импорты</h5>
+                    <p class="card-text fs-4">0</p>
+                    <p class="card-text text-muted">Общее количество импортов</p>
                 </div>
             </div>
         </div>
-
-        <!-- Вкладка экспорта данных -->
-        <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Экспорт данных в файл</h5>
-                    <p class="card-text">Выберите формат для экспорта данных клиента.</p>
-
-                    <form action="#" method="post">
-                        <!-- Форма экспорта будет здесь -->
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-circle me-2"></i>Функциональность экспорта будет добавлена позже
-                        </div>
-                    </form>
+        <div class="col">
+            <div class="card stats-card h-100 bg-light">
+                <div class="card-body text-center">
+                    <i class="fas fa-file-export fa-3x text-success mb-3"></i>
+                    <h5 class="card-title">Экспорты</h5>
+                    <p class="card-text fs-4">0</p>
+                    <p class="card-text text-muted">Общее количество экспортов</p>
                 </div>
             </div>
         </div>
+        <div class="col">
+            <div class="card stats-card h-100 bg-light">
+                <div class="card-body text-center">
+                    <i class="fas fa-database fa-3x text-info mb-3"></i>
+                    <h5 class="card-title">Записи</h5>
+                    <p class="card-text fs-4">0</p>
+                    <p class="card-text text-muted">Общее количество записей</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Доступные действия -->
+    <h4 class="mb-3">Доступные действия</h4>
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+        <div class="col">
+            <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="text-decoration-none">
+                <div class="card action-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-history fa-3x text-primary mb-3"></i>
+                        <h5 class="card-title">Операции</h5>
+                        <p class="card-text">Просмотр истории и статуса операций</p>
+                    </div>
+                    <div class="card-footer bg-transparent border-0 text-center">
+                        <span class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-arrow-right me-1"></i>Перейти
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a th:href="@{/clients/{id}/import(id=${client.id})}" class="text-decoration-none">
+                <div class="card action-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-import fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">Импорт</h5>
+                        <p class="card-text">Загрузка данных из файлов</p>
+                    </div>
+                    <div class="card-footer bg-transparent border-0 text-center">
+                        <span class="btn btn-sm btn-outline-success">
+                            <i class="fas fa-upload me-1"></i>Начать импорт
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a th:href="@{/clients/{id}/export(id=${client.id})}" class="text-decoration-none">
+                <div class="card action-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-export fa-3x text-warning mb-3"></i>
+                        <h5 class="card-title">Экспорт</h5>
+                        <p class="card-text">Выгрузка данных в файлы</p>
+                    </div>
+                    <div class="card-footer bg-transparent border-0 text-center">
+                        <span class="btn btn-sm btn-outline-warning">
+                            <i class="fas fa-download me-1"></i>Начать экспорт
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Последние операции -->
+    <div class="mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>Последние операции</h4>
+            <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-list me-1"></i>Все операции
+            </a>
+        </div>
+
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle me-2"></i>У этого клиента пока нет файловых операций
+        </div>
+
+        <!-- Таблица последних операций будет здесь, когда появятся данные -->
     </div>
 
     <!-- Модальное окно подтверждения удаления -->
@@ -169,14 +193,10 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Активация вкладок Bootstrap
-        const triggerTabList = [].slice.call(document.querySelectorAll('#clientTabs button'));
-        triggerTabList.forEach(function(triggerEl) {
-            const tabTrigger = new bootstrap.Tab(triggerEl);
-            triggerEl.addEventListener('click', function(event) {
-                event.preventDefault();
-                tabTrigger.show();
-            });
+        // Инициализация компонентов Bootstrap
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
         });
     });
 </script>

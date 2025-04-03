@@ -12,6 +12,8 @@ import java.util.Optional;
  */
 public interface CompetitorService {
 
+    Optional<Competitor> findByCompetitorNameAndProductId(String competitorName, Long productId);
+
     /**
      * Сохраняет данные конкурента
      * @param competitor данные конкурента для сохранения

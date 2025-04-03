@@ -19,6 +19,12 @@ public class RegionServiceImpl implements RegionService {
     private final RegionRepository regionRepository;
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Region> findByRegionAndProductId(String regionName, Long productId) {
+        return regionRepository.findByRegionAndProductId(regionName, productId);
+    }
+
+    @Override
     @Transactional
     public Region saveRegion(Region region) {
         log.debug("Сохранение данных региона: {}", region.getRegion());

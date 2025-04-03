@@ -73,4 +73,3 @@ public interface FieldMappingService {
      */
     Map<String, Object> getEntityFieldsMetadata(String entityType);
 }
-

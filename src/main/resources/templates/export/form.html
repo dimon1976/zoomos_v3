@@ -268,51 +268,6 @@
             });
         }
 
-        // Функция для получения списка полей в зависимости от типа сущности
-        function getFieldsForEntityType(entityType) {
-            // В реальной реализации эти данные должны приходить с сервера
-            const fieldsByType = {
-                product: [
-                    { label: 'ID товара', value: 'productId', default: true },
-                    { label: 'Название', value: 'productName', default: true },
-                    { label: 'Бренд', value: 'productBrand', default: true },
-                    { label: 'Штрихкод', value: 'productBar', default: true },
-                    { label: 'Описание', value: 'productDescription', default: true },
-                    { label: 'Ссылка', value: 'productUrl', default: true },
-                    { label: 'Категория 1', value: 'productCategory1', default: true },
-                    { label: 'Категория 2', value: 'productCategory2', default: true },
-                    { label: 'Категория 3', value: 'productCategory3', default: true },
-                    { label: 'Цена', value: 'productPrice', default: true },
-                    { label: 'Аналог', value: 'productAnalog', default: true },
-                    { label: 'Дополнительное поле 1', value: 'productAdditional1', default: false },
-                    { label: 'Дополнительное поле 2', value: 'productAdditional2', default: false },
-                    { label: 'Дополнительное поле 3', value: 'productAdditional3', default: false },
-                    { label: 'Дополнительное поле 4', value: 'productAdditional4', default: false },
-                    { label: 'Дополнительное поле 5', value: 'productAdditional5', default: false }
-                ],
-                regiondata: [
-                    { label: 'Регион', value: 'region', default: true },
-                    { label: 'Адрес', value: 'regionAddress', default: true }
-                ],
-                competitordata: [
-                    { label: 'Название конкурента', value: 'competitorName', default: true },
-                    { label: 'Цена конкурента', value: 'competitorPrice', default: true },
-                    { label: 'Акционная цена', value: 'competitorPromotionalPrice', default: true },
-                    { label: 'Время', value: 'competitorTime', default: true },
-                    { label: 'Дата', value: 'competitorDate', default: true },
-                    { label: 'Дата:Время', value: 'competitorLocalDateTime', default: true },
-                    { label: 'Статус', value: 'competitorStockStatus', default: true },
-                    { label: 'Дополнительная цена', value: 'competitorAdditionalPrice', default: false },
-                    { label: 'Комментарий', value: 'competitorCommentary', default: true },
-                    { label: 'Название товара', value: 'competitorProductName', default: true },
-                    { label: 'Ссылка', value: 'competitorUrl', default: true },
-                    { label: 'Скриншот', value: 'competitorWebCacheUrl', default: false }
-                ]
-            };
-
-            return fieldsByType[entityType] || [];
-        }
-
         // Функция для переключения опций в зависимости от выбранного формата
         function toggleFormatOptions(format) {
             const csvOptions = document.getElementById('csvOptions');

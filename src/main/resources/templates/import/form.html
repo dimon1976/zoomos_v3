@@ -348,81 +348,151 @@
             return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
         }
 
-        // Анализ файла (заглушка)
+        // Анализ файла
         function analyzeFile(file) {
-            // Заглушка для демонстрации интерфейса
-            // В реальной реализации здесь должен быть AJAX-запрос к серверу
-
             // Очищаем таблицу предпросмотра
             const headerRow = document.getElementById('headerRow');
             const previewBody = document.getElementById('previewBody');
             headerRow.innerHTML = '';
             previewBody.innerHTML = '';
 
-            // Имитация загрузки
-            setTimeout(() => {
-                // Имитация заголовков файла
-                const headers = ['ID товара', 'Модель', 'Бренд', 'Штрихкод', 'Описание', 'Цена'];
+            // Показываем индикатор загрузки
+            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
 
-                // Заполняем заголовки
-                headers.forEach(header => {
-                    const th = document.createElement('th');
-                    th.textContent = header;
-                    headerRow.appendChild(th);
-                });
+            // Получаем текущий тип сущности и флаг составной сущности
+            const entityType = document.getElementById('selectedEntityType').value;
+            const isComposite = document.getElementById('isComposite').value === 'true';
+            const clientId = window.location.pathname.split('/')[2]; // Извлекаем ID клиента из URL
 
-// Имитация данных для предпросмотра
-                const sampleData = [
-                    ['1001', 'iPhone 13', 'Apple', '123456789012', 'Смартфон с дисплеем 6.1"', '79990'],
-                    ['1002', 'Galaxy S21', 'Samsung', '987654321098', 'Флагманский смартфон с тройной камерой', '69990'],
-                    ['1003', 'Redmi Note 10', 'Xiaomi', '456789012345', 'Доступный смартфон с хорошей камерой', '19990']
-                ];
+            // Создаем форму для отправки файла
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('entityType', entityType);
+            formData.append('composite', isComposite);
 
-                // Заполняем тело таблицы
-                sampleData.forEach(rowData => {
-                    const tr = document.createElement('tr');
-                    rowData.forEach(cellData => {
-                        const td = document.createElement('td');
-                        td.textContent = cellData;
-                        tr.appendChild(td);
+            // Отправляем файл на сервер для анализа
+            fetch(`/clients/${clientId}/import/analyze`, {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Ошибка при анализе файла');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Очищаем строки таблицы
+                    headerRow.innerHTML = '';
+                    previewBody.innerHTML = '';
+
+                    // Заполняем заголовки, если они есть
+                    if (data.headers && data.headers.length > 0) {
+                        data.headers.forEach(header => {
+                            const th = document.createElement('th');
+                            th.textContent = header;
+                            headerRow.appendChild(th);
+                        });
+                    }
+
+                    // Заполняем предпросмотр данных первыми 10 строками, если они есть
+                    if (data.sampleData && data.sampleData.length > 0) {
+                        // data.sampleData - это массив объектов, а не двумерный массив
+                        data.sampleData.forEach(rowObject => {
+                            const tr = document.createElement('tr');
+
+                            // Для каждого заголовка получаем соответствующее значение
+                            if (data.headers && data.headers.length > 0) {
+                                data.headers.forEach(header => {
+                                    const td = document.createElement('td');
+                                    // Получаем значение по ключу заголовка, если оно существует
+                                    const cellValue = rowObject[header] !== undefined ? rowObject[header] : '';
+                                    td.textContent = cellValue;
+                                    tr.appendChild(td);
+                                });
+                            } else {
+                                // Если заголовки не определены, выводим все значения объекта
+                                Object.values(rowObject).forEach(value => {
+                                    const td = document.createElement('td');
+                                    td.textContent = value !== null ? value : '';
+                                    tr.appendChild(td);
+                                });
+                            }
+
+                            previewBody.appendChild(tr);
+                        });
+
+                        // Сообщаем, сколько всего строк в файле, если их больше, чем мы показываем
+                        const totalRows = data.totalRows || data.sampleData.length;
+                        if (totalRows > data.sampleData.length) {
+                            const tr = document.createElement('tr');
+                            const td = document.createElement('td');
+                            td.colSpan = data.headers ? data.headers.length : Object.keys(data.sampleData[0]).length;
+                            td.className = 'text-center text-muted';
+                            td.textContent = `...и еще ${totalRows - data.sampleData.length} строк`;
+                            tr.appendChild(td);
+                            previewBody.appendChild(tr);
+                        }
+                    }
+
+                    // Обновляем доступные маппинги
+                    if (data.availableMappings) {
+                        updateMappingOptions(data.availableMappings);
+                    }
+
+                    // Сохраняем заголовки и данные для использования при создании маппинга
+                    window.fileHeaders = data.headers || [];
+                    window.fieldsMetadata = data.fieldsMetadata;
+
+                    const event = new CustomEvent('fileAnalyzed', {
+                        detail: {
+                            headers: data.headers || [],
+                            metadata: data.fieldsMetadata
+                        }
                     });
+                    document.dispatchEvent(event);
+
+                    // Если нет данных для предпросмотра
+                    if ((!data.headers || data.headers.length === 0) &&
+                        (!data.sampleData || data.sampleData.length === 0)) {
+                        const tr = document.createElement('tr');
+                        const td = document.createElement('td');
+                        td.colSpan = 5;
+                        td.className = 'text-center text-muted py-3';
+                        td.textContent = 'Не удалось прочитать данные из файла или файл пуст';
+                        tr.appendChild(td);
+                        previewBody.appendChild(tr);
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при анализе файла:', error);
+                    headerRow.innerHTML = '';
+                    previewBody.innerHTML = '';
+
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 5;
+                    td.className = 'text-center text-danger py-3';
+                    td.textContent = 'Ошибка при анализе файла: ' + error.message;
+                    tr.appendChild(td);
                     previewBody.appendChild(tr);
                 });
+        }
 
-                // Имитация получения доступных маппингов и стратегий
-                const mappingSelect = document.getElementById('mappingId');
-                const strategySelect = document.getElementById('strategyId');
 
-                // Очищаем селекты
-                mappingSelect.innerHTML = '<option value="">Автоматическое</option>';
-                strategySelect.innerHTML = '<option value="">По умолчанию</option>';
+        // Функция для обновления списка доступных маппингов
+        function updateMappingOptions(mappings) {
+            const mappingSelect = document.getElementById('mappingId');
+            mappingSelect.innerHTML = '<option value="">Автоматическое</option>';
 
-                // Добавляем маппинги
-                const mappings = [
-                    { id: 1, name: 'Стандартное сопоставление товаров' },
-                    { id: 2, name: 'Сопоставление с дополнительными полями' }
-                ];
-
+            if (mappings && mappings.length > 0) {
                 mappings.forEach(mapping => {
                     const option = document.createElement('option');
                     option.value = mapping.id;
-                    option.textContent = mapping.name;
+                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
                     mappingSelect.appendChild(option);
                 });
-
-                // Добавляем стратегии
-                const strategies = [
-                    { id: 1, name: 'Стандартная стратегия импорта' },
-                    { id: 2, name: 'Обновление существующих записей' }
-                ];
-
-                strategies.forEach(strategy => {
-                    const option = document.createElement('option');
-                    option.value = strategy.id;
-                    option.textContent = strategy.name;
-                    strategySelect.appendChild(option);
-                });
-            }, 1000);
+            }
         }
 
         // Отправка формы

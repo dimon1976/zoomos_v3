@@ -1,0 +1,168 @@
+Структура папок
+Серийный номер тома: 2ACC-0DF3
+E:.
+|   tree.txt
+|   
++---java
+|   \---my
+|       \---java
+|           |   Main.java
+|           |   
+|           +---config
+|           |       AsyncConfig.java
+|           |       RequestIdFilter.java
+|           |       WebConfig.java
+|           |       WebSocketConfig.java
+|           |       
+|           +---controller
+|           |       ClientController.java
+|           |       ExportController.java
+|           |       FieldSelectionController.java
+|           |       ImportController.java
+|           |       MainController.java
+|           |       OperationController.java
+|           |       
+|           +---dto
+|           |       ClientDto.java
+|           |       FileOperationDto.java
+|           |       
+|           +---exception
+|           |       FileOperationException.java
+|           |       GlobalExceptionHandler.java
+|           |       
+|           +---model
+|           |   |   Client.java
+|           |   |   FileOperation.java
+|           |   |   
+|           |   +---entity
+|           |   |       Competitor.java
+|           |   |       ImportableEntity.java
+|           |   |       Product.java
+|           |   |       Region.java
+|           |   |       
+|           |   \---enums
+|           |           DataSourceType.java
+|           |           
+|           +---repository
+|           |       ClientRepository.java
+|           |       CompetitorRepository.java
+|           |       FileOperationRepository.java
+|           |       ProductRepository.java
+|           |       RegionRepository.java
+|           |       
+|           +---service
+|           |   +---client
+|           |   |   |   ClientService.java
+|           |   |   |   
+|           |   |   \---impl
+|           |   |           ClientServiceImpl.java
+|           |   |           
+|           |   +---entity
+|           |   |   +---competitor
+|           |   |   |       CompetitorService.java
+|           |   |   |       CompetitorServiceImpl.java
+|           |   |   |       
+|           |   |   +---product
+|           |   |   |       ProductService.java
+|           |   |   |       ProductServiceImpl.java
+|           |   |   |       
+|           |   |   \---region
+|           |   |           RegionService.java
+|           |   |           RegionServiceImpl.java
+|           |   |           
+|           |   \---file
+|           |       +---entity
+|           |       |       CompositeEntityService.java
+|           |       |       
+|           |       +---importer
+|           |       |       FileImportService.java
+|           |       |       FileImportServiceImpl.java
+|           |       |       
+|           |       +---mapping
+|           |       |       FieldMappingService.java
+|           |       |       FieldMappingServiceEnhanced.java
+|           |       |       FieldMappingServiceImpl.java
+|           |       |       
+|           |       +---metadata
+|           |       |       EntityMetadata.java
+|           |       |       EntityRegistry.java
+|           |       |       
+|           |       +---processor
+|           |       |       AbstractFileProcessor.java
+|           |       |       CsvFileProcessor.java
+|           |       |       ExcelFileProcessor.java
+|           |       |       FileProcessor.java
+|           |       |       FileProcessorFactory.java
+|           |       |       
+|           |       +---strategy
+|           |       |       DefaultFileProcessingStrategy.java
+|           |       |       FileProcessingStrategy.java
+|           |       |       
+|           |       \---transformer
+|           |               AbstractValueTransformer.java
+|           |               BooleanTransformer.java
+|           |               DateTimeTransformer.java
+|           |               EnumTransformer.java
+|           |               NumberTransformer.java
+|           |               StringTransformer.java
+|           |               ValueTransformer.java
+|           |               ValueTransformerFactory.java
+|           |               
+|           \---util
+|                   PathResolver.java
+|                   
+\---resources
+    |   application-dev.properties
+    |   application.properties
+    |   logback-spring.xml
+    |   
+    +---db
+    |   \---migration
+    |           V1__Create_Initial_Schema.sql
+    |           V2__Fix_Client_Id_Type.sql
+    |           V3__Create_File_Processing_Schema.sql
+    |           V4__Add_Entity_Indexes.sql
+    |           V5__AddColumnFieldMappings.sql
+    |           
+    +---static
+    |   +---css
+    |   |       styles.css
+    |   |       
+    |   \---js
+    |           main.js
+    |           
+    \---templates
+        |   index.html
+        |   
+        +---clients
+        |       details.html
+        |       form.html
+        |       list.html
+        |       
+        +---components
+        |       field-selection.html
+        |       
+        +---error
+        |       access-denied.html
+        |       file-error.html
+        |       general.html
+        |       not-found.html
+        |       
+        +---export
+        |       form.html
+        |       
+        +---import
+        |       form.html
+        |       
+        +---layout
+        |       main.html
+        |       
+        +---operations
+        |       list.html
+        |       
+        +---statistics
+        |       index.html
+        |       
+        \---utilities
+                index.html
+                

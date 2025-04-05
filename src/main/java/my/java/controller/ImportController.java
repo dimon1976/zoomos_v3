@@ -84,6 +84,10 @@ public class ImportController {
             redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите файл для загрузки");
             return "redirect:/clients/" + clientId + "/import";
         }
+        if (entityType != null && entityType.contains(",")) {
+            entityType = entityType.split(",")[0];
+            log.info("Преобразованный параметр entityType: {}", entityType);
+        }
 
         try {
             // Получаем клиента
@@ -149,7 +153,7 @@ public class ImportController {
     public ResponseEntity<?> analyzeFile(
             @PathVariable Long clientId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam("entityType") String entityType,
+            @RequestParam("analysisEntityType") String entityType,
             @RequestParam(value = "composite", required = false, defaultValue = "false") boolean isComposite) {
 
         log.debug("POST запрос на анализ файла для клиента: {}, тип: {}, составной: {}",

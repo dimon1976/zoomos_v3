@@ -512,11 +512,11 @@ public class FileImportServiceImpl implements FileImportService {
         if (operation == null) {
             return null;
         }
-
+// TODO Реализовать сохранение названия клиента
         return FileOperationDto.builder()
                 .id(operation.getId())
                 .clientId(operation.getClient() != null ? operation.getClient().getId() : null)
-                .clientName(operation.getClient() != null ? operation.getClient().getName() : null)
+//                .clientName(operation.getClient() != null ? operation.getClient().getName() : null)
                 .operationType(operation.getOperationType())
                 .fileName(operation.getFileName())
                 .fileType(operation.getFileType())

@@ -103,7 +103,7 @@ public class Competitor implements ImportableEntity {
         boolean success = true;
 
         for (Map.Entry<String, String> entry : data.entrySet()) {
-            String header = entry.getKey();
+            String fieldName = entry.getKey();
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -111,25 +111,35 @@ public class Competitor implements ImportableEntity {
                 continue;
             }
 
-            // Получаем имя поля из маппинга
-            String fieldName = FIELD_MAPPINGS.get(header);
-            if (fieldName == null) {
-                // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-                    if (mapping.getKey().equalsIgnoreCase(header)) {
-                        fieldName = mapping.getValue();
-                        break;
-                    }
-                }
+//            // Получаем имя поля из маппинга
+//            String fieldName = FIELD_MAPPINGS.get(header);
+//            if (fieldName == null) {
+//                // Пробуем без учета регистра
+//                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
+//                    if (mapping.getKey().equalsIgnoreCase(header)) {
+//                        fieldName = mapping.getValue();
+//                        break;
+//                    }
+//                }
+//
+//                // Если все еще не нашли, пропускаем
+//                if (fieldName == null) {
+//                    continue;
+//                }
+//            }
+//
+//            // Устанавливаем значение поля
+//            success &= setFieldValue(fieldName, value);
+//        }
 
-                // Если все еще не нашли, пропускаем
-                if (fieldName == null) {
-                    continue;
-                }
+            // Проверяем, относится ли поле к этой сущности
+            if (fieldName.startsWith("competitor.")) {
+                // Извлекаем имя поля без префикса
+                String actualFieldName = fieldName.substring("competitor.".length());
+
+                // Устанавливаем значение поля
+                success &= setFieldValue(actualFieldName, value);
             }
-
-            // Устанавливаем значение поля
-            success &= setFieldValue(fieldName, value);
         }
 
         return success;

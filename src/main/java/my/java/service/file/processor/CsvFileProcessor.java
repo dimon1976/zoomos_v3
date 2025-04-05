@@ -44,10 +44,18 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     private static final int SAMPLE_SIZE = 10000; // Размер выборки для анализа
     private static final int MAX_HEADER_ROW = 10; // Максимальный номер строки для поиска заголовков
 
+    // Константы для имен параметров
+    private static final String PARAM_DELIMITER = "delimiter";
+    private static final String PARAM_QUOTE_CHAR = "quoteChar";
+    private static final String PARAM_CHARSET = "charset";
+    private static final String PARAM_HEADER_ROW = "headerRow";
+    private static final String PARAM_SKIP_EMPTY_ROWS = "skipEmptyRows";
+    private static final String PARAM_TRIM_WHITESPACE = "trimWhitespace";
+
     /**
      * Конструктор для CSV процессора.
      *
-     * @param pathResolver утилита для работы с путями
+     * @param pathResolver       утилита для работы с путями
      * @param transformerFactory фабрика трансформеров значений
      */
     @Autowired
@@ -142,18 +150,35 @@ public class CsvFileProcessor extends AbstractFileProcessor {
 
     @Override
     protected void validateFileType(Path filePath) {
+        if (filePath == null) {
+            throw new FileOperationException("Путь к файлу не может быть null");
+        }
+
+        if (!Files.exists(filePath)) {
+            throw new FileOperationException("Файл не существует: " + filePath);
+        }
+
+        if (!Files.isRegularFile(filePath)) {
+            throw new FileOperationException("Указанный путь не является файлом: " + filePath);
+        }
+
+        if (!Files.isReadable(filePath)) {
+            throw new FileOperationException("Файл не доступен для чтения: " + filePath);
+        }
+
         String fileName = filePath.getFileName().toString().toLowerCase();
-        boolean isValid = false;
+        boolean isValidExtension = false;
 
         for (String ext : SUPPORTED_EXTENSIONS) {
             if (fileName.endsWith("." + ext)) {
-                isValid = true;
+                isValidExtension = true;
                 break;
             }
         }
 
-        if (!isValid) {
-            throw new FileOperationException("Неподдерживаемый тип файла. Ожидается CSV файл.");
+        if (!isValidExtension) {
+            throw new FileOperationException("Неподдерживаемый тип файла. Ожидается файл с расширением: "
+                    + String.join(", ", SUPPORTED_EXTENSIONS));
         }
     }
 
@@ -295,58 +320,107 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     public Map<String, Object> getConfigParameters() {
         Map<String, Object> params = new HashMap<>();
 
-        params.put("delimiter", "Разделитель полей (по умолчанию: ,)");
-        params.put("quoteChar", "Символ кавычек (по умолчанию: \")");
-        params.put("charset", "Кодировка файла (по умолчанию: UTF-8)");
-        params.put("headerRow", "Номер строки заголовка (с 0, по умолчанию: 0)");
-        params.put("skipEmptyRows", "Пропускать пустые строки (по умолчанию: true)");
-        params.put("trimWhitespace", "Удалять пробельные символы (по умолчанию: true)");
+        params.put(PARAM_DELIMITER, "Разделитель полей (по умолчанию: ,)");
+        params.put(PARAM_QUOTE_CHAR, "Символ кавычек (по умолчанию: \")");
+        params.put(PARAM_CHARSET, "Кодировка файла (по умолчанию: UTF-8)");
+        params.put(PARAM_HEADER_ROW, "Номер строки заголовка (с 0, по умолчанию: 0)");
+        params.put(PARAM_SKIP_EMPTY_ROWS, "Пропускать пустые строки (по умолчанию: true)");
+        params.put(PARAM_TRIM_WHITESPACE, "Удалять пробельные символы (по умолчанию: true)");
 
         return params;
     }
 
     /**
-     * Определяет параметры чтения CSV файла.
+     * Безопасно извлекает значение параметра из Map.
+     *
+     * @param params Map с параметрами
+     * @param key ключ параметра
+     * @param defaultValue значение по умолчанию
+     * @return значение параметра или значение по умолчанию, если параметр отсутствует
+     */
+    private String getParameterSafely(Map<String, String> params, String key, String defaultValue) {
+        if (params == null || !params.containsKey(key) || params.get(key) == null || params.get(key).isEmpty()) {
+            return defaultValue;
+        }
+        return params.get(key);
+    }
+
+    /**
+     * Безопасно извлекает целочисленное значение параметра.
+     *
+     * @param params Map с параметрами
+     * @param key ключ параметра
+     * @param defaultValue значение по умолчанию
+     * @return целочисленное значение параметра или значение по умолчанию при ошибке
+     */
+    private int getIntParameterSafely(Map<String, String> params, String key, int defaultValue) {
+        String value = getParameterSafely(params, key, String.valueOf(defaultValue));
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            log.warn("Не удалось преобразовать параметр {} в число: {}", key, value);
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Безопасно извлекает символьное значение параметра.
+     *
+     * @param params Map с параметрами
+     * @param key ключ параметра
+     * @param defaultValue значение по умолчанию
+     * @return символьное значение параметра или значение по умолчанию при ошибке
+     */
+    private char getCharParameterSafely(Map<String, String> params, String key, char defaultValue) {
+        String value = getParameterSafely(params, key, String.valueOf(defaultValue));
+        return value.isEmpty() ? defaultValue : value.charAt(0);
+    }
+
+    /**
+     * Определяет параметры чтения CSV файла, комбинируя автоопределение и пользовательские настройки.
      *
      * @param filePath путь к файлу
-     * @param params параметры, указанные пользователем
+     * @param params   параметры, указанные пользователем
      * @return настроенные параметры чтения
      */
     private FileReadingOptions determineReadingOptions(Path filePath, Map<String, String> params) {
         FileReadingOptions options = new FileReadingOptions();
 
-        // Если пользователь указал параметры, используем их
+        // Сначала автоматически определяем параметры
+        try {
+            detectFileOptions(filePath, options);
+        } catch (IOException e) {
+            log.error("Ошибка при автоопределении параметров файла: {}", e.getMessage());
+        }
+
+        // Если параметры указаны пользователем, переопределяем их
         if (params != null) {
-            if (params.containsKey("delimiter")) {
-                options.setDelimiter(params.get("delimiter").charAt(0));
-            }
+            // Применяем параметры пользователя поверх автоопределенных
+            char delimiterValue = getCharParameterSafely(params, PARAM_DELIMITER, options.getDelimiter());
+            options.setDelimiter(delimiterValue);
 
-            if (params.containsKey("quoteChar")) {
-                options.setQuoteChar(params.get("quoteChar").charAt(0));
-            }
+            char quoteValue = getCharParameterSafely(params, PARAM_QUOTE_CHAR, options.getQuoteChar());
+            options.setQuoteChar(quoteValue);
 
-            if (params.containsKey("charset")) {
-                options.setCharset(Charset.forName(params.get("charset")));
-            }
-
-            if (params.containsKey("headerRow")) {
-                options.setHeaderRow(Integer.parseInt(params.get("headerRow")));
-            }
-
-            if (params.containsKey("skipEmptyRows")) {
-                options.setSkipEmptyRows(Boolean.parseBoolean(params.get("skipEmptyRows")));
-            }
-
-            if (params.containsKey("trimWhitespace")) {
-                options.setTrimWhitespace(Boolean.parseBoolean(params.get("trimWhitespace")));
-            }
-        } else {
-            // Автоматически определяем параметры
             try {
-                detectFileOptions(filePath, options);
-            } catch (IOException e) {
-                log.error("Ошибка при автоопределении параметров файла: {}", e.getMessage());
+                String charsetName = getParameterSafely(params, PARAM_CHARSET, options.getCharset().name());
+                options.setCharset(Charset.forName(charsetName));
+            } catch (IllegalArgumentException e) {
+                log.warn("Неизвестная кодировка: {}, используем автоопределенную",
+                        getParameterSafely(params, PARAM_CHARSET, ""));
             }
+
+            int headerRowValue = getIntParameterSafely(params, PARAM_HEADER_ROW, options.getHeaderRow());
+            options.setHeaderRow(headerRowValue);
+
+            // Для булевых значений используем дефолтные значения из options
+            boolean skipEmptyRows = Boolean.parseBoolean(
+                    getParameterSafely(params, PARAM_SKIP_EMPTY_ROWS, String.valueOf(options.isSkipEmptyRows())));
+            options.setSkipEmptyRows(skipEmptyRows);
+
+            boolean trimWhitespace = Boolean.parseBoolean(
+                    getParameterSafely(params, PARAM_TRIM_WHITESPACE, String.valueOf(options.isTrimWhitespace())));
+            options.setTrimWhitespace(trimWhitespace);
         }
 
         return options;
@@ -356,7 +430,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Автоматически определяет параметры CSV файла.
      *
      * @param filePath путь к файлу
-     * @param options объект для сохранения определенных параметров
+     * @param options  объект для сохранения определенных параметров
      * @throws IOException если возникла ошибка при чтении файла
      */
     private void detectFileOptions(Path filePath, FileReadingOptions options) throws IOException {
@@ -418,8 +492,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Читает первые несколько строк файла для анализа.
      *
-     * @param filePath путь к файлу
-     * @param charset кодировка файла
+     * @param filePath  путь к файлу
+     * @param charset   кодировка файла
      * @param lineCount количество строк для чтения
      * @return список прочитанных строк
      * @throws IOException если возникла ошибка при чтении файла
@@ -473,7 +547,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Подсчитывает количество вхождений разделителя в строке.
      *
-     * @param line строка для анализа
+     * @param line      строка для анализа
      * @param delimiter разделитель
      * @return количество вхождений разделителя
      */
@@ -499,7 +573,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Определяет символ кавычек в CSV файле.
      *
      * @param sampleLines образец строк из файла
-     * @param delimiter определенный разделитель
+     * @param delimiter   определенный разделитель
      * @return символ кавычек
      */
     private char detectQuoteChar(List<String> sampleLines, char delimiter) {
@@ -521,8 +595,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Проверяет, подходит ли указанный символ кавычек для данного образца строк.
      *
      * @param sampleLines образец строк
-     * @param delimiter разделитель
-     * @param quoteChar символ кавычек для проверки
+     * @param delimiter   разделитель
+     * @param quoteChar   символ кавычек для проверки
      * @return true, если символ кавычек подходит
      */
     private boolean isQuoteCharSuitable(List<String> sampleLines, char delimiter, char quoteChar) {
@@ -546,8 +620,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Определяет номер строки с заголовками.
      *
      * @param sampleLines образец строк
-     * @param delimiter разделитель
-     * @param quoteChar символ кавычек
+     * @param delimiter   разделитель
+     * @param quoteChar   символ кавычек
      * @return номер строки с заголовками (с 0)
      */
     private int detectHeaderRow(List<String> sampleLines, char delimiter, char quoteChar) {
@@ -581,7 +655,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Разбивает строку CSV с учетом кавычек.
      *
-     * @param line строка для разбиения
+     * @param line      строка для разбиения
      * @param delimiter разделитель
      * @param quoteChar символ кавычек
      * @return массив полей
@@ -612,7 +686,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Определяет заголовки CSV файла.
      *
      * @param filePath путь к файлу
-     * @param options параметры чтения
+     * @param options  параметры чтения
      * @return массив заголовков
      * @throws IOException если возникла ошибка при чтении файла
      */
@@ -627,7 +701,18 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                      .withCSVParser(parser)
                      .withSkipLines(options.getHeaderRow())
                      .build()) {
-
+            // Добавить прямо перед строкой String[] headers = csvReader.readNext();
+            log.info("Чтение заголовков из файла: {}", filePath);
+            log.info("Настройки чтения: разделитель='{}', кавычки='{}', строка заголовка={}, кодировка={}",
+                    options.getDelimiter(), options.getQuoteChar(), options.getHeaderRow(), options.getCharset());
+            try {
+                // Попробуем прочитать первые несколько байт файла для диагностики
+                byte[] firstBytes = Files.readAllBytes(filePath);
+                String fileStart = new String(Arrays.copyOf(firstBytes, Math.min(100, firstBytes.length)), options.getCharset());
+                log.info("Начало файла: [{}]", fileStart.replace("\n", "\\n").replace("\r", "\\r"));
+            } catch (Exception e) {
+                log.warn("Не удалось прочитать начало файла для диагностики: {}", e.getMessage());
+            }
             String[] headers = csvReader.readNext();
 
             if (headers != null && options.isTrimWhitespace()) {
@@ -653,8 +738,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Получает образец данных из файла.
      *
      * @param filePath путь к файлу
-     * @param options параметры чтения
-     * @param headers заголовки
+     * @param options  параметры чтения
+     * @param headers  заголовки
      * @return список записей из файла
      * @throws IOException если возникла ошибка при чтении файла
      */
@@ -757,7 +842,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * Определяет тип данных для колонки.
      *
      * @param sampleData образец данных
-     * @param header заголовок колонки
+     * @param header     заголовок колонки
      * @return определенный тип данных
      */
     private String detectColumnType(List<Map<String, String>> sampleData, String header) {

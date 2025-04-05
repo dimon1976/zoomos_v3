@@ -20,7 +20,7 @@
                         <i class="fas fa-box fa-3x mb-3 text-primary"></i>
                         <h5 class="card-title">Товары</h5>
                         <p class="card-text small">Информация о товарах</p>
-                        <input type="radio" name="entityTypeRadio" value="product" class="d-none" checked>
+                        <input type="radio" name="entityTypeRadioBtn" value="product" class="d-none" checked>
                     </div>
                 </div>
             </div>
@@ -912,30 +912,52 @@
         // Показ текущего маппинга
         function showCurrentMapping() {
             if (!currentMapping) {
+                console.error("Маппинг не выбран");
                 return;
             }
 
+            // Заполняем основную информацию о маппинге
             document.getElementById('currentMappingName').textContent = currentMapping.name || '-';
             document.getElementById('currentMappingDescription').textContent = currentMapping.description || '-';
 
-            // Загружаем детали маппинга
-            fetch(`/api/fields/mapping/${currentMapping.id}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error('Ошибка при загрузке деталей маппинга:', data.error);
-                        return;
-                    }
+            // Очищаем таблицу просмотра
+            const tableBody = document.getElementById('viewMappingTableBody');
+            tableBody.innerHTML = '';
 
-                    updateViewMappingTable(data.details || []);
+            // Добавляем сообщение об ограниченной функциональности
+            const infoRow = document.createElement('tr');
+            const infoCell = document.createElement('td');
+            infoCell.colSpan = 2;
+            infoCell.className = 'text-center text-info';
+            infoCell.innerHTML = '<i class="fas fa-info-circle me-2"></i>Подробный просмотр деталей маппинга будет доступен в следующих версиях';
+            infoRow.appendChild(infoCell);
+            tableBody.appendChild(infoRow);
 
-                    // Показываем модальное окно
-                    const modal = new bootstrap.Modal(document.getElementById('viewMappingModal'));
-                    modal.show();
-                })
-                .catch(error => {
-                    console.error('Ошибка при загрузке деталей маппинга:', error);
-                });
+            // Добавляем базовую информацию о маппинге
+            const rows = [
+                { header: 'ID', value: currentMapping.id },
+                { header: 'Тип сущности', value: currentMapping.entityType },
+                { header: 'Составной', value: currentMapping.composite ? 'Да' : 'Нет' }
+            ];
+
+            rows.forEach(rowData => {
+                const row = document.createElement('tr');
+
+                const headerCell = document.createElement('td');
+                headerCell.className = 'fw-bold';
+                headerCell.textContent = rowData.header;
+
+                const valueCell = document.createElement('td');
+                valueCell.textContent = rowData.value;
+
+                row.appendChild(headerCell);
+                row.appendChild(valueCell);
+                tableBody.appendChild(row);
+            });
+
+            // Показываем модальное окно
+            const modal = new bootstrap.Modal(document.getElementById('viewMappingModal'));
+            modal.show();
         }
 
         // Обновление таблицы просмотра маппинга

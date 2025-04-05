@@ -20,39 +20,48 @@
             background-color: #f8f9fa;
             cursor: pointer;
         }
+
         .upload-area:hover {
             border-color: #0d6efd;
             background-color: #f1f8ff;
         }
+
         .upload-area.dragging {
             border-color: #0d6efd;
             background-color: #e8f0fe;
         }
+
         .upload-icon {
             font-size: 48px;
             color: #0d6efd;
             margin-bottom: 20px;
         }
+
         .entity-type-card {
             cursor: pointer;
             transition: all 0.2s;
             height: 100%;
         }
+
         .entity-type-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
+
         .entity-type-card.selected {
             border-color: #0d6efd;
             background-color: #f0f7ff;
         }
+
         .progress-container {
             margin-top: 20px;
         }
+
         #filePreview {
             display: none;
             margin-top: 20px;
         }
+
         .preview-table {
             max-height: 300px;
             overflow-y: auto;
@@ -82,7 +91,8 @@
         <div class="card-body">
             <p>Загрузите файл CSV или Excel для импорта данных в систему.</p>
 
-            <form id="importForm" th:action="@{/clients/{id}/import(id=${client.id})}" method="post" enctype="multipart/form-data">
+            <form id="importForm" th:action="@{/clients/{id}/import(id=${client.id})}" method="post"
+                  enctype="multipart/form-data">
                 <!-- Загрузка файла -->
                 <div class="mb-4">
                     <h5>1. Загрузите файл</h5>
@@ -178,7 +188,8 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="validateData" name="params[validateData]" value="true" checked>
+                                        <input class="form-check-input" type="checkbox" id="validateData"
+                                               name="params[validateData]" value="true" checked>
                                         <label class="form-check-label" for="validateData">
                                             Валидировать данные перед импортом
                                         </label>
@@ -186,7 +197,8 @@
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="trimWhitespace" name="params[trimWhitespace]" value="true" checked>
+                                        <input class="form-check-input" type="checkbox" id="trimWhitespace"
+                                               name="params[trimWhitespace]" value="true" checked>
                                         <label class="form-check-label" for="trimWhitespace">
                                             Удалять лишние пробелы
                                         </label>
@@ -215,7 +227,8 @@
                             <div class="progress mb-3" style="height: 25px;">
                                 <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
                                      role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
-                                     aria-valuemax="100">0%</div>
+                                     aria-valuemax="100">0%
+                                </div>
                             </div>
                             <div id="importStatus">Подготовка к импорту...</div>
                         </div>
@@ -227,11 +240,11 @@
 </section>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         // Выбор типа сущности
         const entityCards = document.querySelectorAll('.entity-type-card');
         entityCards.forEach(card => {
-            card.addEventListener('click', function() {
+            card.addEventListener('click', function () {
                 // Снимаем выделение со всех карточек
                 entityCards.forEach(c => c.classList.remove('selected'));
 
@@ -322,7 +335,7 @@
         }
 
         // Удаление файла
-        document.getElementById('removeFile').addEventListener('click', function() {
+        document.getElementById('removeFile').addEventListener('click', function () {
             fileInput.value = '';
             document.getElementById('filePreview').style.display = 'none';
             document.getElementById('startImportBtn').disabled = true;
@@ -496,54 +509,88 @@
         }
 
         // Отправка формы
-        document.getElementById('importForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+        // Проверим, правильно ли установлены обработчики событий
+        console.log("Установка обработчиков событий формы импорта");
+
+        // Найдем форму и кнопку
+        const importForm = document.getElementById('importForm');
+        const startImportBtn = document.getElementById('startImportBtn');
+
+        console.log("Форма импорта:", importForm);
+        console.log("Кнопка импорта:", startImportBtn);
+
+        // Добавим обработчик события клика на кнопку напрямую
+        startImportBtn.addEventListener('click', function (e) {
+            console.log("Нажата кнопка импорта");
+            e.preventDefault(); // Предотвращаем стандартную отправку формы
+
+            // Проверка, активирована ли кнопка
+            if (this.disabled) {
+                console.log("Кнопка импорта отключена, отмена");
+                return;
+            }
+
+            console.log("Начало обработки импорта");
+
+            // Проверяем, выбран ли файл
+            const fileInput = document.getElementById('fileInput');
+            console.log("Файл для импорта:", fileInput.files);
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Пожалуйста, выберите файл для импорта');
+                return;
+            }
 
             // Показываем прогресс импорта
-            document.getElementById('importProgress').classList.remove('d-none');
+            const progressContainer = document.getElementById('importProgress');
+            progressContainer.classList.remove('d-none');
+            console.log("Отображаем индикатор прогресса");
+
+            // Получаем данные формы
+            const formData = new FormData(importForm);
+
+            // Логируем все поля формы
+            console.log("Данные формы для отправки:");
+            for (let [key, value] of formData.entries()) {
+                console.log(`${key}: ${value}`);
+            }
+
+            // Отправляем форму
+            console.log("Отправка формы на:", importForm.action);
 
             // Блокируем кнопку импорта
-            document.getElementById('startImportBtn').disabled = true;
+            this.disabled = true;
 
-            // Имитация процесса импорта с обновлением прогресса
-            simulateImport();
-        });
-
-        // Имитация процесса импорта
-        function simulateImport() {
+            // Обновляем прогресс-бар
             const progressBar = document.getElementById('progressBar');
             const statusText = document.getElementById('importStatus');
-            let progress = 0;
+            progressBar.style.width = '30%';
+            progressBar.setAttribute('aria-valuenow', 30);
+            progressBar.textContent = '30%';
+            statusText.textContent = 'Отправка файла...';
 
-            const interval = setInterval(() => {
-                progress += 5;
-                progressBar.style.width = progress + '%';
-                progressBar.setAttribute('aria-valuenow', progress);
-                progressBar.textContent = progress + '%';
+            // Отправляем форму вручную
+            importForm.submit();
+        });
 
-                // Обновляем текст статуса
-                if (progress < 25) {
-                    statusText.textContent = 'Анализ файла...';
-                } else if (progress < 50) {
-                    statusText.textContent = 'Валидация данных...';
-                } else if (progress < 75) {
-                    statusText.textContent = 'Импорт записей...';
-                } else {
-                    statusText.textContent = 'Завершение импорта...';
-                }
+            // Дополнительно сделаем стандартный обработчик отправки формы
+        importForm.addEventListener('submit', function (e) {
+            console.log("Перехвачена отправка формы");
 
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    statusText.textContent = 'Импорт успешно завершен!';
-                    progressBar.classList.remove('progress-bar-animated');
+            // Не предотвращаем стандартную отправку - пусть форма отправится обычным способом
+            // e.preventDefault();
 
-                    // Перенаправление на страницу операций
-                    setTimeout(() => {
-                        window.location.href = `/clients/${clientId}/operations`;
-                    }, 2000);
-                }
-            }, 200);
-        }
+            // Показываем прогресс импорта
+            const progressContainer = document.getElementById('importProgress');
+            progressContainer.classList.remove('d-none');
+
+            // Блокируем кнопку импорта
+            startImportBtn.disabled = true;
+
+            console.log("Форма отправляется стандартным способом");
+        });
+
+
     });
 </script>
 </body>

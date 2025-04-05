@@ -110,28 +110,6 @@ public class Competitor implements ImportableEntity {
             if (value == null || value.trim().isEmpty()) {
                 continue;
             }
-
-//            // Получаем имя поля из маппинга
-//            String fieldName = FIELD_MAPPINGS.get(header);
-//            if (fieldName == null) {
-//                // Пробуем без учета регистра
-//                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-//                    if (mapping.getKey().equalsIgnoreCase(header)) {
-//                        fieldName = mapping.getValue();
-//                        break;
-//                    }
-//                }
-//
-//                // Если все еще не нашли, пропускаем
-//                if (fieldName == null) {
-//                    continue;
-//                }
-//            }
-//
-//            // Устанавливаем значение поля
-//            success &= setFieldValue(fieldName, value);
-//        }
-
             // Проверяем, относится ли поле к этой сущности
             if (fieldName.startsWith("competitor.")) {
                 // Извлекаем имя поля без префикса
@@ -141,7 +119,6 @@ public class Competitor implements ImportableEntity {
                 success &= setFieldValue(actualFieldName, value);
             }
         }
-
         return success;
     }
 

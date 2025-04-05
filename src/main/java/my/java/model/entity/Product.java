@@ -120,22 +120,6 @@ public class Product implements ImportableEntity {
                 continue;
             }
 
-            // Получаем имя поля из маппинга
-//            String fieldName = FIELD_MAPPINGS.get(header);
-//            if (fieldName == null) {
-//                // Пробуем без учета регистра
-//                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-//                    if (mapping.getKey().equalsIgnoreCase(header)) {
-//                        fieldName = mapping.getValue();
-//                        break;
-//                    }
-//                }
-//
-//                // Если все еще не нашли, пропускаем
-//                if (fieldName == null) {
-//                    continue;
-//                }
-//            }
             // Проверяем, относится ли поле к этой сущности
             if (fieldName.startsWith("product.")) {
                 // Извлекаем имя поля без префикса

@@ -477,7 +477,7 @@ public class FileImportServiceImpl implements FileImportService {
                 log.info("Сохранено {} продуктов", savedCount);
                 break;
 
-            case "regiondata":
+            case "region":
                 List<Region> regionList = entities.stream()
                         .filter(e -> e instanceof Region)
                         .map(e -> (Region) e)
@@ -486,7 +486,7 @@ public class FileImportServiceImpl implements FileImportService {
                 log.info("Сохранено {} данных регионов", savedCount);
                 break;
 
-            case "competitordata":
+            case "competitor":
                 List<Competitor> competitorList = entities.stream()
                         .filter(e -> e instanceof Competitor)
                         .map(e -> (Competitor) e)

@@ -197,11 +197,11 @@ public abstract class AbstractFileProcessor implements FileProcessor {
                 }
 
                 // Валидируем сущность
-                String validationError = entity.validate();
-                if (validationError != null) {
-                    errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
-                    continue;
-                }
+//                String validationError = entity.validate();
+//                if (validationError != null) {
+//                    errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
+//                    continue;
+//                }
 
                 // Добавляем сущность в результат
                 entities.add(entity);

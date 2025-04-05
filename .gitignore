@@ -36,4 +36,8 @@ build/
 /logs/
 /uploads/
 /temp/
-/application-dev.properties
+/temp-files/
+temp-files/
+**/temp-files/**
+/temp-files/**
+application-dev.properties

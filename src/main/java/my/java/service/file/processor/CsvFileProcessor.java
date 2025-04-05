@@ -193,11 +193,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                 Product product = new Product();
                 product.setTransformerFactory(transformerFactory);
                 return product;
-            case "regiondata":
+            case "region":
                 Region region = new Region();
                 region.setTransformerFactory(transformerFactory);
                 return region;
-            case "competitordata":
+            case "competitor":
                 Competitor competitor = new Competitor();
                 competitor.setTransformerFactory(transformerFactory);
                 return competitor;

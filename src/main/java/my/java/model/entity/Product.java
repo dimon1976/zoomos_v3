@@ -81,6 +81,7 @@ public class Product implements ImportableEntity {
         FIELD_MAPPINGS.put("Дополнительное поле 3", "productAdditional3");
         FIELD_MAPPINGS.put("Дополнительное поле 4", "productAdditional4");
         FIELD_MAPPINGS.put("Дополнительное поле 5", "productAdditional5");
+
     }
 
     // Транзитивные поля, не сохраняемые в БД
@@ -111,7 +112,7 @@ public class Product implements ImportableEntity {
         boolean success = true;
 
         for (Map.Entry<String, String> entry : data.entrySet()) {
-            String header = entry.getKey();
+            String fieldName = entry.getKey();
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -119,25 +120,14 @@ public class Product implements ImportableEntity {
                 continue;
             }
 
-            // Получаем имя поля из маппинга
-            String fieldName = FIELD_MAPPINGS.get(header);
-            if (fieldName == null) {
-                // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
-                    if (mapping.getKey().equalsIgnoreCase(header)) {
-                        fieldName = mapping.getValue();
-                        break;
-                    }
-                }
+            // Проверяем, относится ли поле к этой сущности
+            if (fieldName.startsWith("product.")) {
+                // Извлекаем имя поля без префикса
+                String actualFieldName = fieldName.substring("product.".length());
 
-                // Если все еще не нашли, пропускаем
-                if (fieldName == null) {
-                    continue;
-                }
+                // Устанавливаем значение поля
+                success &= setFieldValue(actualFieldName, value);
             }
-
-            // Устанавливаем значение поля
-            success &= setFieldValue(fieldName, value);
         }
 
         return success;

@@ -111,12 +111,9 @@ public class Competitor implements ImportableEntity {
                 continue;
             }
             // Проверяем, относится ли поле к этой сущности
-            if (fieldName.startsWith("competitor.")) {
-                // Извлекаем имя поля без префикса
-                String actualFieldName = fieldName.substring("competitor.".length());
-
+            if (fieldName.startsWith("competitor")) {
                 // Устанавливаем значение поля
-                success &= setFieldValue(actualFieldName, value);
+                success &= setFieldValue(fieldName, value);
             }
         }
         return success;

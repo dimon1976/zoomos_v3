@@ -73,6 +73,15 @@ public interface FileProcessor {
     boolean validateFile(Path filePath);
 
     /**
+     * Читает сырые данные из файла без преобразования в сущности.
+     *
+     * @param filePath путь к файлу
+     * @param params дополнительные параметры обработки
+     * @return список строк с данными
+     */
+    List<Map<String, String>> readRawData(Path filePath, Map<String, String> params);
+
+    /**
      * Оценивает количество записей в файле без полной его обработки.
      *
      * @param filePath путь к файлу

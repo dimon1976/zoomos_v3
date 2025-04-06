@@ -121,12 +121,9 @@ public class Product implements ImportableEntity {
             }
 
             // Проверяем, относится ли поле к этой сущности
-            if (fieldName.startsWith("product.")) {
-                // Извлекаем имя поля без префикса
-                String actualFieldName = fieldName.substring("product.".length());
-
+            if (fieldName.startsWith("product")) {
                 // Устанавливаем значение поля
-                success &= setFieldValue(actualFieldName, value);
+                success &= setFieldValue(fieldName, value);
             }
         }
 

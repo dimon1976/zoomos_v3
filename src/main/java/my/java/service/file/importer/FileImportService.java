@@ -26,6 +26,7 @@ public interface FileImportService {
      * @param mappingId идентификатор маппинга полей (может быть null для автоопределения)
      * @param strategyId идентификатор стратегии обработки (может быть null для стратегии по умолчанию)
      * @param params дополнительные параметры для обработки
+     * @param isComposite флаг, указывающий, что импортируется составная сущность
      * @return объект Future с DTO операции импорта
      */
     CompletableFuture<FileOperationDto> importFileAsync(
@@ -33,7 +34,8 @@ public interface FileImportService {
             Client client,
             Long mappingId,
             Long strategyId,
-            Map<String, String> params);
+            Map<String, String> params,
+            boolean isComposite);
 
     /**
      * Возвращает статус операции импорта файла.

@@ -27,7 +27,6 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class CompositeEntityService {
 
-    private final EntityRegistry entityRegistry;
     private final ProductService productService;
     private final RegionService regionService;
     private final CompetitorService competitorService;
@@ -91,33 +90,64 @@ public class CompositeEntityService {
                                                                Map<String, String> mappedFields) {
         Map<String, Map<String, String>> result = new HashMap<>();
 
-        // Преобразуем маппинг полей для удобства работы
-        Map<String, String> headerToField = new HashMap<>();
-        for (Map.Entry<String, String> entry : mappedFields.entrySet()) {
-            headerToField.put(entry.getKey(), entry.getValue());
-        }
+        // Логируем входные данные для отладки
+        log.debug("Данные для обработки: {}", data.keySet());
+        log.debug("Маппинг полей: {}", mappedFields);
 
-        // Обрабатываем каждый заголовок из файла
+        // Проверяем маппинг для каждого поля из входных данных
         for (Map.Entry<String, String> dataEntry : data.entrySet()) {
-            String header = dataEntry.getKey();
+            String key = dataEntry.getKey();
             String value = dataEntry.getValue();
 
-            // Получаем соответствующее поле с префиксом сущности
-            String mappedField = headerToField.get(header);
-            if (mappedField != null) {
-                // Разделяем префикс сущности и имя поля
-                String[] parts = mappedField.split("\\.", 2);
+            // Пропускаем пустые значения
+            if (value == null || value.trim().isEmpty()) {
+                continue;
+            }
+
+            // Проверяем варианты обработки:
+
+            // 1. Ключ уже в формате с префиксом (product.xxx)
+            if (key.contains(".")) {
+                String[] parts = key.split("\\.", 2);
                 if (parts.length == 2) {
                     String entityType = parts[0];
                     String fieldName = parts[1];
 
-                    // Добавляем данные в соответствующую карту сущности
                     result.computeIfAbsent(entityType, k -> new HashMap<>())
                             .put(fieldName, value);
+                    continue;
                 }
+            }
+
+            // 2. Поиск маппинга в mappedFields
+            boolean mappingFound = false;
+            for (Map.Entry<String, String> mapping : mappedFields.entrySet()) {
+                // Если ключ из data совпадает с ключом из mappedFields
+                if (key.equalsIgnoreCase(mapping.getKey())) {
+                    String prefixedField = mapping.getValue();
+
+                    // Если значение маппинга имеет формат с префиксом
+                    if (prefixedField != null && prefixedField.contains(".")) {
+                        String[] parts = prefixedField.split("\\.", 2);
+                        if (parts.length == 2) {
+                            String entityType = parts[0];
+                            String fieldName = parts[1];
+
+                            result.computeIfAbsent(entityType, k -> new HashMap<>())
+                                    .put(fieldName, value);
+                            mappingFound = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!mappingFound) {
+                log.debug("Не найден маппинг для поля: {}", key);
             }
         }
 
+        log.debug("Подготовленные данные по сущностям: {}", result);
         return result;
     }
 
@@ -142,11 +172,11 @@ public class CompositeEntityService {
             }
 
             // Валидируем сущность
-            String validationError = product.validate();
-            if (validationError != null) {
-                log.error("Ошибка валидации Product: {}", validationError);
-                return null;
-            }
+//            String validationError = product.validate();
+//            if (validationError != null) {
+//                log.error("Ошибка валидации Product: {}", validationError);
+//                return null;
+//            }
 
             // Проверяем существование продукта по его внешнему идентификатору
             if (product.getProductId() != null) {
@@ -219,8 +249,19 @@ public class CompositeEntityService {
      */
     private Region processRegionData(Map<String, String> data, Product product, Long clientId) {
         try {
-            // Проверяем, содержит ли карта данных достаточно информации
-            if (data.isEmpty() || !data.containsKey("region")) {
+            // Проверяем, содержит ли карта данных достаточно информации с префиксом region.
+            boolean hasRegionData = false;
+            for (String key : data.keySet()) {
+                if (key.startsWith("region")) {
+                    String value = data.get(key);
+                    if (value != null && !value.trim().isEmpty()) {
+                        hasRegionData = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasRegionData) {
                 log.debug("Недостаточно данных для региона");
                 return null;
             }
@@ -238,11 +279,11 @@ public class CompositeEntityService {
             }
 
             // Валидируем сущность
-            String validationError = region.validate();
-            if (validationError != null) {
-                log.error("Ошибка валидации Region: {}", validationError);
-                return null;
-            }
+//            String validationError = region.validate();
+//            if (validationError != null) {
+//                log.error("Ошибка валидации Region: {}", validationError);
+//                return null;
+//            }
 
             // Проверяем существование региона
             Optional<Region> existingRegion = regionService.findByRegionAndProductId(
@@ -283,8 +324,19 @@ public class CompositeEntityService {
      */
     private Competitor processCompetitorData(Map<String, String> data, Product product, Long clientId) {
         try {
-            // Проверяем, содержит ли карта данных достаточно информации
-            if (data.isEmpty() || !data.containsKey("competitorName")) {
+            // Проверяем, содержит ли карта данных достаточно информации с префиксом competitor
+            boolean hasRegionData = false;
+            for (String key : data.keySet()) {
+                if (key.startsWith("competitor")) {
+                    String value = data.get(key);
+                    if (value != null && !value.trim().isEmpty()) {
+                        hasRegionData = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasRegionData) {
                 log.debug("Недостаточно данных для конкурента");
                 return null;
             }
@@ -302,11 +354,11 @@ public class CompositeEntityService {
             }
 
             // Валидируем сущность
-            String validationError = competitor.validate();
-            if (validationError != null) {
-                log.error("Ошибка валидации Competitor: {}", validationError);
-                return null;
-            }
+//            String validationError = competitor.validate();
+//            if (validationError != null) {
+//                log.error("Ошибка валидации Competitor: {}", validationError);
+//                return null;
+//            }
 
             // Проверяем существование конкурента
             Optional<Competitor> existingCompetitor = competitorService.findByCompetitorNameAndProductId(

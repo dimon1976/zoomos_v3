@@ -73,12 +73,9 @@ public class Region implements ImportableEntity {
             }
 
             // Проверяем, относится ли поле к этой сущности
-            if (fieldName.startsWith("region.")) {
-                // Извлекаем имя поля без префикса
-                String actualFieldName = fieldName.substring("region.".length());
-
+            if (fieldName.startsWith("region")) {
                 // Устанавливаем значение поля
-                success &= setFieldValue(actualFieldName, value);
+                success &= setFieldValue(fieldName, value);
             }
         }
 

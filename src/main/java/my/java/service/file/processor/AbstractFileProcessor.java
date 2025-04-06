@@ -30,7 +30,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Конструктор с необходимыми зависимостями.
      *
-     * @param pathResolver утилита для работы с путями
+     * @param pathResolver       утилита для работы с путями
      * @param transformerFactory фабрика трансформеров значений
      */
     protected AbstractFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
@@ -85,7 +85,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      * Считывает данные из файла.
      *
      * @param filePath путь к файлу
-     * @param params параметры чтения
+     * @param params   параметры чтения
      * @return список сырых данных
      * @throws IOException если возникла ошибка при чтении файла
      */
@@ -144,14 +144,31 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      */
     protected abstract void validateFileType(Path filePath);
 
+
+    @Override
+    public List<Map<String, String>> readRawData(Path filePath, Map<String, String> params) {
+        try {
+            log.debug("Чтение сырых данных из файла: {}", filePath);
+
+            // Валидация файла
+            validateFileInternal(filePath);
+
+            // Делегируем чтение конкретной реализации
+            return readFile(filePath, params);
+        } catch (Exception e) {
+            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
+            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * Преобразует сырые данные в сущности.
      *
-     * @param rawData сырые данные из файла
-     * @param entityType тип сущности
-     * @param client клиент
+     * @param rawData      сырые данные из файла
+     * @param entityType   тип сущности
+     * @param client       клиент
      * @param fieldMapping маппинг полей
-     * @param operation информация об операции
+     * @param operation    информация об операции
      * @return список созданных сущностей
      */
     protected List<ImportableEntity> convertToEntities(
@@ -274,7 +291,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Применяет маппинг полей к данным.
      *
-     * @param rawData исходные данные
+     * @param rawData      исходные данные
      * @param fieldMapping маппинг полей
      * @return данные с примененным маппингом
      */
@@ -290,6 +307,10 @@ public abstract class AbstractFileProcessor implements FileProcessor {
         for (Map.Entry<String, String> mappingEntry : fieldMapping.entrySet()) {
             String fileHeader = mappingEntry.getKey();
             String entityField = mappingEntry.getValue();
+            String[] parts = entityField.split("\\.", 2);
+            if (parts.length == 2) {
+                entityField = parts[1];
+            }
 
             if (rawData.containsKey(fileHeader)) {
                 result.put(entityField, rawData.get(fileHeader));
@@ -303,7 +324,7 @@ public abstract class AbstractFileProcessor implements FileProcessor {
      * Обновляет статус операции.
      *
      * @param operation операция
-     * @param status новый статус
+     * @param status    новый статус
      */
     protected void updateOperationStatus(FileOperation operation, FileOperation.OperationStatus status) {
         if (operation != null) {
@@ -314,9 +335,9 @@ public abstract class AbstractFileProcessor implements FileProcessor {
     /**
      * Обновляет прогресс операции.
      *
-     * @param operation операция
+     * @param operation        операция
      * @param processedRecords количество обработанных записей
-     * @param totalRecords общее количество записей
+     * @param totalRecords     общее количество записей
      */
     protected void updateProgress(FileOperation operation, int processedRecords, int totalRecords) {
         if (operation != null && totalRecords > 0) {

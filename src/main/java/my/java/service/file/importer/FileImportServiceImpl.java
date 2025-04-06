@@ -12,6 +12,7 @@ import my.java.model.entity.Product;
 import my.java.model.entity.Region;
 import my.java.repository.FileOperationRepository;
 import my.java.service.entity.competitor.CompetitorService;
+import my.java.service.file.entity.CompositeEntityService;
 import my.java.service.file.mapping.FieldMappingService;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
@@ -20,6 +21,7 @@ import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.service.entity.product.ProductService;
 import my.java.service.entity.region.RegionService;
 import my.java.util.PathResolver;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
@@ -50,6 +52,8 @@ public class FileImportServiceImpl implements FileImportService {
     private final ProductService productService;
     private final RegionService regionService;
     private final CompetitorService competitorService;
+    @Autowired
+    private CompositeEntityService compositeEntityService;
 
     // Пул потоков для асинхронной обработки файлов
     @Qualifier("fileProcessingExecutor")
@@ -67,9 +71,11 @@ public class FileImportServiceImpl implements FileImportService {
             Client client,
             Long mappingId,
             Long strategyId,
-            Map<String, String> params) {
+            Map<String, String> params,
+            boolean isComposite) {
 
-        log.info("Начало асинхронного импорта файла: {}, клиент: {}", file.getOriginalFilename(), client.getName());
+        log.info("Начало асинхронного импорта файла: {}, клиент: {}, составная сущность: {}",
+                file.getOriginalFilename(), client.getName(), isComposite);
 
         try {
             // Сохраняем файл во временную директорию
@@ -78,6 +84,13 @@ public class FileImportServiceImpl implements FileImportService {
 
             // Создаем запись об операции в БД
             FileOperation operation = createFileOperation(client, file, tempFilePath);
+
+            // Создаем копию параметров и добавляем параметр о составной сущности
+            final Map<String, String> processParams = new HashMap<>();
+            if (params != null) {
+                processParams.putAll(params);
+            }
+            processParams.put("composite", String.valueOf(isComposite));
 
             // Запускаем асинхронную обработку файла
             CompletableFuture<FileOperationDto> future = CompletableFuture.supplyAsync(() -> {
@@ -265,6 +278,10 @@ public class FileImportServiceImpl implements FileImportService {
             String entityType = getEntityTypeFromParams(params);
             log.debug("Тип сущности для импорта: {}", entityType);
 
+            // Проверяем, является ли импорт составным
+            boolean isComposite = isCompositeImport(params);
+            log.debug("Составной импорт: {}", isComposite);
+
             // Получаем маппинг полей
             Map<String, String> fieldMapping = mappingId != null
                     ? fieldMappingService.getMappingById(mappingId)
@@ -286,10 +303,15 @@ public class FileImportServiceImpl implements FileImportService {
             // Меняем статус операции на "в процессе"
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
-
-            // Обрабатываем файл и получаем список сущностей
-            List<ImportableEntity> entities = processor.processFile(
-                    filePath, entityType, client, fieldMapping, params, operation);
+            List<ImportableEntity> entities;
+            // В зависимости от типа импорта, используем соответствующую логику
+            if (isComposite) {
+                // Логика для составных сущностей
+                entities = processCompositeEntities(processor, filePath, entityType, client, fieldMapping, params, operation);
+            } else {
+                // Стандартная логика для одиночных сущностей
+                entities = processor.processFile(filePath, entityType, client, fieldMapping, params, operation);
+            }
 
             // Сохраняем сущности в БД
             int savedEntities = saveEntities(entities, entityType);
@@ -312,6 +334,129 @@ public class FileImportServiceImpl implements FileImportService {
             operation = fileOperationRepository.save(operation);
             throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Обрабатывает файл для составных сущностей.
+     *
+     * @param processor процессор файлов
+     * @param filePath путь к файлу
+     * @param mainEntityType основной тип сущности
+     * @param client клиент
+     * @param fieldMapping маппинг полей
+     * @param params параметры
+     * @param operation информация об операции
+     * @return список созданных сущностей
+     */
+    private List<ImportableEntity> processCompositeEntities(
+            FileProcessor processor,
+            Path filePath,
+            String mainEntityType,
+            Client client,
+            Map<String, String> fieldMapping,
+            Map<String, String> params,
+            FileOperation operation) {
+
+        log.info("Обработка составных сущностей. Основной тип: {}", mainEntityType);
+
+        // Получаем связанные сущности
+        List<String> relatedEntities = getRelatedEntities(params);
+        log.debug("Связанные сущности: {}", relatedEntities);
+
+        // Используем процессор для получения сырых данных из файла
+        List<Map<String, String>> rawData = processor.readRawData(filePath, params);
+        log.debug("Прочитано {} строк данных из файла", rawData.size());
+
+        // Обновляем информацию о количестве записей
+        if (operation != null) {
+            operation.setTotalRecords(rawData.size());
+        }
+
+        // Результирующий список сущностей
+        List<ImportableEntity> resultEntities = new ArrayList<>();
+        int processedRecords = 0;
+
+        // Обрабатываем каждую строку данных
+        for (Map<String, String> row : rawData) {
+            processedRecords++;
+
+            try {
+                // Применяем маппинг полей перед обработкой
+                Map<String, String> mappedData = applyFieldMapping(row, fieldMapping);
+
+                // Обрабатываем строку данных и получаем список сущностей
+                List<ImportableEntity> entitiesFromRow = compositeEntityService.processRow(
+                        mappedData, fieldMapping, client.getId());
+
+                // Добавляем созданные сущности в результат
+                resultEntities.addAll(entitiesFromRow);
+
+            } catch (Exception e) {
+                log.warn("Ошибка при обработке строки {}: {}", processedRecords, e.getMessage());
+            }
+        }
+
+        // Очищаем кэш после завершения импорта
+        compositeEntityService.clearCache();
+
+        log.info("Обработка составных сущностей завершена. Создано сущностей: {}", resultEntities.size());
+        return resultEntities;
+    }
+
+    /**
+     * Применяет маппинг полей к данным строки.
+     *
+     * @param rawData исходные данные
+     * @param fieldMapping маппинг полей
+     * @return преобразованные данные
+     */
+    private Map<String, String> applyFieldMapping(Map<String, String> rawData, Map<String, String> fieldMapping) {
+        if (fieldMapping == null || fieldMapping.isEmpty()) {
+            return new HashMap<>(rawData);
+        }
+
+        Map<String, String> result = new HashMap<>();
+
+        for (Map.Entry<String, String> entry : fieldMapping.entrySet()) {
+            String fileHeader = entry.getKey();
+            String entityField = entry.getValue();
+
+            if (rawData.containsKey(fileHeader)) {
+                result.put(entityField, rawData.get(fileHeader));
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Получает список связанных сущностей из параметров.
+     *
+     * @param params параметры
+     * @return список связанных сущностей
+     */
+    private List<String> getRelatedEntities(Map<String, String> params) {
+        if (params != null && params.containsKey("relatedEntities")) {
+            String relatedEntitiesStr = params.get("relatedEntities");
+            if (relatedEntitiesStr != null && !relatedEntitiesStr.isEmpty()) {
+                return Arrays.asList(relatedEntitiesStr.split(","));
+            }
+        }
+        return Collections.emptyList();
+    }
+
+
+    /**
+     * Проверяет, является ли импорт составным.
+     *
+     * @param params параметры импорта
+     * @return true, если импорт составной
+     */
+    private boolean isCompositeImport(Map<String, String> params) {
+        if (params == null) {
+            return false;
+        }
+        return Boolean.parseBoolean(params.getOrDefault("composite", "false"));
     }
 
     @Override

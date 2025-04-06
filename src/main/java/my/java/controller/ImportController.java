@@ -115,7 +115,7 @@ public class ImportController {
 
             // Начинаем асинхронный импорт
             CompletableFuture<FileOperationDto> futureOperation =
-                    fileImportService.importFileAsync(file, client, mappingId, null, params);
+                    fileImportService.importFileAsync(file, client, mappingId, null, params, isComposite);
 
             // Получаем ID операции
             FileOperationDto operation = futureOperation.getNow(null);

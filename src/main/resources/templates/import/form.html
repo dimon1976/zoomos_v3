@@ -746,46 +746,97 @@
 
                     console.log('Форма готова к отправке! Нажимаем submit() напрямую');
 
-                    // Перед строкой form.submit()
-                    console.log('Форма готова к отправке! Добавляем недостающие параметры');
 
-                    // Добавляем недостающие параметры импорта
-                    const missingParams = {
-                        'params[errorHandling]': 'continue',
-                        'params[duplicateHandling]': 'update',
-                        'params[validateData]': 'true',
-                        'params[trimWhitespace]': 'true'
-                    };
+                    console.log('Форма готова к отправке! Считываем фактические параметры импорта');
 
-                    // Создаем скрытые поля с параметрами и добавляем их в форму
-                    for (const [name, value] of Object.entries(missingParams)) {
-                        // Проверяем, существует ли уже такое поле
-                        let existingField = form.querySelector(`input[name="${name}"]`);
-
-                        if (!existingField) {
-                            console.log(`Добавляем отсутствующий параметр: ${name}=${value}`);
-                            const hiddenField = document.createElement('input');
-                            hiddenField.type = 'hidden';
-                            hiddenField.name = name;
-                            hiddenField.value = value;
-                            form.appendChild(hiddenField);
-                        } else {
-                            console.log(`Параметр ${name} уже существует со значением ${existingField.value}`);
+// Определяем параметры, которые нужно собрать и их селекторы
+                    const paramConfig = [
+                        {
+                            name: 'params[errorHandling]',
+                            selector: '#errorHandling',
+                            defaultValue: 'continue',
+                            type: 'select'
+                        },
+                        {
+                            name: 'params[duplicateHandling]',
+                            selector: '#duplicateHandling',
+                            defaultValue: 'update',
+                            type: 'select'
+                        },
+                        {
+                            name: 'params[validateData]',
+                            selector: '#validateData',
+                            defaultValue: 'true',
+                            type: 'checkbox'
+                        },
+                        {
+                            name: 'params[trimWhitespace]',
+                            selector: '#trimWhitespace',
+                            defaultValue: 'true',
+                            type: 'checkbox'
                         }
-                    }
+                    ];
 
-                    // Логируем итоговое состояние формы
+// Собираем фактические значения параметров из формы
+                    paramConfig.forEach(param => {
+                        // Находим элемент в форме
+                        const element = document.querySelector(param.selector);
+
+                        // Проверяем, существует ли элемент
+                        if (element) {
+                            // Получаем значение в зависимости от типа элемента
+                            let value;
+                            if (param.type === 'checkbox') {
+                                value = element.checked ? element.value || 'true' : 'false';
+                            } else if (param.type === 'select') {
+                                value = element.value;
+                            } else {
+                                value = element.value;
+                            }
+
+                            console.log(`Найден элемент ${param.name}: ${value}`);
+
+                            // Проверяем, существует ли уже поле с таким именем
+                            let existingField = form.querySelector(`input[name="${param.name}"]`);
+
+                            if (!existingField) {
+                                // Если поле не существует, создаем его
+                                console.log(`Добавляем параметр: ${param.name}=${value}`);
+                                const hiddenField = document.createElement('input');
+                                hiddenField.type = 'hidden';
+                                hiddenField.name = param.name;
+                                hiddenField.value = value;
+                                form.appendChild(hiddenField);
+                            } else {
+                                // Если поле существует, обновляем его значение
+                                console.log(`Обновляем параметр: ${param.name}=${value} (было: ${existingField.value})`);
+                                existingField.value = value;
+                            }
+                        } else {
+                            // Если элемент не найден, используем значение по умолчанию
+                            console.log(`Элемент ${param.selector} не найден, используем значение по умолчанию: ${param.defaultValue}`);
+
+                            // Проверяем, существует ли уже поле с таким именем
+                            let existingField = form.querySelector(`input[name="${param.name}"]`);
+
+                            if (!existingField) {
+                                // Если поле не существует, создаем его с значением по умолчанию
+                                console.log(`Добавляем параметр по умолчанию: ${param.name}=${param.defaultValue}`);
+                                const hiddenField = document.createElement('input');
+                                hiddenField.type = 'hidden';
+                                hiddenField.name = param.name;
+                                hiddenField.value = param.defaultValue;
+                                form.appendChild(hiddenField);
+                            }
+                        }
+                    });
+
+// Дополнительная диагностика состояния формы перед отправкой
                     console.log('Финальное состояние формы перед отправкой:');
-                    const finalFormData = new FormData(form);
-                    for (let [key, value] of finalFormData.entries()) {
-                        if (value instanceof File) {
-                            console.log(`${key}: Файл "${value.name}" (${value.size} байт)`);
-                        } else {
-                            console.log(`${key}: ${value}`);
-                        }
-                    }
+                    window.debugFormState();
 
-                    console.log('Отправляем форму с добавленными параметрами');
+                    console.log('Отправляем форму с актуальными параметрами');
+                    // Отправляем форму программно
                     form.submit();
 
                     // Предотвращаем стандартное действие кнопки

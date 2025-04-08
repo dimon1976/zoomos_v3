@@ -97,7 +97,7 @@
                 <div class="mb-4">
                     <h5>1. Загрузите файл</h5>
                     <div class="upload-area mt-2" id="dropArea">
-                        <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none">
+                        <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none" required>
                         <div class="upload-icon">
                             <i class="fas fa-cloud-upload-alt"></i>
                         </div>
@@ -143,21 +143,15 @@
                 <!-- Включение компонента выбора полей -->
                 <div th:replace="components/field-selection :: fieldSelection(${client.id}, 'import')"></div>
 
-                <!-- Параметры импорта -->
-                <div id="importOptions" class="mb-4 d-none">
+                <!-- Параметры импорта - убрали класс d-none, чтобы блок всегда был виден -->
+                <div id="importOptions" class="mb-4">
                     <h5>2. Настройте параметры импорта</h5>
                     <div class="card mt-2">
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <label for="mappingId" class="form-label">Сопоставление полей</label>
-                                    <select class="form-select" id="mappingId" name="mappingId">
-                                        <option value="">Автоматическое</option>
-                                        <!-- Опции будут добавлены динамически -->
-
-                                    </select>
-                                </div>
-                                <div class="col-md-6 mb-3">
+                                    <!-- Поле скрыто, так как значение теперь выбирается в компоненте field-selection -->
+                                    <input type="hidden" id="mappingId" name="mappingId" value="">
                                     <label for="strategyId" class="form-label">Стратегия импорта</label>
                                     <select class="form-select" id="strategyId" name="strategyId">
                                         <option value="">По умолчанию</option>
@@ -219,6 +213,7 @@
                     </a>
                 </div>
 
+
                 <!-- Прогресс импорта -->
                 <div id="importProgress" class="progress-container d-none">
                     <div class="card">
@@ -241,28 +236,44 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Выбор типа сущности
-        const entityCards = document.querySelectorAll('.entity-type-card');
-        entityCards.forEach(card => {
-            card.addEventListener('click', function () {
-                // Снимаем выделение со всех карточек
-                entityCards.forEach(c => c.classList.remove('selected'));
+        console.log('DOMContentLoaded: Инициализация скрипта импорта');
 
-                // Выделяем текущую карточку
-                this.classList.add('selected');
-
-                // Устанавливаем соответствующий radio
-                const entityType = this.dataset.entityType;
-                document.getElementById(`entity${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`).checked = true;
-            });
-        });
-
-        // Установка выбранной карточки по умолчанию
-        document.querySelector('[data-entity-type="product"]').classList.add('selected');
-
-        // Область загрузки файла
-        const dropArea = document.getElementById('dropArea');
+        // Получаем ссылки на основные DOM-элементы
+        const importForm = document.getElementById('importForm');
         const fileInput = document.getElementById('fileInput');
+        const startImportBtn = document.getElementById('startImportBtn');
+        const dropArea = document.getElementById('dropArea');
+        const filePreview = document.getElementById('filePreview');
+        const removeFileBtn = document.getElementById('removeFile');
+        const progressContainer = document.getElementById('importProgress');
+
+        console.log('Форма импорта:', importForm);
+        console.log('Кнопка импорта:', startImportBtn);
+
+        // Синхронизируем значение mappingId с компонентом выбора полей
+        const selectedMappingIdField = document.getElementById('selectedMappingId');
+        const mappingIdField = document.getElementById('mappingId');
+
+        // Если поле selectedMappingId существует, устанавливаем обработчик изменений
+        if (selectedMappingIdField) {
+            console.log('Найдено поле selectedMappingId, настраиваем синхронизацию');
+            // Начальная синхронизация значений
+            mappingIdField.value = selectedMappingIdField.value;
+
+            // Следим за изменениями в компоненте выбора полей
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                        mappingIdField.value = selectedMappingIdField.value;
+                        console.log('Синхронизировано значение mappingId:', mappingIdField.value);
+                    }
+                });
+            });
+
+            observer.observe(selectedMappingIdField, {attributes: true});
+        } else {
+            console.warn('Поле selectedMappingId не найдено');
+        }
 
         // Обработка клика по области загрузки
         dropArea.addEventListener('click', () => {
@@ -318,31 +329,110 @@
         }
 
         function handleFile(file) {
+            console.log('Обработка файла:', file.name);
             // Показываем превью файла
-            document.getElementById('filePreview').style.display = 'block';
+            filePreview.style.display = 'block';
             document.getElementById('fileName').textContent = file.name;
             document.getElementById('fileSize').textContent = formatFileSize(file.size);
             document.getElementById('fileType').textContent = file.type || getFileExtension(file.name);
 
             // Активируем кнопку импорта
-            document.getElementById('startImportBtn').disabled = false;
+            startImportBtn.disabled = false;
+            console.log('Кнопка импорта активирована');
 
-            // Показываем параметры импорта
-            document.getElementById('importOptions').classList.remove('d-none');
-
-            // Анализируем файл (здесь будет AJAX-запрос к серверу)
+            // Анализируем файл
             analyzeFile(file);
         }
 
         // Удаление файла
-        document.getElementById('removeFile').addEventListener('click', function () {
+        removeFileBtn.addEventListener('click', function () {
             fileInput.value = '';
-            document.getElementById('filePreview').style.display = 'none';
-            document.getElementById('startImportBtn').disabled = true;
-            document.getElementById('importOptions').classList.add('d-none');
+            filePreview.style.display = 'none';
+            startImportBtn.disabled = true;
+            console.log('Файл удален, кнопка импорта деактивирована');
         });
 
-        // Форматирование размера файла
+        // Обработчик отправки формы
+        importForm.addEventListener('submit', function (e) {
+            console.log('Попытка отправки формы');
+
+            // Проверяем наличие файла
+            if (!fileInput.files || fileInput.files.length === 0) {
+                e.preventDefault();
+                alert('Пожалуйста, выберите файл для импорта');
+                console.warn('Отправка формы отменена: файл не выбран');
+                return false;
+            }
+
+            // Показываем прогресс импорта
+            progressContainer.classList.remove('d-none');
+
+            // Блокируем кнопку импорта
+            startImportBtn.disabled = true;
+
+            // Обновляем прогресс-бар
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('importStatus');
+            progressBar.style.width = '30%';
+            progressBar.setAttribute('aria-valuenow', 30);
+            progressBar.textContent = '30%';
+            statusText.textContent = 'Отправка файла...';
+
+            // Логируем данные формы перед отправкой
+            console.log('Отправка формы с параметрами:');
+            const formData = new FormData(this);
+            for (let [key, value] of formData.entries()) {
+                console.log(`${key}: ${value}`);
+            }
+
+            // Продолжаем стандартную отправку формы
+            console.log('Форма отправляется на сервер');
+            return true;
+        });
+
+        // Функция для обновления списка доступных маппингов
+        function updateMappingOptions(mappings) {
+            console.log('Обновление доступных маппингов:', mappings);
+            const mappingSelect = document.getElementById('mappingSelect');
+
+            // Если элемент не найден в этой странице, проверяем alternative ID
+            if (!mappingSelect) {
+                console.warn('Элемент с ID "mappingSelect" не найден, проверяем альтернативные ID');
+
+                // Пробуем найти по альтернативному ID
+                const altSelect = document.getElementById('mappingId');
+                if (altSelect) {
+                    console.log('Найден альтернативный элемент для маппингов:', altSelect.id);
+                    updateMappingOptionsForElement(altSelect, mappings);
+                } else {
+                    console.error('Не найдены элементы для отображения маппингов');
+                }
+                return;
+            }
+
+            updateMappingOptionsForElement(mappingSelect, mappings);
+        }
+
+        // Вспомогательная функция обновления элемента выбора маппингов
+        function updateMappingOptionsForElement(selectElement, mappings) {
+            // Очищаем текущие опции
+            selectElement.innerHTML = '<option value="">Автоматическое</option>';
+
+            // Добавляем доступные маппинги
+            if (mappings && mappings.length > 0) {
+                mappings.forEach(mapping => {
+                    const option = document.createElement('option');
+                    option.value = mapping.id;
+                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
+                    selectElement.appendChild(option);
+                });
+                console.log(`Добавлено ${mappings.length} маппингов в элемент ${selectElement.id}`);
+            } else {
+                console.log('Нет доступных маппингов для добавления');
+            }
+        }
+
+        // Функции для форматирования и анализа файла
         function formatFileSize(size) {
             const kb = 1024;
             const mb = kb * 1024;
@@ -356,16 +446,22 @@
             }
         }
 
-        // Получение расширения файла
         function getFileExtension(filename) {
             return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
         }
 
-        // Анализ файла
         function analyzeFile(file) {
+            console.log('Начало анализа файла:', file.name);
+
             // Очищаем таблицу предпросмотра
             const headerRow = document.getElementById('headerRow');
             const previewBody = document.getElementById('previewBody');
+
+            if (!headerRow || !previewBody) {
+                console.error('Не найдены элементы для таблицы предпросмотра');
+                return;
+            }
+
             headerRow.innerHTML = '';
             previewBody.innerHTML = '';
 
@@ -373,9 +469,14 @@
             headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
 
             // Получаем текущий тип сущности и флаг составной сущности
-            const entityType = document.getElementById('selectedEntityType').value;
-            const isComposite = document.getElementById('isComposite').value === 'true';
-            const clientId = window.location.pathname.split('/')[2]; // Извлекаем ID клиента из URL
+            const entityType = document.getElementById('selectedEntityType')?.value || 'product';
+            const isComposite = document.getElementById('isComposite')?.value === 'true';
+
+            // Извлекаем ID клиента из URL
+            const pathParts = window.location.pathname.split('/');
+            const clientId = pathParts[2];
+
+            console.log('Параметры анализа файла:', {entityType, isComposite, clientId});
 
             // Создаем форму для отправки файла
             const formData = new FormData();
@@ -384,17 +485,23 @@
             formData.append('composite', isComposite);
 
             // Отправляем файл на сервер для анализа
-            fetch(`/clients/${clientId}/import/analyze`, {
+            const analyzeUrl = `/clients/${clientId}/import/analyze`;
+            console.log('Отправка запроса на анализ файла:', analyzeUrl);
+
+            fetch(analyzeUrl, {
                 method: 'POST',
                 body: formData
             })
                 .then(response => {
+                    console.log('Получен ответ от сервера:', response.status);
                     if (!response.ok) {
-                        throw new Error('Ошибка при анализе файла');
+                        throw new Error(`Ошибка HTTP: ${response.status}`);
                     }
                     return response.json();
                 })
                 .then(data => {
+                    console.log('Данные анализа файла:', data);
+
                     // Очищаем строки таблицы
                     headerRow.innerHTML = '';
                     previewBody.innerHTML = '';
@@ -457,6 +564,7 @@
                     window.fileHeaders = data.headers || [];
                     window.fieldsMetadata = data.fieldsMetadata;
 
+                    // Диспатчим событие для компонента field-selection
                     const event = new CustomEvent('fileAnalyzed', {
                         detail: {
                             headers: data.headers || [],
@@ -464,6 +572,7 @@
                         }
                     });
                     document.dispatchEvent(event);
+                    console.log('Событие fileAnalyzed отправлено');
 
                     // Если нет данных для предпросмотра
                     if ((!data.headers || data.headers.length === 0) &&
@@ -492,104 +601,203 @@
                 });
         }
 
+        // Активируем кнопку "Начать импорт" если файл уже был выбран при загрузке страницы
+        if (fileInput.files && fileInput.files.length > 0) {
+            console.log('Файл уже выбран при загрузке страницы, активируем кнопку импорта');
+            startImportBtn.disabled = false;
+        }
+        // Добавьте этот код в конец вашего скрипта, перед закрывающей скобкой функции DOMContentLoaded
+// Функция для глубокой отладки формы и её отправки
 
-        // Функция для обновления списка доступных маппингов
-        function updateMappingOptions(mappings) {
-            const mappingSelect = document.getElementById('mappingId');
-            mappingSelect.innerHTML = '<option value="">Автоматическое</option>';
+        function setupDebugMonitoring() {
+            console.log('=== НАСТРОЙКА ОТЛАДОЧНОГО МОНИТОРИНГА ===');
 
-            if (mappings && mappings.length > 0) {
-                mappings.forEach(mapping => {
-                    const option = document.createElement('option');
-                    option.value = mapping.id;
-                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
-                    mappingSelect.appendChild(option);
+            // 1. Добавляем функцию отладки для проверки состояния формы
+            window.debugFormState = function () {
+                const form = document.getElementById('importForm');
+                if (!form) return console.error('Форма не найдена!');
+
+                console.log('=== СОСТОЯНИЕ ФОРМЫ ===');
+                console.log('Действие формы:', form.action);
+                console.log('Метод формы:', form.method);
+                console.log('Формат данных:', form.enctype);
+
+                // Проверяем все поля формы
+                console.log('=== ПОЛЯ ФОРМЫ ===');
+
+                // Собираем все input, select и textarea элементы внутри формы
+                const formElements = form.querySelectorAll('input, select, textarea');
+                console.log(`Найдено ${formElements.length} полей в форме`);
+
+                formElements.forEach(el => {
+                    // Не логируем файловые поля, так как их значения не могут быть преобразованы в строку
+                    let value = el.type === 'file' ? `Файл: ${el.files && el.files[0] ? el.files[0].name : 'не выбран'}` : el.value;
+
+                    console.log(`${el.tagName} #${el.id || 'без-id'} name="${el.name || 'без-имени'}" type="${el.type || 'стандартный'}" value="${value}" disabled=${el.disabled}`);
                 });
+
+                // Проверка кнопки импорта
+                const importBtn = document.getElementById('startImportBtn');
+                if (importBtn) {
+                    console.log('=== КНОПКА ИМПОРТА ===');
+                    console.log('Тип:', importBtn.type);
+                    console.log('Отключена:', importBtn.disabled);
+                    console.log('Текст:', importBtn.textContent.trim());
+                    console.log('Класс:', importBtn.className);
+                    console.log('Родитель:', importBtn.parentElement.tagName);
+                }
+
+                // Если используем второй вариант с кнопкой manualSubmitBtn
+                const manualBtn = document.getElementById('manualSubmitBtn');
+                if (manualBtn) {
+                    console.log('=== РУЧНАЯ КНОПКА ИМПОРТА ===');
+                    console.log('Тип:', manualBtn.type);
+                    console.log('Отключена:', manualBtn.disabled);
+                    console.log('Текст:', manualBtn.textContent.trim());
+                }
+
+                // Создаем FormData для проверки того, что действительно будет отправлено
+                const formData = new FormData(form);
+                console.log('=== ДАННЫЕ ДЛЯ ОТПРАВКИ (FormData) ===');
+                for (let [key, value] of formData.entries()) {
+                    // Для файлов показываем имя файла, а не объект File
+                    if (value instanceof File) {
+                        console.log(`${key}: Файл "${value.name}" (${value.size} байт)`);
+                    } else {
+                        console.log(`${key}: ${value}`);
+                    }
+                }
+            };
+
+            // 2. Мониторинг изменения состояния кнопки импорта
+            const importBtn = document.getElementById('startImportBtn');
+            if (importBtn) {
+                // Создаем обертку вокруг свойства disabled
+                const originalSetter = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, 'disabled').set;
+
+                Object.defineProperty(importBtn, 'disabled', {
+                    set: function (value) {
+                        console.log(`=== ИЗМЕНЕНИЕ СОСТОЯНИЯ КНОПКИ: ${value ? 'отключена' : 'активирована'} ===`);
+                        console.trace('Стек вызовов изменения кнопки');
+                        originalSetter.call(this, value);
+                    }
+                });
+            }
+
+            // 3. Мониторинг отправки формы
+            const form = document.getElementById('importForm');
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    console.log('=== СОБЫТИЕ ОТПРАВКИ ФОРМЫ ===');
+                    console.log('Время:', new Date().toISOString());
+                    console.log('Состояние кнопки импорта:', importBtn ? `отключена: ${importBtn.disabled}` : 'кнопка не найдена');
+
+                    // Проверяем состояние формы перед отправкой
+                    window.debugFormState();
+
+                    // Не блокируем отправку, это только для отладки
+                    console.log('Форма будет отправлена...');
+                }, false);
+            }
+
+            // 4. Добавляем кнопку отладки в интерфейс
+            const debugButton = document.createElement('button');
+            debugButton.type = 'button';
+            debugButton.className = 'btn btn-sm btn-outline-info mt-2';
+            debugButton.textContent = 'Отладка формы';
+            debugButton.onclick = window.debugFormState;
+
+            // Добавляем кнопку после контейнера importOptions
+            const importOptions = document.getElementById('importOptions');
+            if (importOptions && importOptions.parentNode) {
+                importOptions.parentNode.insertBefore(debugButton, importOptions.nextSibling);
+            }
+
+            console.log('Отладочный мониторинг настроен, нажмите кнопку "Отладка формы" для проверки состояния');
+
+            // 5. Добавляем прямой обработчик клика на кнопку импорта
+            const submitButton = document.getElementById('startImportBtn');
+            if (submitButton) {
+                console.log('Установка прямого обработчика клика на кнопку импорта');
+
+                // Добавляем прямой обработчик клика
+                submitButton.addEventListener('click', function (event) {
+                    console.log('=== ПРЯМОЙ КЛИК ПО КНОПКЕ ИМПОРТА ===');
+                    console.log('Время:', new Date().toISOString());
+                    console.log('Кнопка отключена?', this.disabled);
+
+                    // Проверка формы
+                    const form = document.getElementById('importForm');
+                    if (!form) {
+                        console.error('Форма не найдена!');
+                        return;
+                    }
+
+                    // Проверка файла
+                    const fileInput = document.getElementById('fileInput');
+                    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                        alert('Пожалуйста, выберите файл для импорта');
+                        event.preventDefault();
+                        return;
+                    }
+
+                    // Проверяем состояние формы перед отправкой
+                    window.debugFormState();
+
+                    console.log('Форма готова к отправке! Нажимаем submit() напрямую');
+
+                    // Перед строкой form.submit()
+                    console.log('Форма готова к отправке! Добавляем недостающие параметры');
+
+                    // Добавляем недостающие параметры импорта
+                    const missingParams = {
+                        'params[errorHandling]': 'continue',
+                        'params[duplicateHandling]': 'update',
+                        'params[validateData]': 'true',
+                        'params[trimWhitespace]': 'true'
+                    };
+
+                    // Создаем скрытые поля с параметрами и добавляем их в форму
+                    for (const [name, value] of Object.entries(missingParams)) {
+                        // Проверяем, существует ли уже такое поле
+                        let existingField = form.querySelector(`input[name="${name}"]`);
+
+                        if (!existingField) {
+                            console.log(`Добавляем отсутствующий параметр: ${name}=${value}`);
+                            const hiddenField = document.createElement('input');
+                            hiddenField.type = 'hidden';
+                            hiddenField.name = name;
+                            hiddenField.value = value;
+                            form.appendChild(hiddenField);
+                        } else {
+                            console.log(`Параметр ${name} уже существует со значением ${existingField.value}`);
+                        }
+                    }
+
+                    // Логируем итоговое состояние формы
+                    console.log('Финальное состояние формы перед отправкой:');
+                    const finalFormData = new FormData(form);
+                    for (let [key, value] of finalFormData.entries()) {
+                        if (value instanceof File) {
+                            console.log(`${key}: Файл "${value.name}" (${value.size} байт)`);
+                        } else {
+                            console.log(`${key}: ${value}`);
+                        }
+                    }
+
+                    console.log('Отправляем форму с добавленными параметрами');
+                    form.submit();
+
+                    // Предотвращаем стандартное действие кнопки
+                    event.preventDefault();
+                });
+
+                console.log('Прямой обработчик клика установлен');
             }
         }
 
-        // Отправка формы
-        // Проверим, правильно ли установлены обработчики событий
-        console.log("Установка обработчиков событий формы импорта");
-
-        // Найдем форму и кнопку
-        const importForm = document.getElementById('importForm');
-        const startImportBtn = document.getElementById('startImportBtn');
-
-        console.log("Форма импорта:", importForm);
-        console.log("Кнопка импорта:", startImportBtn);
-
-        // Добавим обработчик события клика на кнопку напрямую
-        startImportBtn.addEventListener('click', function (e) {
-            console.log("Нажата кнопка импорта");
-            e.preventDefault(); // Предотвращаем стандартную отправку формы
-
-            // Проверка, активирована ли кнопка
-            if (this.disabled) {
-                console.log("Кнопка импорта отключена, отмена");
-                return;
-            }
-
-            console.log("Начало обработки импорта");
-
-            // Проверяем, выбран ли файл
-            const fileInput = document.getElementById('fileInput');
-            console.log("Файл для импорта:", fileInput.files);
-
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Пожалуйста, выберите файл для импорта');
-                return;
-            }
-
-            // Показываем прогресс импорта
-            const progressContainer = document.getElementById('importProgress');
-            progressContainer.classList.remove('d-none');
-            console.log("Отображаем индикатор прогресса");
-
-            // Получаем данные формы
-            const formData = new FormData(importForm);
-
-            // Логируем все поля формы
-            console.log("Данные формы для отправки:");
-            for (let [key, value] of formData.entries()) {
-                console.log(`${key}: ${value}`);
-            }
-
-            // Отправляем форму
-            console.log("Отправка формы на:", importForm.action);
-
-            // Блокируем кнопку импорта
-            this.disabled = true;
-
-            // Обновляем прогресс-бар
-            const progressBar = document.getElementById('progressBar');
-            const statusText = document.getElementById('importStatus');
-            progressBar.style.width = '30%';
-            progressBar.setAttribute('aria-valuenow', 30);
-            progressBar.textContent = '30%';
-            statusText.textContent = 'Отправка файла...';
-
-            // Отправляем форму вручную
-            importForm.submit();
-        });
-
-            // Дополнительно сделаем стандартный обработчик отправки формы
-        importForm.addEventListener('submit', function (e) {
-            console.log("Перехвачена отправка формы");
-
-            // Не предотвращаем стандартную отправку - пусть форма отправится обычным способом
-            // e.preventDefault();
-
-            // Показываем прогресс импорта
-            const progressContainer = document.getElementById('importProgress');
-            progressContainer.classList.remove('d-none');
-
-            // Блокируем кнопку импорта
-            startImportBtn.disabled = true;
-
-            console.log("Форма отправляется стандартным способом");
-        });
-
+// Вызываем настройку отладки в конце загрузки DOM
+        setupDebugMonitoring();
 
     });
 </script>

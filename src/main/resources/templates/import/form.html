@@ -236,8 +236,6 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        console.log('DOMContentLoaded: Инициализация скрипта импорта');
-
         // Получаем ссылки на основные DOM-элементы
         const importForm = document.getElementById('importForm');
         const fileInput = document.getElementById('fileInput');
@@ -247,16 +245,12 @@
         const removeFileBtn = document.getElementById('removeFile');
         const progressContainer = document.getElementById('importProgress');
 
-        console.log('Форма импорта:', importForm);
-        console.log('Кнопка импорта:', startImportBtn);
-
         // Синхронизируем значение mappingId с компонентом выбора полей
         const selectedMappingIdField = document.getElementById('selectedMappingId');
         const mappingIdField = document.getElementById('mappingId');
 
-        // Если поле selectedMappingId существует, устанавливаем обработчик изменений
-        if (selectedMappingIdField) {
-            console.log('Найдено поле selectedMappingId, настраиваем синхронизацию');
+        // Синхронизируем поля, если они существуют
+        if (selectedMappingIdField && mappingIdField) {
             // Начальная синхронизация значений
             mappingIdField.value = selectedMappingIdField.value;
 
@@ -265,20 +259,15 @@
                 mutations.forEach(function (mutation) {
                     if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
                         mappingIdField.value = selectedMappingIdField.value;
-                        console.log('Синхронизировано значение mappingId:', mappingIdField.value);
                     }
                 });
             });
 
             observer.observe(selectedMappingIdField, {attributes: true});
-        } else {
-            console.warn('Поле selectedMappingId не найдено');
         }
 
         // Обработка клика по области загрузки
-        dropArea.addEventListener('click', () => {
-            fileInput.click();
-        });
+        dropArea.addEventListener('click', () => fileInput.click());
 
         // Обработка перетаскивания файла
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -291,45 +280,29 @@
         }
 
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, highlight, false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('dragging'), false);
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, unhighlight, false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragging'), false);
         });
 
-        function highlight() {
-            dropArea.classList.add('dragging');
-        }
-
-        function unhighlight() {
-            dropArea.classList.remove('dragging');
-        }
-
         // Обработка выбора файла
-        fileInput.addEventListener('change', handleFileSelect, false);
-        dropArea.addEventListener('drop', handleFileDrop, false);
+        fileInput.addEventListener('change', e => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
 
-        function handleFileDrop(e) {
+        dropArea.addEventListener('drop', e => {
             const dt = e.dataTransfer;
-            const files = dt.files;
-
-            if (files.length > 0) {
-                fileInput.files = files;
-                handleFile(files[0]);
+            if (dt.files && dt.files.length > 0) {
+                fileInput.files = dt.files;
+                handleFile(dt.files[0]);
             }
-        }
-
-        function handleFileSelect(e) {
-            const files = e.target.files;
-
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
-        }
+        });
 
         function handleFile(file) {
-            console.log('Обработка файла:', file.name);
             // Показываем превью файла
             filePreview.style.display = 'block';
             document.getElementById('fileName').textContent = file.name;
@@ -338,7 +311,6 @@
 
             // Активируем кнопку импорта
             startImportBtn.disabled = false;
-            console.log('Кнопка импорта активирована');
 
             // Анализируем файл
             analyzeFile(file);
@@ -349,26 +321,95 @@
             fileInput.value = '';
             filePreview.style.display = 'none';
             startImportBtn.disabled = true;
-            console.log('Файл удален, кнопка импорта деактивирована');
         });
 
-        // Обработчик отправки формы
-        importForm.addEventListener('submit', function (e) {
-            console.log('Попытка отправки формы');
+        // Добавляем прямой обработчик клика на кнопку импорта
+        startImportBtn.addEventListener('click', function (event) {
+            // Проверка формы
+            const form = document.getElementById('importForm');
+            if (!form) return;
 
-            // Проверяем наличие файла
+            // Проверка файла
             if (!fileInput.files || fileInput.files.length === 0) {
-                e.preventDefault();
                 alert('Пожалуйста, выберите файл для импорта');
-                console.warn('Отправка формы отменена: файл не выбран');
-                return false;
+                event.preventDefault();
+                return;
             }
+
+            // Определяем параметры, которые нужно собрать и их селекторы
+            const paramConfig = [
+                {
+                    name: 'params[errorHandling]',
+                    selector: '#errorHandling',
+                    defaultValue: 'continue',
+                    type: 'select'
+                },
+                {
+                    name: 'params[duplicateHandling]',
+                    selector: '#duplicateHandling',
+                    defaultValue: 'update',
+                    type: 'select'
+                },
+                {
+                    name: 'params[validateData]',
+                    selector: '#validateData',
+                    defaultValue: 'true',
+                    type: 'checkbox'
+                },
+                {
+                    name: 'params[trimWhitespace]',
+                    selector: '#trimWhitespace',
+                    defaultValue: 'true',
+                    type: 'checkbox'
+                }
+            ];
+
+            // Собираем фактические значения параметров из формы
+            paramConfig.forEach(param => {
+                // Находим элемент в форме
+                const element = document.querySelector(param.selector);
+
+                // Добавляем параметр с соответствующим значением
+                if (element) {
+                    // Получаем значение в зависимости от типа элемента
+                    let value;
+                    if (param.type === 'checkbox') {
+                        value = element.checked ? element.value || 'true' : 'false';
+                    } else {
+                        value = element.value;
+                    }
+
+                    // Проверяем, существует ли уже поле с таким именем
+                    let existingField = form.querySelector(`input[name="${param.name}"]`);
+
+                    if (!existingField) {
+                        // Если поле не существует, создаем его
+                        const hiddenField = document.createElement('input');
+                        hiddenField.type = 'hidden';
+                        hiddenField.name = param.name;
+                        hiddenField.value = value;
+                        form.appendChild(hiddenField);
+                    } else {
+                        // Если поле существует, обновляем его значение
+                        existingField.value = value;
+                    }
+                } else {
+                    // Если элемент не найден, используем значение по умолчанию
+                    let existingField = form.querySelector(`input[name="${param.name}"]`);
+
+                    if (!existingField) {
+                        // Если поле не существует, создаем его с значением по умолчанию
+                        const hiddenField = document.createElement('input');
+                        hiddenField.type = 'hidden';
+                        hiddenField.name = param.name;
+                        hiddenField.value = param.defaultValue;
+                        form.appendChild(hiddenField);
+                    }
+                }
+            });
 
             // Показываем прогресс импорта
             progressContainer.classList.remove('d-none');
-
-            // Блокируем кнопку импорта
-            startImportBtn.disabled = true;
 
             // Обновляем прогресс-бар
             const progressBar = document.getElementById('progressBar');
@@ -378,34 +419,22 @@
             progressBar.textContent = '30%';
             statusText.textContent = 'Отправка файла...';
 
-            // Логируем данные формы перед отправкой
-            console.log('Отправка формы с параметрами:');
-            const formData = new FormData(this);
-            for (let [key, value] of formData.entries()) {
-                console.log(`${key}: ${value}`);
-            }
+            // Отправляем форму программно
+            form.submit();
 
-            // Продолжаем стандартную отправку формы
-            console.log('Форма отправляется на сервер');
-            return true;
+            // Предотвращаем стандартное действие кнопки
+            event.preventDefault();
         });
 
-        // Функция для обновления списка доступных маппингов
+        // Функции для работы с файлами и анализа
         function updateMappingOptions(mappings) {
-            console.log('Обновление доступных маппингов:', mappings);
             const mappingSelect = document.getElementById('mappingSelect');
 
-            // Если элемент не найден в этой странице, проверяем alternative ID
+            // Если элемент не найден, пробуем найти по альтернативному ID
             if (!mappingSelect) {
-                console.warn('Элемент с ID "mappingSelect" не найден, проверяем альтернативные ID');
-
-                // Пробуем найти по альтернативному ID
                 const altSelect = document.getElementById('mappingId');
                 if (altSelect) {
-                    console.log('Найден альтернативный элемент для маппингов:', altSelect.id);
                     updateMappingOptionsForElement(altSelect, mappings);
-                } else {
-                    console.error('Не найдены элементы для отображения маппингов');
                 }
                 return;
             }
@@ -413,7 +442,6 @@
             updateMappingOptionsForElement(mappingSelect, mappings);
         }
 
-        // Вспомогательная функция обновления элемента выбора маппингов
         function updateMappingOptionsForElement(selectElement, mappings) {
             // Очищаем текущие опции
             selectElement.innerHTML = '<option value="">Автоматическое</option>';
@@ -426,13 +454,9 @@
                     option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
                     selectElement.appendChild(option);
                 });
-                console.log(`Добавлено ${mappings.length} маппингов в элемент ${selectElement.id}`);
-            } else {
-                console.log('Нет доступных маппингов для добавления');
             }
         }
 
-        // Функции для форматирования и анализа файла
         function formatFileSize(size) {
             const kb = 1024;
             const mb = kb * 1024;
@@ -451,32 +475,19 @@
         }
 
         function analyzeFile(file) {
-            console.log('Начало анализа файла:', file.name);
-
             // Очищаем таблицу предпросмотра
             const headerRow = document.getElementById('headerRow');
             const previewBody = document.getElementById('previewBody');
 
-            if (!headerRow || !previewBody) {
-                console.error('Не найдены элементы для таблицы предпросмотра');
-                return;
-            }
+            if (!headerRow || !previewBody) return;
 
-            headerRow.innerHTML = '';
+            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
             previewBody.innerHTML = '';
 
-            // Показываем индикатор загрузки
-            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
-
-            // Получаем текущий тип сущности и флаг составной сущности
+            // Получаем параметры анализа
             const entityType = document.getElementById('selectedEntityType')?.value || 'product';
             const isComposite = document.getElementById('isComposite')?.value === 'true';
-
-            // Извлекаем ID клиента из URL
-            const pathParts = window.location.pathname.split('/');
-            const clientId = pathParts[2];
-
-            console.log('Параметры анализа файла:', {entityType, isComposite, clientId});
+            const clientId = window.location.pathname.split('/')[2]; // ID клиента из URL
 
             // Создаем форму для отправки файла
             const formData = new FormData();
@@ -485,23 +496,17 @@
             formData.append('composite', isComposite);
 
             // Отправляем файл на сервер для анализа
-            const analyzeUrl = `/clients/${clientId}/import/analyze`;
-            console.log('Отправка запроса на анализ файла:', analyzeUrl);
-
-            fetch(analyzeUrl, {
+            fetch(`/clients/${clientId}/import/analyze`, {
                 method: 'POST',
                 body: formData
             })
                 .then(response => {
-                    console.log('Получен ответ от сервера:', response.status);
                     if (!response.ok) {
                         throw new Error(`Ошибка HTTP: ${response.status}`);
                     }
                     return response.json();
                 })
                 .then(data => {
-                    console.log('Данные анализа файла:', data);
-
                     // Очищаем строки таблицы
                     headerRow.innerHTML = '';
                     previewBody.innerHTML = '';
@@ -515,9 +520,8 @@
                         });
                     }
 
-                    // Заполняем предпросмотр данных первыми 10 строками, если они есть
+                    // Заполняем предпросмотр данных первыми 10 строками
                     if (data.sampleData && data.sampleData.length > 0) {
-                        // data.sampleData - это массив объектов, а не двумерный массив
                         data.sampleData.forEach(rowObject => {
                             const tr = document.createElement('tr');
 
@@ -525,7 +529,6 @@
                             if (data.headers && data.headers.length > 0) {
                                 data.headers.forEach(header => {
                                     const td = document.createElement('td');
-                                    // Получаем значение по ключу заголовка, если оно существует
                                     const cellValue = rowObject[header] !== undefined ? rowObject[header] : '';
                                     td.textContent = cellValue;
                                     tr.appendChild(td);
@@ -542,7 +545,7 @@
                             previewBody.appendChild(tr);
                         });
 
-                        // Сообщаем, сколько всего строк в файле, если их больше, чем мы показываем
+                        // Сообщаем, сколько всего строк в файле
                         const totalRows = data.totalRows || data.sampleData.length;
                         if (totalRows > data.sampleData.length) {
                             const tr = document.createElement('tr');
@@ -565,14 +568,12 @@
                     window.fieldsMetadata = data.fieldsMetadata;
 
                     // Диспатчим событие для компонента field-selection
-                    const event = new CustomEvent('fileAnalyzed', {
+                    document.dispatchEvent(new CustomEvent('fileAnalyzed', {
                         detail: {
                             headers: data.headers || [],
                             metadata: data.fieldsMetadata
                         }
-                    });
-                    document.dispatchEvent(event);
-                    console.log('Событие fileAnalyzed отправлено');
+                    }));
 
                     // Если нет данных для предпросмотра
                     if ((!data.headers || data.headers.length === 0) &&
@@ -587,7 +588,6 @@
                     }
                 })
                 .catch(error => {
-                    console.error('Ошибка при анализе файла:', error);
                     headerRow.innerHTML = '';
                     previewBody.innerHTML = '';
 
@@ -603,253 +603,8 @@
 
         // Активируем кнопку "Начать импорт" если файл уже был выбран при загрузке страницы
         if (fileInput.files && fileInput.files.length > 0) {
-            console.log('Файл уже выбран при загрузке страницы, активируем кнопку импорта');
             startImportBtn.disabled = false;
         }
-        // Добавьте этот код в конец вашего скрипта, перед закрывающей скобкой функции DOMContentLoaded
-// Функция для глубокой отладки формы и её отправки
-
-        function setupDebugMonitoring() {
-            console.log('=== НАСТРОЙКА ОТЛАДОЧНОГО МОНИТОРИНГА ===');
-
-            // 1. Добавляем функцию отладки для проверки состояния формы
-            window.debugFormState = function () {
-                const form = document.getElementById('importForm');
-                if (!form) return console.error('Форма не найдена!');
-
-                console.log('=== СОСТОЯНИЕ ФОРМЫ ===');
-                console.log('Действие формы:', form.action);
-                console.log('Метод формы:', form.method);
-                console.log('Формат данных:', form.enctype);
-
-                // Проверяем все поля формы
-                console.log('=== ПОЛЯ ФОРМЫ ===');
-
-                // Собираем все input, select и textarea элементы внутри формы
-                const formElements = form.querySelectorAll('input, select, textarea');
-                console.log(`Найдено ${formElements.length} полей в форме`);
-
-                formElements.forEach(el => {
-                    // Не логируем файловые поля, так как их значения не могут быть преобразованы в строку
-                    let value = el.type === 'file' ? `Файл: ${el.files && el.files[0] ? el.files[0].name : 'не выбран'}` : el.value;
-
-                    console.log(`${el.tagName} #${el.id || 'без-id'} name="${el.name || 'без-имени'}" type="${el.type || 'стандартный'}" value="${value}" disabled=${el.disabled}`);
-                });
-
-                // Проверка кнопки импорта
-                const importBtn = document.getElementById('startImportBtn');
-                if (importBtn) {
-                    console.log('=== КНОПКА ИМПОРТА ===');
-                    console.log('Тип:', importBtn.type);
-                    console.log('Отключена:', importBtn.disabled);
-                    console.log('Текст:', importBtn.textContent.trim());
-                    console.log('Класс:', importBtn.className);
-                    console.log('Родитель:', importBtn.parentElement.tagName);
-                }
-
-                // Если используем второй вариант с кнопкой manualSubmitBtn
-                const manualBtn = document.getElementById('manualSubmitBtn');
-                if (manualBtn) {
-                    console.log('=== РУЧНАЯ КНОПКА ИМПОРТА ===');
-                    console.log('Тип:', manualBtn.type);
-                    console.log('Отключена:', manualBtn.disabled);
-                    console.log('Текст:', manualBtn.textContent.trim());
-                }
-
-                // Создаем FormData для проверки того, что действительно будет отправлено
-                const formData = new FormData(form);
-                console.log('=== ДАННЫЕ ДЛЯ ОТПРАВКИ (FormData) ===');
-                for (let [key, value] of formData.entries()) {
-                    // Для файлов показываем имя файла, а не объект File
-                    if (value instanceof File) {
-                        console.log(`${key}: Файл "${value.name}" (${value.size} байт)`);
-                    } else {
-                        console.log(`${key}: ${value}`);
-                    }
-                }
-            };
-
-            // 2. Мониторинг изменения состояния кнопки импорта
-            const importBtn = document.getElementById('startImportBtn');
-            if (importBtn) {
-                // Создаем обертку вокруг свойства disabled
-                const originalSetter = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, 'disabled').set;
-
-                Object.defineProperty(importBtn, 'disabled', {
-                    set: function (value) {
-                        console.log(`=== ИЗМЕНЕНИЕ СОСТОЯНИЯ КНОПКИ: ${value ? 'отключена' : 'активирована'} ===`);
-                        console.trace('Стек вызовов изменения кнопки');
-                        originalSetter.call(this, value);
-                    }
-                });
-            }
-
-            // 3. Мониторинг отправки формы
-            const form = document.getElementById('importForm');
-            if (form) {
-                form.addEventListener('submit', function (e) {
-                    console.log('=== СОБЫТИЕ ОТПРАВКИ ФОРМЫ ===');
-                    console.log('Время:', new Date().toISOString());
-                    console.log('Состояние кнопки импорта:', importBtn ? `отключена: ${importBtn.disabled}` : 'кнопка не найдена');
-
-                    // Проверяем состояние формы перед отправкой
-                    window.debugFormState();
-
-                    // Не блокируем отправку, это только для отладки
-                    console.log('Форма будет отправлена...');
-                }, false);
-            }
-
-            // 4. Добавляем кнопку отладки в интерфейс
-            const debugButton = document.createElement('button');
-            debugButton.type = 'button';
-            debugButton.className = 'btn btn-sm btn-outline-info mt-2';
-            debugButton.textContent = 'Отладка формы';
-            debugButton.onclick = window.debugFormState;
-
-            // Добавляем кнопку после контейнера importOptions
-            const importOptions = document.getElementById('importOptions');
-            if (importOptions && importOptions.parentNode) {
-                importOptions.parentNode.insertBefore(debugButton, importOptions.nextSibling);
-            }
-
-            console.log('Отладочный мониторинг настроен, нажмите кнопку "Отладка формы" для проверки состояния');
-
-            // 5. Добавляем прямой обработчик клика на кнопку импорта
-            const submitButton = document.getElementById('startImportBtn');
-            if (submitButton) {
-                console.log('Установка прямого обработчика клика на кнопку импорта');
-
-                // Добавляем прямой обработчик клика
-                submitButton.addEventListener('click', function (event) {
-                    console.log('=== ПРЯМОЙ КЛИК ПО КНОПКЕ ИМПОРТА ===');
-                    console.log('Время:', new Date().toISOString());
-                    console.log('Кнопка отключена?', this.disabled);
-
-                    // Проверка формы
-                    const form = document.getElementById('importForm');
-                    if (!form) {
-                        console.error('Форма не найдена!');
-                        return;
-                    }
-
-                    // Проверка файла
-                    const fileInput = document.getElementById('fileInput');
-                    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-                        alert('Пожалуйста, выберите файл для импорта');
-                        event.preventDefault();
-                        return;
-                    }
-
-                    // Проверяем состояние формы перед отправкой
-                    window.debugFormState();
-
-                    console.log('Форма готова к отправке! Нажимаем submit() напрямую');
-
-
-                    console.log('Форма готова к отправке! Считываем фактические параметры импорта');
-
-// Определяем параметры, которые нужно собрать и их селекторы
-                    const paramConfig = [
-                        {
-                            name: 'params[errorHandling]',
-                            selector: '#errorHandling',
-                            defaultValue: 'continue',
-                            type: 'select'
-                        },
-                        {
-                            name: 'params[duplicateHandling]',
-                            selector: '#duplicateHandling',
-                            defaultValue: 'update',
-                            type: 'select'
-                        },
-                        {
-                            name: 'params[validateData]',
-                            selector: '#validateData',
-                            defaultValue: 'true',
-                            type: 'checkbox'
-                        },
-                        {
-                            name: 'params[trimWhitespace]',
-                            selector: '#trimWhitespace',
-                            defaultValue: 'true',
-                            type: 'checkbox'
-                        }
-                    ];
-
-// Собираем фактические значения параметров из формы
-                    paramConfig.forEach(param => {
-                        // Находим элемент в форме
-                        const element = document.querySelector(param.selector);
-
-                        // Проверяем, существует ли элемент
-                        if (element) {
-                            // Получаем значение в зависимости от типа элемента
-                            let value;
-                            if (param.type === 'checkbox') {
-                                value = element.checked ? element.value || 'true' : 'false';
-                            } else if (param.type === 'select') {
-                                value = element.value;
-                            } else {
-                                value = element.value;
-                            }
-
-                            console.log(`Найден элемент ${param.name}: ${value}`);
-
-                            // Проверяем, существует ли уже поле с таким именем
-                            let existingField = form.querySelector(`input[name="${param.name}"]`);
-
-                            if (!existingField) {
-                                // Если поле не существует, создаем его
-                                console.log(`Добавляем параметр: ${param.name}=${value}`);
-                                const hiddenField = document.createElement('input');
-                                hiddenField.type = 'hidden';
-                                hiddenField.name = param.name;
-                                hiddenField.value = value;
-                                form.appendChild(hiddenField);
-                            } else {
-                                // Если поле существует, обновляем его значение
-                                console.log(`Обновляем параметр: ${param.name}=${value} (было: ${existingField.value})`);
-                                existingField.value = value;
-                            }
-                        } else {
-                            // Если элемент не найден, используем значение по умолчанию
-                            console.log(`Элемент ${param.selector} не найден, используем значение по умолчанию: ${param.defaultValue}`);
-
-                            // Проверяем, существует ли уже поле с таким именем
-                            let existingField = form.querySelector(`input[name="${param.name}"]`);
-
-                            if (!existingField) {
-                                // Если поле не существует, создаем его с значением по умолчанию
-                                console.log(`Добавляем параметр по умолчанию: ${param.name}=${param.defaultValue}`);
-                                const hiddenField = document.createElement('input');
-                                hiddenField.type = 'hidden';
-                                hiddenField.name = param.name;
-                                hiddenField.value = param.defaultValue;
-                                form.appendChild(hiddenField);
-                            }
-                        }
-                    });
-
-// Дополнительная диагностика состояния формы перед отправкой
-                    console.log('Финальное состояние формы перед отправкой:');
-                    window.debugFormState();
-
-                    console.log('Отправляем форму с актуальными параметрами');
-                    // Отправляем форму программно
-                    form.submit();
-
-                    // Предотвращаем стандартное действие кнопки
-                    event.preventDefault();
-                });
-
-                console.log('Прямой обработчик клика установлен');
-            }
-        }
-
-// Вызываем настройку отладки в конце загрузки DOM
-        setupDebugMonitoring();
-
     });
 </script>
 </body>

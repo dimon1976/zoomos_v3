@@ -75,63 +75,29 @@ public class ImportController {
             HttpServletRequest request,
             RedirectAttributes redirectAttributes)
     {
-        log.info("=========== ДЕТАЛЬНАЯ ОТЛАДКА ИМПОРТА ===========");
-        log.info("Время запроса: {}", new Date());
-        log.info("IP адрес: {}", request.getRemoteAddr());
-        log.info("User-Agent: {}", request.getHeader("User-Agent"));
+        log.debug("=========== ДЕТАЛЬНАЯ ОТЛАДКА ИМПОРТА ===========");
+        log.debug("Время запроса: {}", new Date());
+        log.debug("IP адрес: {}", request.getRemoteAddr());
+        log.debug("User-Agent: {}", request.getHeader("User-Agent"));
 
         // 1. Базовые параметры
-        log.info("--- Основные параметры ---");
-        log.info("clientId: {}", clientId);
-        log.info("entityType: {}", entityType);
-        log.info("mappingId: {}", mappingId);
-        log.info("composite: {}", isComposite);
+        log.debug("--- Основные параметры ---");
+        log.debug("clientId: {}", clientId);
+        log.debug("entityType: {}", entityType);
+        log.debug("mappingId: {}", mappingId);
+        log.debug("composite: {}", isComposite);
 
         // 2. Информация о файле
-        log.info("--- Информация о файле ---");
-        log.info("Имя файла: {}", file != null ? file.getOriginalFilename() : "null");
-        log.info("Размер: {}", file != null ? file.getSize() + " байт" : "null");
-        log.info("Тип контента: {}", file != null ? file.getContentType() : "null");
-        log.info("Пустой?: {}", file != null ? file.isEmpty() : "null");
+        log.debug("--- Информация о файле ---");
+        log.debug("Имя файла: {}", file != null ? file.getOriginalFilename() : "null");
+        log.debug("Размер: {}", file != null ? file.getSize() + " байт" : "null");
+        log.debug("Тип контента: {}", file != null ? file.getContentType() : "null");
+        log.debug("Пустой?: {}", file != null ? file.isEmpty() : "null");
 
         // 3. Все параметры запроса
-        log.info("--- Все параметры запроса ---");
+        log.debug("--- Все параметры запроса ---");
         for (Map.Entry<String, String> entry : allParams.entrySet()) {
             log.info("{} = {}", entry.getKey(), entry.getValue());
-        }
-
-        // 4. Проверка параметров params[...]
-        log.info("--- Извлеченные параметры конфигурации ---");
-        Map<String, String> extractedParams = new HashMap<>();
-        for (Map.Entry<String, String> entry : allParams.entrySet()) {
-            if (entry.getKey().startsWith("params[") && entry.getKey().endsWith("]")) {
-                String paramName = entry.getKey().substring(7, entry.getKey().length() - 1);
-                extractedParams.put(paramName, entry.getValue());
-            }
-        }
-
-        if (extractedParams.isEmpty()) {
-            log.warn("Не найдены параметры в формате params[ключ]");
-        } else {
-            for (Map.Entry<String, String> entry : extractedParams.entrySet()) {
-                log.info("params[{}] = {}", entry.getKey(), entry.getValue());
-            }
-        }
-
-        // 5. Проверка заголовков запроса
-        log.info("--- Заголовки запроса ---");
-        Enumeration<String> headerNames = request.getHeaderNames();
-        while (headerNames.hasMoreElements()) {
-            String headerName = headerNames.nextElement();
-            log.info("{}: {}", headerName, request.getHeader(headerName));
-        }
-
-        // 6. Проверка атрибутов запроса
-        log.info("--- Атрибуты запроса ---");
-        Enumeration<String> attributeNames = request.getAttributeNames();
-        while (attributeNames.hasMoreElements()) {
-            String attrName = attributeNames.nextElement();
-            log.info("{} = {}", attrName, request.getAttribute(attrName));
         }
 
         // Теперь продолжаем обычную обработку импорта...

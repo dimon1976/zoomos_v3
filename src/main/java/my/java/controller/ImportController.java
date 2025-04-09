@@ -18,9 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -36,7 +34,6 @@ public class ImportController {
     private final FileImportService fileImportService;
     private final FieldMappingServiceEnhanced fieldMappingService;
     private final EntityRegistry entityRegistry;
-    private final CompositeEntityService compositeEntityService;
 
     /**
      * Отображение страницы импорта
@@ -75,7 +72,35 @@ public class ImportController {
             @RequestParam(value = "mappingId", required = false) Long mappingId,
             @RequestParam(value = "composite", required = false, defaultValue = "false") boolean isComposite,
             @RequestParam Map<String, String> allParams,
-            RedirectAttributes redirectAttributes) {
+            HttpServletRequest request,
+            RedirectAttributes redirectAttributes)
+    {
+        log.debug("=========== ДЕТАЛЬНАЯ ОТЛАДКА ИМПОРТА ===========");
+        log.debug("Время запроса: {}", new Date());
+        log.debug("IP адрес: {}", request.getRemoteAddr());
+        log.debug("User-Agent: {}", request.getHeader("User-Agent"));
+
+        // 1. Базовые параметры
+        log.debug("--- Основные параметры ---");
+        log.debug("clientId: {}", clientId);
+        log.debug("entityType: {}", entityType);
+        log.debug("mappingId: {}", mappingId);
+        log.debug("composite: {}", isComposite);
+
+        // 2. Информация о файле
+        log.debug("--- Информация о файле ---");
+        log.debug("Имя файла: {}", file != null ? file.getOriginalFilename() : "null");
+        log.debug("Размер: {}", file != null ? file.getSize() + " байт" : "null");
+        log.debug("Тип контента: {}", file != null ? file.getContentType() : "null");
+        log.debug("Пустой?: {}", file != null ? file.isEmpty() : "null");
+
+        // 3. Все параметры запроса
+        log.debug("--- Все параметры запроса ---");
+        for (Map.Entry<String, String> entry : allParams.entrySet()) {
+            log.info("{} = {}", entry.getKey(), entry.getValue());
+        }
+
+        // Теперь продолжаем обычную обработку импорта...
 
         log.info("POST запрос на импорт файла для клиента: {}, тип сущности: {}, составной: {}",
                 clientId, entityType, isComposite);

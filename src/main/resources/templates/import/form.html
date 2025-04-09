@@ -97,7 +97,7 @@
                 <div class="mb-4">
                     <h5>1. Загрузите файл</h5>
                     <div class="upload-area mt-2" id="dropArea">
-                        <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none">
+                        <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none" required>
                         <div class="upload-icon">
                             <i class="fas fa-cloud-upload-alt"></i>
                         </div>
@@ -141,67 +141,219 @@
                 </div>
 
                 <!-- Включение компонента выбора полей -->
-                <div th:replace="components/field-selection :: fieldSelection(${client.id}, 'import')"></div>
+                <div th:replace="~{components/field-selection :: fieldSelection(${client.id}, 'import')}"></div>
 
                 <!-- Параметры импорта -->
-                <div id="importOptions" class="mb-4 d-none">
+                <div id="importOptions" class="mb-4">
                     <h5>2. Настройте параметры импорта</h5>
                     <div class="card mt-2">
                         <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="mappingId" class="form-label">Сопоставление полей</label>
-                                    <select class="form-select" id="mappingId" name="mappingId">
-                                        <option value="">Автоматическое</option>
-                                        <!-- Опции будут добавлены динамически -->
+                            <ul class="nav nav-tabs" id="importParamsTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab"
+                                            data-bs-target="#basic" type="button" role="tab"
+                                            aria-controls="basic" aria-selected="true">Основные</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="structure-tab" data-bs-toggle="tab"
+                                            data-bs-target="#structure" type="button" role="tab"
+                                            aria-controls="structure" aria-selected="false">Структура</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="format-tab" data-bs-toggle="tab"
+                                            data-bs-target="#format" type="button" role="tab"
+                                            aria-controls="format" aria-selected="false">Формат</button>
+                                </li>
+                            </ul>
 
-                                    </select>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="strategyId" class="form-label">Стратегия импорта</label>
-                                    <select class="form-select" id="strategyId" name="strategyId">
-                                        <option value="">По умолчанию</option>
-                                        <!-- Опции будут добавлены динамически -->
-                                    </select>
-                                </div>
-                            </div>
+                            <div class="tab-content pt-3" id="importParamsContent">
+                                <!-- Основные параметры (существующие) -->
+                                <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <!-- Поле скрыто, так как значение выбирается в компоненте field-selection -->
+                                            <input type="hidden" id="mappingId" name="mappingId" value="">
+                                            <label for="strategyId" class="form-label">Стратегия импорта</label>
+                                            <select class="form-select" id="strategyId" name="strategyId">
+                                                <option value="">По умолчанию</option>
+                                                <!-- Опции будут добавлены динамически -->
+                                            </select>
+                                        </div>
+                                    </div>
 
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="errorHandling" class="form-label">Обработка ошибок</label>
-                                    <select class="form-select" id="errorHandling" name="params[errorHandling]">
-                                        <option value="continue">Продолжать при ошибках</option>
-                                        <option value="stop">Остановить при первой ошибке</option>
-                                        <option value="report">Собирать отчет об ошибках</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="duplicateHandling" class="form-label">Обработка дубликатов</label>
-                                    <select class="form-select" id="duplicateHandling" name="params[duplicateHandling]">
-                                        <option value="skip">Пропускать дубликаты</option>
-                                        <option value="update">Обновлять существующие записи</option>
-                                        <option value="error">Выдавать ошибку при дубликатах</option>
-                                    </select>
-                                </div>
-                            </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="errorHandling" class="form-label">Обработка ошибок</label>
+                                            <select class="form-select" id="errorHandling" name="params[errorHandling]">
+                                                <option value="continue">Продолжать при ошибках</option>
+                                                <option value="stop">Остановить при первой ошибке</option>
+                                                <option value="report">Собирать отчет об ошибках</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="duplicateHandling" class="form-label">Обработка дубликатов</label>
+                                            <select class="form-select" id="duplicateHandling" name="params[duplicateHandling]">
+                                                <option value="skip">Пропускать дубликаты</option>
+                                                <option value="update">Обновлять существующие записи</option>
+                                                <option value="error">Выдавать ошибку при дубликатах</option>
+                                            </select>
+                                        </div>
+                                    </div>
 
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="validateData"
-                                               name="params[validateData]" value="true" checked>
-                                        <label class="form-check-label" for="validateData">
-                                            Валидировать данные перед импортом
-                                        </label>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="validateData"
+                                                       name="params[validateData]" value="true" checked>
+                                                <label class="form-check-label" for="validateData">
+                                                    Валидировать данные перед импортом
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="trimWhitespace"
+                                                       name="params[trimWhitespace]" value="true" checked>
+                                                <label class="form-check-label" for="trimWhitespace">
+                                                    Удалять лишние пробелы
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="trimWhitespace"
-                                               name="params[trimWhitespace]" value="true" checked>
-                                        <label class="form-check-label" for="trimWhitespace">
-                                            Удалять лишние пробелы
-                                        </label>
+
+                                <!-- Параметры структуры данных -->
+                                <div class="tab-pane fade" id="structure" role="tabpanel" aria-labelledby="structure-tab">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="headerRowInput" class="form-label">Строка заголовков</label>
+                                            <input type="number" class="form-control" id="headerRowInput" name="params[headerRow]" value="0" min="0">
+                                            <small class="form-text text-muted">Номер строки с заголовками (начиная с 0)</small>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="dataStartRow" class="form-label">Начальная строка данных</label>
+                                            <input type="number" class="form-control" id="dataStartRow" name="params[dataStartRow]" value="1" min="1">
+                                            <small class="form-text text-muted">Номер строки, с которой начинаются данные</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="skipEmptyRows" name="params[skipEmptyRows]" value="true" checked>
+                                                <label class="form-check-label" for="skipEmptyRows">Пропускать пустые строки</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="autoDetectTypes" name="params[autoDetectTypes]" value="true" checked>
+                                                <label class="form-check-label" for="autoDetectTypes">Автоопределение типов данных</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="dateFormat" class="form-label">Формат дат</label>
+                                            <select class="form-select" id="dateFormat" name="params[dateFormat]">
+                                                <option value="auto">Автоопределение</option>
+                                                <option value="dd.MM.yyyy">DD.MM.YYYY (31.12.2023)</option>
+                                                <option value="yyyy-MM-dd">YYYY-MM-DD (2023-12-31)</option>
+                                                <option value="MM/dd/yyyy">MM/DD/YYYY (12/31/2023)</option>
+                                                <option value="dd/MM/yyyy">DD/MM/YYYY (31/12/2023)</option>
+                                                <option value="custom">Свой формат...</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3" id="customDateFormatContainer" style="display: none;">
+                                            <label for="customDateFormat" class="form-label">Свой формат даты</label>
+                                            <input type="text" class="form-control" id="customDateFormat" name="params[customDateFormat]" placeholder="Например: yyyy.MM.dd HH:mm:ss">
+                                            <small class="form-text text-muted">
+                                                Используйте: y (год), M (месяц), d (день), H (часы), m (минуты), s (секунды)
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="emptyFieldHandling" class="form-label">Обработка пустых ячеек</label>
+                                            <select class="form-select" id="emptyFieldHandling" name="params[emptyFieldHandling]">
+                                                <option value="empty">Оставлять пустыми</option>
+                                                <option value="null">Установить NULL</option>
+                                                <option value="default">Использовать значения по умолчанию</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3 xlsx-only">
+                                            <label for="sheetIndex" class="form-label">Лист Excel</label>
+                                            <input type="number" class="form-control" id="sheetIndex" name="params[sheetIndex]" value="0" min="0" placeholder="Индекс начиная с 0">
+                                            <small class="form-text text-muted">Индекс листа (начиная с 0)</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="row xlsx-only">
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="evaluateFormulas" name="params[evaluateFormulas]" value="true" checked>
+                                                <label class="form-check-label" for="evaluateFormulas">Вычислять формулы</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Параметры формата файла -->
+                                <div class="tab-pane fade" id="format" role="tabpanel" aria-labelledby="format-tab">
+                                    <!-- Параметры только для CSV файлов -->
+                                    <div class="csv-only">
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="delimiter" class="form-label">Разделитель полей</label>
+                                                <select class="form-select" id="delimiter" name="params[delimiter]">
+                                                    <option value="auto">Автоопределение</option>
+                                                    <option value=";">Точка с запятой (;)</option>
+                                                    <option value=",">Запятая (,)</option>
+                                                    <option value="\t">Табуляция</option>
+                                                    <option value="|">Вертикальная черта (|)</option>
+                                                    <option value=" ">Пробел</option>
+                                                    <option value="custom">Другой...</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6 mb-3" id="customDelimiterContainer" style="display: none;">
+                                                <label for="customDelimiter" class="form-label">Укажите разделитель</label>
+                                                <input type="text" class="form-control" id="customDelimiter" name="params[customDelimiter]" maxlength="1">
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="quoteChar" class="form-label">Символ обрамления текста</label>
+                                                <select class="form-select" id="quoteChar" name="params[quoteChar]">
+                                                    <option value="auto">Автоопределение</option>
+                                                    <option value="&quot;">Двойные кавычки (&quot;)</option>
+                                                    <option value="'">Одинарные кавычки (')</option>
+                                                    <option value="">Без обрамления</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="encoding" class="form-label">Кодировка файла</label>
+                                                <select class="form-select" id="encoding" name="params[encoding]">
+                                                    <option value="auto">Автоопределение</option>
+                                                    <option value="UTF-8">UTF-8</option>
+                                                    <option value="windows-1251">Windows-1251 (кириллица)</option>
+                                                    <option value="CP1252">CP1252 (западноевропейская)</option>
+                                                    <option value="ISO-8859-1">ISO-8859-1 (латиница)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="escapeChar" class="form-label">Символ экранирования</label>
+                                                <select class="form-select" id="escapeChar" name="params[escapeChar]">
+                                                    <option value="auto">Автоопределение</option>
+                                                    <option value="\">Обратная косая черта (\)</option>
+                                                    <option value="">Без экранирования</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -241,33 +393,38 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Выбор типа сущности
-        const entityCards = document.querySelectorAll('.entity-type-card');
-        entityCards.forEach(card => {
-            card.addEventListener('click', function () {
-                // Снимаем выделение со всех карточек
-                entityCards.forEach(c => c.classList.remove('selected'));
-
-                // Выделяем текущую карточку
-                this.classList.add('selected');
-
-                // Устанавливаем соответствующий radio
-                const entityType = this.dataset.entityType;
-                document.getElementById(`entity${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`).checked = true;
-            });
-        });
-
-        // Установка выбранной карточки по умолчанию
-        document.querySelector('[data-entity-type="product"]').classList.add('selected');
-
-        // Область загрузки файла
-        const dropArea = document.getElementById('dropArea');
+        // Получаем ссылки на основные DOM-элементы
+        const importForm = document.getElementById('importForm');
         const fileInput = document.getElementById('fileInput');
+        const startImportBtn = document.getElementById('startImportBtn');
+        const dropArea = document.getElementById('dropArea');
+        const filePreview = document.getElementById('filePreview');
+        const removeFileBtn = document.getElementById('removeFile');
+        const progressContainer = document.getElementById('importProgress');
+
+        // Синхронизируем значение mappingId с компонентом выбора полей
+        const selectedMappingIdField = document.getElementById('selectedMappingId');
+        const mappingIdField = document.getElementById('mappingId');
+
+        // Синхронизируем поля, если они существуют
+        if (selectedMappingIdField && mappingIdField) {
+            // Начальная синхронизация значений
+            mappingIdField.value = selectedMappingIdField.value;
+
+            // Следим за изменениями в компоненте выбора полей
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+                        mappingIdField.value = selectedMappingIdField.value;
+                    }
+                });
+            });
+
+            observer.observe(selectedMappingIdField, {attributes: true});
+        }
 
         // Обработка клика по области загрузки
-        dropArea.addEventListener('click', () => {
-            fileInput.click();
-        });
+        dropArea.addEventListener('click', () => fileInput.click());
 
         // Обработка перетаскивания файла
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -280,69 +437,228 @@
         }
 
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, highlight, false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('dragging'), false);
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, unhighlight, false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragging'), false);
         });
 
-        function highlight() {
-            dropArea.classList.add('dragging');
-        }
-
-        function unhighlight() {
-            dropArea.classList.remove('dragging');
-        }
-
         // Обработка выбора файла
-        fileInput.addEventListener('change', handleFileSelect, false);
-        dropArea.addEventListener('drop', handleFileDrop, false);
-
-        function handleFileDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-
-            if (files.length > 0) {
-                fileInput.files = files;
-                handleFile(files[0]);
+        fileInput.addEventListener('change', e => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
             }
+        });
+
+        dropArea.addEventListener('drop', e => {
+            const dt = e.dataTransfer;
+            if (dt.files && dt.files.length > 0) {
+                fileInput.files = dt.files;
+                handleFile(dt.files[0]);
+            }
+        });
+
+        // Определение типа файла и соответствующих параметров
+        function updateFileSpecificParams() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+
+            const fileName = fileInput.files[0].name.toLowerCase();
+            const isXlsx = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+            const isCsv = fileName.endsWith('.csv');
+
+            // Показываем/скрываем параметры в зависимости от типа файла
+            document.querySelectorAll('.csv-only').forEach(el => {
+                el.style.display = isCsv ? 'block' : 'none';
+            });
+
+            document.querySelectorAll('.xlsx-only').forEach(el => {
+                el.style.display = isXlsx ? 'block' : 'none';
+            });
         }
 
-        function handleFileSelect(e) {
-            const files = e.target.files;
+        // Обработка пользовательского формата даты
+        const dateFormatSelect = document.getElementById('dateFormat');
+        const customDateFormatContainer = document.getElementById('customDateFormatContainer');
+        if (dateFormatSelect && customDateFormatContainer) {
+            dateFormatSelect.addEventListener('change', function() {
+                customDateFormatContainer.style.display =
+                    this.value === 'custom' ? 'block' : 'none';
+            });
+        }
 
-            if (files.length > 0) {
-                handleFile(files[0]);
-            }
+        // Обработка пользовательского разделителя
+        const delimiterSelect = document.getElementById('delimiter');
+        const customDelimiterContainer = document.getElementById('customDelimiterContainer');
+        if (delimiterSelect && customDelimiterContainer) {
+            delimiterSelect.addEventListener('change', function() {
+                customDelimiterContainer.style.display =
+                    this.value === 'custom' ? 'block' : 'none';
+            });
         }
 
         function handleFile(file) {
             // Показываем превью файла
-            document.getElementById('filePreview').style.display = 'block';
+            filePreview.style.display = 'block';
             document.getElementById('fileName').textContent = file.name;
             document.getElementById('fileSize').textContent = formatFileSize(file.size);
             document.getElementById('fileType').textContent = file.type || getFileExtension(file.name);
 
             // Активируем кнопку импорта
-            document.getElementById('startImportBtn').disabled = false;
+            startImportBtn.disabled = false;
 
-            // Показываем параметры импорта
-            document.getElementById('importOptions').classList.remove('d-none');
+            // Обновляем параметры в зависимости от типа файла
+            updateFileSpecificParams();
 
-            // Анализируем файл (здесь будет AJAX-запрос к серверу)
+            // Анализируем файл
             analyzeFile(file);
         }
 
         // Удаление файла
-        document.getElementById('removeFile').addEventListener('click', function () {
+        removeFileBtn.addEventListener('click', function () {
             fileInput.value = '';
-            document.getElementById('filePreview').style.display = 'none';
-            document.getElementById('startImportBtn').disabled = true;
-            document.getElementById('importOptions').classList.add('d-none');
+            filePreview.style.display = 'none';
+            startImportBtn.disabled = true;
         });
 
-        // Форматирование размера файла
+        // Функция для сбора всех параметров импорта
+        function collectImportParameters(form) {
+            // Собираем значения выборочных полей
+            const paramsByType = {
+                'select': ['errorHandling', 'duplicateHandling', 'dateFormat', 'emptyFieldHandling',
+                    'delimiter', 'quoteChar', 'encoding', 'escapeChar'],
+                'checkbox': ['validateData', 'trimWhitespace', 'skipEmptyRows', 'autoDetectTypes', 'evaluateFormulas'],
+                'number': ['headerRowInput', 'dataStartRow', 'sheetIndex'] // Заменили headerRow на headerRowInput
+            };
+
+            // Собираем параметры по типам элементов
+            for (const [type, ids] of Object.entries(paramsByType)) {
+                ids.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (!element) return;
+
+                    let value;
+                    if (type === 'checkbox') {
+                        value = element.checked ? element.value || 'true' : 'false';
+                    } else {
+                        value = element.value;
+                    }
+
+                    // Специальная обработка для headerRowInput, так как имя параметра отличается от id
+                    const paramName = id === 'headerRowInput'
+                        ? 'params[headerRow]'
+                        : `params[${id}]`;
+
+                    let existingField = form.querySelector(`input[name="${paramName}"]`);
+
+                    if (!existingField) {
+                        // Если поле не существует, создаем его
+                        const hiddenField = document.createElement('input');
+                        hiddenField.type = 'hidden';
+                        hiddenField.name = paramName;
+                        hiddenField.value = value;
+                        form.appendChild(hiddenField);
+                    } else {
+                        // Если поле существует, обновляем его значение
+                        existingField.value = value;
+                    }
+                });
+            }
+
+            // Специальная обработка для полей с пользовательскими значениями
+            // Пользовательский формат даты
+            if (dateFormatSelect && dateFormatSelect.value === 'custom') {
+                const customDateFormat = document.getElementById('customDateFormat');
+                if (customDateFormat && customDateFormat.value) {
+                    const hiddenField = document.createElement('input');
+                    hiddenField.type = 'hidden';
+                    hiddenField.name = 'params[datePattern]';
+                    hiddenField.value = customDateFormat.value;
+                    form.appendChild(hiddenField);
+                }
+            }
+
+            // Пользовательский разделитель
+            if (delimiterSelect && delimiterSelect.value === 'custom') {
+                const customDelimiter = document.getElementById('customDelimiter');
+                if (customDelimiter && customDelimiter.value) {
+                    const hiddenField = document.createElement('input');
+                    hiddenField.type = 'hidden';
+                    hiddenField.name = 'params[delimiter]';
+                    hiddenField.value = customDelimiter.value;
+                    form.appendChild(hiddenField);
+                }
+            }
+
+            return true;
+        }
+
+        // Добавляем прямой обработчик клика на кнопку импорта
+        startImportBtn.addEventListener('click', function (event) {
+            // Проверка формы
+            const form = document.getElementById('importForm');
+            if (!form) return;
+
+            // Проверка файла
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Пожалуйста, выберите файл для импорта');
+                event.preventDefault();
+                return;
+            }
+
+            // Собираем все параметры импорта
+            collectImportParameters(form);
+
+            // Показываем прогресс импорта
+            progressContainer.classList.remove('d-none');
+
+            // Обновляем прогресс-бар
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('importStatus');
+            progressBar.style.width = '30%';
+            progressBar.setAttribute('aria-valuenow', 30);
+            progressBar.textContent = '30%';
+            statusText.textContent = 'Отправка файла...';
+
+            // Отправляем форму программно
+            form.submit();
+
+            // Предотвращаем стандартное действие кнопки
+            event.preventDefault();
+        });
+
+        // Функции для работы с файлами и анализа
+        function updateMappingOptions(mappings) {
+            const mappingSelect = document.getElementById('mappingSelect');
+
+            // Если элемент не найден, пробуем найти по альтернативному ID
+            if (!mappingSelect) {
+                const altSelect = document.getElementById('mappingId');
+                if (altSelect) {
+                    updateMappingOptionsForElement(altSelect, mappings);
+                }
+                return;
+            }
+
+            updateMappingOptionsForElement(mappingSelect, mappings);
+        }
+
+        function updateMappingOptionsForElement(selectElement, mappings) {
+            // Очищаем текущие опции
+            selectElement.innerHTML = '<option value="">Автоматическое</option>';
+
+            // Добавляем доступные маппинги
+            if (mappings && mappings.length > 0) {
+                mappings.forEach(mapping => {
+                    const option = document.createElement('option');
+                    option.value = mapping.id;
+                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
+                    selectElement.appendChild(option);
+                });
+            }
+        }
+
         function formatFileSize(size) {
             const kb = 1024;
             const mb = kb * 1024;
@@ -356,26 +672,24 @@
             }
         }
 
-        // Получение расширения файла
         function getFileExtension(filename) {
             return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
         }
 
-        // Анализ файла
         function analyzeFile(file) {
             // Очищаем таблицу предпросмотра
             const headerRow = document.getElementById('headerRow');
             const previewBody = document.getElementById('previewBody');
-            headerRow.innerHTML = '';
+
+            if (!headerRow || !previewBody) return;
+
+            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
             previewBody.innerHTML = '';
 
-            // Показываем индикатор загрузки
-            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
-
-            // Получаем текущий тип сущности и флаг составной сущности
-            const entityType = document.getElementById('selectedEntityType').value;
-            const isComposite = document.getElementById('isComposite').value === 'true';
-            const clientId = window.location.pathname.split('/')[2]; // Извлекаем ID клиента из URL
+            // Получаем параметры анализа
+            const entityType = document.getElementById('selectedEntityType')?.value || 'product';
+            const isComposite = document.getElementById('isComposite')?.value === 'true';
+            const clientId = window.location.pathname.split('/')[2]; // ID клиента из URL
 
             // Создаем форму для отправки файла
             const formData = new FormData();
@@ -390,7 +704,7 @@
             })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error('Ошибка при анализе файла');
+                        throw new Error(`Ошибка HTTP: ${response.status}`);
                     }
                     return response.json();
                 })
@@ -408,9 +722,8 @@
                         });
                     }
 
-                    // Заполняем предпросмотр данных первыми 10 строками, если они есть
+                    // Заполняем предпросмотр данных первыми 10 строками
                     if (data.sampleData && data.sampleData.length > 0) {
-                        // data.sampleData - это массив объектов, а не двумерный массив
                         data.sampleData.forEach(rowObject => {
                             const tr = document.createElement('tr');
 
@@ -418,7 +731,6 @@
                             if (data.headers && data.headers.length > 0) {
                                 data.headers.forEach(header => {
                                     const td = document.createElement('td');
-                                    // Получаем значение по ключу заголовка, если оно существует
                                     const cellValue = rowObject[header] !== undefined ? rowObject[header] : '';
                                     td.textContent = cellValue;
                                     tr.appendChild(td);
@@ -435,7 +747,7 @@
                             previewBody.appendChild(tr);
                         });
 
-                        // Сообщаем, сколько всего строк в файле, если их больше, чем мы показываем
+                        // Сообщаем, сколько всего строк в файле
                         const totalRows = data.totalRows || data.sampleData.length;
                         if (totalRows > data.sampleData.length) {
                             const tr = document.createElement('tr');
@@ -448,6 +760,50 @@
                         }
                     }
 
+                    // Автоматическое обновление параметров импорта на основе обнаруженных данных
+                    if (data.detectedOptions) {
+                        // Обновляем разделитель, если он обнаружен и есть соответствующее поле
+                        if (data.detectedOptions.delimiter && delimiterSelect) {
+                            const detectedDelimiter = data.detectedOptions.delimiter;
+                            // Проверяем, есть ли такой разделитель в списке
+                            const options = Array.from(delimiterSelect.options);
+                            const option = options.find(opt => opt.value === detectedDelimiter);
+                            if (option) {
+                                delimiterSelect.value = detectedDelimiter;
+                            }
+                        }
+
+                        // Обновляем другие обнаруженные параметры
+                        if (data.detectedOptions.quoteChar) {
+                            const quoteCharSelect = document.getElementById('quoteChar');
+                            if (quoteCharSelect) {
+                                const options = Array.from(quoteCharSelect.options);
+                                const option = options.find(opt => opt.value === data.detectedOptions.quoteChar);
+                                if (option) {
+                                    quoteCharSelect.value = data.detectedOptions.quoteChar;
+                                }
+                            }
+                        }
+
+                        if (data.detectedOptions.charset) {
+                            const encodingSelect = document.getElementById('encoding');
+                            if (encodingSelect) {
+                                const options = Array.from(encodingSelect.options);
+                                const option = options.find(opt => opt.value.toLowerCase() === data.detectedOptions.charset.toLowerCase());
+                                if (option) {
+                                    encodingSelect.value = option.value;
+                                }
+                            }
+                        }
+
+                        if (data.detectedOptions.headerRow !== undefined) {
+                            const headerRowInput = document.getElementById('headerRowInput');
+                            if (headerRowInput) {
+                                headerRowInput.value = data.detectedOptions.headerRow;
+                            }
+                        }
+                    }
+
                     // Обновляем доступные маппинги
                     if (data.availableMappings) {
                         updateMappingOptions(data.availableMappings);
@@ -457,13 +813,13 @@
                     window.fileHeaders = data.headers || [];
                     window.fieldsMetadata = data.fieldsMetadata;
 
-                    const event = new CustomEvent('fileAnalyzed', {
+                    // Диспатчим событие для компонента field-selection
+                    document.dispatchEvent(new CustomEvent('fileAnalyzed', {
                         detail: {
                             headers: data.headers || [],
                             metadata: data.fieldsMetadata
                         }
-                    });
-                    document.dispatchEvent(event);
+                    }));
 
                     // Если нет данных для предпросмотра
                     if ((!data.headers || data.headers.length === 0) &&
@@ -478,7 +834,6 @@
                     }
                 })
                 .catch(error => {
-                    console.error('Ошибка при анализе файла:', error);
                     headerRow.innerHTML = '';
                     previewBody.innerHTML = '';
 
@@ -492,105 +847,14 @@
                 });
         }
 
-
-        // Функция для обновления списка доступных маппингов
-        function updateMappingOptions(mappings) {
-            const mappingSelect = document.getElementById('mappingId');
-            mappingSelect.innerHTML = '<option value="">Автоматическое</option>';
-
-            if (mappings && mappings.length > 0) {
-                mappings.forEach(mapping => {
-                    const option = document.createElement('option');
-                    option.value = mapping.id;
-                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
-                    mappingSelect.appendChild(option);
-                });
-            }
+        // Активируем кнопку "Начать импорт" если файл уже был выбран при загрузке страницы
+        if (fileInput.files && fileInput.files.length > 0) {
+            startImportBtn.disabled = false;
+            updateFileSpecificParams(); // Обновляем параметры в зависимости от типа файла
         }
 
-        // Отправка формы
-        // Проверим, правильно ли установлены обработчики событий
-        console.log("Установка обработчиков событий формы импорта");
-
-        // Найдем форму и кнопку
-        const importForm = document.getElementById('importForm');
-        const startImportBtn = document.getElementById('startImportBtn');
-
-        console.log("Форма импорта:", importForm);
-        console.log("Кнопка импорта:", startImportBtn);
-
-        // Добавим обработчик события клика на кнопку напрямую
-        startImportBtn.addEventListener('click', function (e) {
-            console.log("Нажата кнопка импорта");
-            e.preventDefault(); // Предотвращаем стандартную отправку формы
-
-            // Проверка, активирована ли кнопка
-            if (this.disabled) {
-                console.log("Кнопка импорта отключена, отмена");
-                return;
-            }
-
-            console.log("Начало обработки импорта");
-
-            // Проверяем, выбран ли файл
-            const fileInput = document.getElementById('fileInput');
-            console.log("Файл для импорта:", fileInput.files);
-
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Пожалуйста, выберите файл для импорта');
-                return;
-            }
-
-            // Показываем прогресс импорта
-            const progressContainer = document.getElementById('importProgress');
-            progressContainer.classList.remove('d-none');
-            console.log("Отображаем индикатор прогресса");
-
-            // Получаем данные формы
-            const formData = new FormData(importForm);
-
-            // Логируем все поля формы
-            console.log("Данные формы для отправки:");
-            for (let [key, value] of formData.entries()) {
-                console.log(`${key}: ${value}`);
-            }
-
-            // Отправляем форму
-            console.log("Отправка формы на:", importForm.action);
-
-            // Блокируем кнопку импорта
-            this.disabled = true;
-
-            // Обновляем прогресс-бар
-            const progressBar = document.getElementById('progressBar');
-            const statusText = document.getElementById('importStatus');
-            progressBar.style.width = '30%';
-            progressBar.setAttribute('aria-valuenow', 30);
-            progressBar.textContent = '30%';
-            statusText.textContent = 'Отправка файла...';
-
-            // Отправляем форму вручную
-            importForm.submit();
-        });
-
-            // Дополнительно сделаем стандартный обработчик отправки формы
-        importForm.addEventListener('submit', function (e) {
-            console.log("Перехвачена отправка формы");
-
-            // Не предотвращаем стандартную отправку - пусть форма отправится обычным способом
-            // e.preventDefault();
-
-            // Показываем прогресс импорта
-            const progressContainer = document.getElementById('importProgress');
-            progressContainer.classList.remove('d-none');
-
-            // Блокируем кнопку импорта
-            startImportBtn.disabled = true;
-
-            console.log("Форма отправляется стандартным способом");
-        });
-
-
+        // Инициализация при загрузке страницы
+        updateFileSpecificParams();
     });
 </script>
 </body>

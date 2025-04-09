@@ -40,4 +40,4 @@ build/
 temp-files/
 **/temp-files/**
 /temp-files/**
-application-dev.properties
+src/main/resources/application-verbose.properties

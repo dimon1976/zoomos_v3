@@ -5,6 +5,7 @@ import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 
@@ -319,6 +320,44 @@ public abstract class AbstractFileProcessor implements FileProcessor {
 
         return result;
     }
+
+    /**
+     * Обрабатывает файл с использованием объекта параметров FileReadingOptions.
+     *
+     * @param filePath путь к файлу
+     * @param entityType тип сущности
+     * @param client клиент
+     * @param fieldMapping маппинг полей
+     * @param options параметры чтения файла
+     * @param operation операция для отслеживания прогресса
+     * @return список созданных сущностей
+     */
+    public List<ImportableEntity> processFileWithOptions(
+            Path filePath,
+            String entityType,
+            Client client,
+            Map<String, String> fieldMapping,
+            FileReadingOptions options,
+            FileOperation operation) {
+
+        try {
+            // Конвертируем options обратно в Map для обратной совместимости с существующим кодом
+            // В будущем можно полностью переписать эти методы для работы с FileReadingOptions
+            Map<String, String> params = options.toMap();
+
+            // Вызываем существующий метод (постепенно его тоже можно будет обновить)
+            return processFile(filePath, entityType, client, fieldMapping, params, operation);
+        } catch (Exception e) {
+            String errorMessage = "Ошибка при обработке файла: " + e.getMessage();
+            log.error(errorMessage, e);
+            // Помечаем операцию как неудачную
+            if (operation != null) {
+                operation.markAsFailed(errorMessage);
+            }
+            throw new FileOperationException(errorMessage, e);
+        }
+    }
+
 
     /**
      * Обновляет статус операции.

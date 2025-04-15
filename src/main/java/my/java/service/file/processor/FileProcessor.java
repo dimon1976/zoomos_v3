@@ -3,6 +3,7 @@ package my.java.service.file.processor;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.service.file.options.FileReadingOptions;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -63,6 +64,52 @@ public interface FileProcessor {
      * @return карта с информацией о структуре файла (заголовки, типы данных, примеры и т.д.)
      */
     Map<String, Object> analyzeFile(Path filePath, Map<String, String> params);
+
+    /**
+     * Анализирует файл с использованием объекта параметров FileReadingOptions.
+     *
+     * @param filePath путь к файлу
+     * @param options параметры анализа
+     * @return карта с информацией о структуре файла (заголовки, типы данных, примеры и т.д.)
+     */
+    default Map<String, Object> analyzeFileWithOptions(Path filePath, FileReadingOptions options) {
+        // По умолчанию преобразуем в Map для обратной совместимости
+        return analyzeFile(filePath, options != null ? options.toMap() : null);
+    }
+
+    /**
+     * Обрабатывает файл и создает список сущностей из его данных с использованием FileReadingOptions.
+     *
+     * @param filePath путь к файлу
+     * @param entityType тип создаваемых сущностей
+     * @param client клиент, для которого производится импорт
+     * @param fieldMapping маппинг полей файла к полям сущности
+     * @param options параметры обработки в виде объекта FileReadingOptions
+     * @param operation объект операции для отслеживания прогресса
+     * @return список созданных сущностей
+     */
+    default List<ImportableEntity> processFileWithOptions(
+            Path filePath,
+            String entityType,
+            Client client,
+            Map<String, String> fieldMapping,
+            FileReadingOptions options,
+            FileOperation operation) {
+        // По умолчанию преобразуем в Map для обратной совместимости
+        return processFile(filePath, entityType, client, fieldMapping, options != null ? options.toMap() : null, operation);
+    }
+
+    /**
+     * Читает сырые данные из файла с использованием FileReadingOptions.
+     *
+     * @param filePath путь к файлу
+     * @param options параметры обработки в виде объекта FileReadingOptions
+     * @return список строк с данными
+     */
+    default List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
+        // По умолчанию преобразуем в Map для обратной совместимости
+        return readRawData(filePath, options != null ? options.toMap() : null);
+    }
 
     /**
      * Проверяет базовую валидность файла.

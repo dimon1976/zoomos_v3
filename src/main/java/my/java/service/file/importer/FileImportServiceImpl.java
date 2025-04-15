@@ -14,6 +14,7 @@ import my.java.repository.FileOperationRepository;
 import my.java.service.entity.competitor.CompetitorService;
 import my.java.service.file.entity.CompositeEntityService;
 import my.java.service.file.mapping.FieldMappingService;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
 import my.java.service.file.strategy.FileProcessingStrategy;
@@ -92,11 +93,14 @@ public class FileImportServiceImpl implements FileImportService {
             }
             processParams.put("composite", String.valueOf(isComposite));
 
+            // Создаем FileReadingOptions из параметров для будущего использования
+            FileReadingOptions options = FileReadingOptions.fromMap(processParams);
+
             // Запускаем асинхронную обработку файла
             CompletableFuture<FileOperationDto> future = CompletableFuture.supplyAsync(() -> {
                 try {
                     // Обрабатываем файл и получаем результат
-                    return processUploadedFile(tempFilePath, client, mappingId, strategyId, params);
+                    return processUploadedFile(tempFilePath, client, mappingId, strategyId, processParams);
                 } catch (Exception e) {
                     log.error("Ошибка при обработке файла: {}", e.getMessage(), e);
                     operation.markAsFailed(e.getMessage());
@@ -177,11 +181,20 @@ public class FileImportServiceImpl implements FileImportService {
 
             FileProcessor processor = processorOpt.get();
 
+            // Создаем пустые параметры для анализа
+            FileReadingOptions options = new FileReadingOptions();
+
+            // Для обратной совместимости преобразуем в Map
+            Map<String, String> params = options.toMap();
+
             // Анализируем файл
-            Map<String, Object> result = processor.analyzeFile(tempFilePath, null);
+            Map<String, Object> result = processor.analyzeFile(tempFilePath, params);
 
             // Добавляем информацию о процессоре
             result.put("processorType", processor.getClass().getSimpleName());
+
+            // Добавляем настройки
+            result.put("options", options);
 
             // Удаляем временный файл
             pathResolver.deleteFile(tempFilePath);
@@ -274,12 +287,17 @@ public class FileImportServiceImpl implements FileImportService {
             FileProcessor processor = processorOpt.get();
             log.debug("Выбран процессор: {}", processor.getClass().getSimpleName());
 
+            // Преобразуем Map параметров в FileReadingOptions
+            FileReadingOptions options = FileReadingOptions.fromMap(params);
+
             // Определяем тип сущности для импорта (можно получить из параметров)
             String entityType = getEntityTypeFromParams(params);
+            options.getAdditionalParams().put("entityType", entityType);
             log.debug("Тип сущности для импорта: {}", entityType);
 
             // Проверяем, является ли импорт составным
             boolean isComposite = isCompositeImport(params);
+            options.getAdditionalParams().put("composite", String.valueOf(isComposite));
             log.debug("Составной импорт: {}", isComposite);
 
             // Получаем маппинг полей
@@ -289,7 +307,7 @@ public class FileImportServiceImpl implements FileImportService {
 
             // Если маппинг не указан, можем попробовать автоматически сопоставить поля
             if (fieldMapping == null || fieldMapping.isEmpty()) {
-                Map<String, Object> fileAnalysis = processor.analyzeFile(filePath, null);
+                Map<String, Object> fileAnalysis = processor.analyzeFile(filePath, params);
                 if (fileAnalysis.containsKey("headers")) {
                     @SuppressWarnings("unchecked")
                     List<String> headers = (List<String>) fileAnalysis.get("headers");
@@ -304,12 +322,14 @@ public class FileImportServiceImpl implements FileImportService {
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
             List<ImportableEntity> entities;
+
             // В зависимости от типа импорта, используем соответствующую логику
             if (isComposite) {
                 // Логика для составных сущностей
                 entities = processCompositeEntities(processor, filePath, entityType, client, fieldMapping, params, operation);
             } else {
-                // Стандартная логика для одиночных сущностей
+                // Для одиночных сущностей можно использовать FileReadingOptions,
+                // но для обратной совместимости продолжаем использовать Map
                 entities = processor.processFile(filePath, entityType, client, fieldMapping, params, operation);
             }
 
@@ -358,6 +378,9 @@ public class FileImportServiceImpl implements FileImportService {
             FileOperation operation) {
 
         log.info("Обработка составных сущностей. Основной тип: {}", mainEntityType);
+
+        // Преобразуем Map параметров в FileReadingOptions
+        FileReadingOptions options = FileReadingOptions.fromMap(params);
 
         // Получаем связанные сущности
         List<String> relatedEntities = getRelatedEntities(params);

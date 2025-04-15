@@ -11,6 +11,7 @@ import my.java.service.file.entity.CompositeEntityService;
 import my.java.service.file.importer.FileImportService;
 import my.java.service.file.mapping.FieldMappingServiceEnhanced;
 import my.java.service.file.metadata.EntityRegistry;
+import my.java.service.file.options.FileReadingOptions;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -119,16 +120,22 @@ public class ImportController {
             Client client = clientService.findClientEntityById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
 
-            // Извлекаем параметры
+            // Извлекаем параметры и создаем объект FileReadingOptions
             Map<String, String> params = extractParams(allParams);
             params.put("entityType", entityType);
             params.put("composite", String.valueOf(isComposite));
+
+            FileReadingOptions options = FileReadingOptions.fromMap(params);
+
+            // Для обратной совместимости также сохраняем параметры в Map
+            // В будущем это можно будет удалить
 
             // Если выбран составной импорт, добавляем список связанных сущностей
             if (isComposite) {
                 List<String> relatedEntities = getRelatedEntities(entityType);
                 if (!relatedEntities.isEmpty()) {
                     params.put("relatedEntities", String.join(",", relatedEntities));
+                    options.getAdditionalParams().put("relatedEntities", String.join(",", relatedEntities));
                 }
             }
 
@@ -179,7 +186,8 @@ public class ImportController {
             @PathVariable Long clientId,
             @RequestParam("file") MultipartFile file,
             @RequestParam("analysisEntityType") String entityType,
-            @RequestParam(value = "composite", required = false, defaultValue = "false") boolean isComposite) {
+            @RequestParam(value = "composite", required = false, defaultValue = "false") boolean isComposite,
+            @RequestParam Map<String, String> allParams) {
 
         log.debug("POST запрос на анализ файла для клиента: {}, тип: {}, составной: {}",
                 clientId, entityType, isComposite);
@@ -189,10 +197,18 @@ public class ImportController {
             clientService.getClientById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
 
-            // Анализируем файл
+            // Извлекаем параметры и создаем FileReadingOptions
+            Map<String, String> params = extractParams(allParams);
+            params.put("entityType", entityType);
+            params.put("composite", String.valueOf(isComposite));
+
+            FileReadingOptions options = FileReadingOptions.fromMap(params);
+
+            // Анализируем файл (используем пока существующий метод с Map для обратной совместимости)
             Map<String, Object> result = fileImportService.analyzeFile(file);
             result.put("entityType", entityType);
             result.put("isComposite", isComposite);
+            result.put("options", options); // Добавляем объект параметров в результат
 
             // Если выбран составной импорт, добавляем информацию о связанных сущностях
             if (isComposite) {

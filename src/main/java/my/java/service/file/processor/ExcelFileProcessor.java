@@ -6,6 +6,7 @@ import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 import org.apache.poi.ss.usermodel.*;
@@ -328,34 +329,9 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
      * @return настроенные параметры чтения
      */
     private FileReadingOptions determineReadingOptions(Map<String, String> params) {
-        FileReadingOptions options = new FileReadingOptions();
-
-        // Если пользователь указал параметры, используем их
-        if (params != null) {
-            if (params.containsKey("sheetName")) {
-                options.setSheetName(params.get("sheetName"));
-            }
-
-            if (params.containsKey("sheetIndex")) {
-                options.setSheetIndex(Integer.parseInt(params.get("sheetIndex")));
-            }
-
-            if (params.containsKey("headerRow")) {
-                options.setHeaderRow(Integer.parseInt(params.get("headerRow")));
-            }
-
-            if (params.containsKey("trimWhitespace")) {
-                options.setTrimWhitespace(Boolean.parseBoolean(params.get("trimWhitespace")));
-            }
-
-            if (params.containsKey("ignoreEmptyRows")) {
-                options.setIgnoreEmptyRows(Boolean.parseBoolean(params.get("ignoreEmptyRows")));
-            }
-
-            if (params.containsKey("dateFormat")) {
-                options.setDateFormat(params.get("dateFormat"));
-            }
-        }
+        // Создаем параметры из Map или используем значения по умолчанию
+        FileReadingOptions options = params != null ?
+                FileReadingOptions.fromMap(params) : new FileReadingOptions();
 
         return options;
     }
@@ -754,66 +730,5 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     private boolean isDateValue(String value) {
         // Простая проверка на наличие разделителей дат
         return value.matches(".*\\d+[./\\-]\\d+[./\\-]\\d+.*");
-    }
-
-    /**
-     * Класс для хранения параметров чтения Excel файла.
-     */
-    private static class FileReadingOptions {
-        private String sheetName;
-        private int sheetIndex = -1;
-        private int headerRow = -1;
-        private boolean trimWhitespace = true;
-        private boolean ignoreEmptyRows = true;
-        private String dateFormat = "dd.MM.yyyy";
-
-        // Геттеры и сеттеры
-        public String getSheetName() {
-            return sheetName;
-        }
-
-        public void setSheetName(String sheetName) {
-            this.sheetName = sheetName;
-        }
-
-        public int getSheetIndex() {
-            return sheetIndex;
-        }
-
-        public void setSheetIndex(int sheetIndex) {
-            this.sheetIndex = sheetIndex;
-        }
-
-        public int getHeaderRow() {
-            return headerRow;
-        }
-
-        public void setHeaderRow(int headerRow) {
-            this.headerRow = headerRow;
-        }
-
-        public boolean isTrimWhitespace() {
-            return trimWhitespace;
-        }
-
-        public void setTrimWhitespace(boolean trimWhitespace) {
-            this.trimWhitespace = trimWhitespace;
-        }
-
-        public boolean isIgnoreEmptyRows() {
-            return ignoreEmptyRows;
-        }
-
-        public void setIgnoreEmptyRows(boolean ignoreEmptyRows) {
-            this.ignoreEmptyRows = ignoreEmptyRows;
-        }
-
-        public String getDateFormat() {
-            return dateFormat;
-        }
-
-        public void setDateFormat(String dateFormat) {
-            this.dateFormat = dateFormat;
-        }
     }
 }

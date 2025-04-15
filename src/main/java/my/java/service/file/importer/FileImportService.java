@@ -4,6 +4,7 @@ import my.java.dto.FileOperationDto;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.service.file.options.FileReadingOptions;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Path;

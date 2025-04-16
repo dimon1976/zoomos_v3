@@ -6,6 +6,7 @@ import my.java.exception.FileOperationException;
 import my.java.model.entity.ImportableEntity;
 import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
+import my.java.service.file.options.FileReadingOptions;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -187,9 +188,16 @@ public class FieldMappingServiceEnhanced {
     }
 
     /**
-     * Получает метаданные о полях для составной сущности
+     * Получает метаданные о полях для составной сущности с использованием FileReadingOptions
+     *
+     * @param mainEntityType тип основной сущности
+     * @param options параметры обработки
+     * @return метаданные о полях сущности
      */
-    public Map<String, Object> getCompositeEntityFieldsMetadata(String mainEntityType) {
+    public Map<String, Object> getCompositeEntityFieldsMetadataWithOptions(
+            String mainEntityType,
+            FileReadingOptions options) {
+
         Map<String, Object> result = new HashMap<>();
 
         // Получаем метаданные основной сущности
@@ -199,8 +207,9 @@ public class FieldMappingServiceEnhanced {
             return result;
         }
 
-        // Получаем все поля основной и связанных сущностей
-        Map<String, EntityMetadata.FieldMetadata> allFields = entityRegistry.getCompositeEntityFields(mainEntityType);
+        // Получаем все поля основной и связанных сущностей с использованием options
+        Map<String, EntityMetadata.FieldMetadata> allFields =
+                entityRegistry.getCompositeEntityFieldsWithOptions(mainEntityType, options);
 
         // Группируем поля по типам сущностей
         Map<String, List<Map<String, Object>>> fieldsByEntity = new HashMap<>();
@@ -230,8 +239,20 @@ public class FieldMappingServiceEnhanced {
         mainEntityInfo.put("fields", fieldsByEntity.getOrDefault(mainEntityType, Collections.emptyList()));
         entities.add(mainEntityInfo);
 
+        // Получаем список связанных сущностей из options
+        String relatedEntitiesStr = options.getAdditionalParam("relatedEntities", "");
+        List<String> relationTypes = relatedEntitiesStr.isEmpty()
+                ? Collections.emptyList()
+                : Arrays.asList(relatedEntitiesStr.split(","));
+
         // Добавляем связанные сущности
-        for (EntityMetadata relatedMetadata : entityRegistry.getRelatedEntities(mainEntityType)) {
+        List<EntityMetadata> relatedEntities = entityRegistry.getRelatedEntities(mainEntityType);
+        for (EntityMetadata relatedMetadata : relatedEntities) {
+            // Если указаны конкретные связанные сущности, проверяем наличие в списке
+            if (!relationTypes.isEmpty() && !relationTypes.contains(relatedMetadata.getEntityType())) {
+                continue;
+            }
+
             Map<String, Object> relatedEntityInfo = new HashMap<>();
             relatedEntityInfo.put("type", relatedMetadata.getEntityType());
             relatedEntityInfo.put("displayName", relatedMetadata.getDisplayName());

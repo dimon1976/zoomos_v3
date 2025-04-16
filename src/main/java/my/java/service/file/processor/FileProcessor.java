@@ -88,16 +88,13 @@ public interface FileProcessor {
      * @param operation объект операции для отслеживания прогресса
      * @return список созданных сущностей
      */
-    default List<ImportableEntity> processFileWithOptions(
+    List<ImportableEntity> processFileWithOptions(
             Path filePath,
             String entityType,
             Client client,
             Map<String, String> fieldMapping,
             FileReadingOptions options,
-            FileOperation operation) {
-        // По умолчанию преобразуем в Map для обратной совместимости
-        return processFile(filePath, entityType, client, fieldMapping, options != null ? options.toMap() : null, operation);
-    }
+            FileOperation operation);
 
     /**
      * Читает сырые данные из файла с использованием FileReadingOptions.

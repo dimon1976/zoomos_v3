@@ -208,6 +208,23 @@ public class CsvFileProcessor extends AbstractFileProcessor {
         }
     }
 
+
+    @Override
+    public List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
+        log.debug("Чтение сырых данных из CSV файла с FileReadingOptions: {}", filePath);
+
+        try {
+            // Преобразуем options в Map для использования с существующими методами
+            Map<String, String> params = options.toMap();
+
+            // Используем существующий метод
+            return readFile(filePath, params);
+        } catch (IOException e) {
+            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
+            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
+        }
+    }
+
     @Override
     public Map<String, Object> analyzeFile(Path filePath, Map<String, String> params) {
         log.debug("Анализ CSV файла: {}", filePath);
@@ -334,8 +351,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Безопасно извлекает значение параметра из Map.
      *
-     * @param params Map с параметрами
-     * @param key ключ параметра
+     * @param params       Map с параметрами
+     * @param key          ключ параметра
      * @param defaultValue значение по умолчанию
      * @return значение параметра или значение по умолчанию, если параметр отсутствует
      */
@@ -349,8 +366,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Безопасно извлекает целочисленное значение параметра.
      *
-     * @param params Map с параметрами
-     * @param key ключ параметра
+     * @param params       Map с параметрами
+     * @param key          ключ параметра
      * @param defaultValue значение по умолчанию
      * @return целочисленное значение параметра или значение по умолчанию при ошибке
      */
@@ -367,8 +384,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Безопасно извлекает символьное значение параметра.
      *
-     * @param params Map с параметрами
-     * @param key ключ параметра
+     * @param params       Map с параметрами
+     * @param key          ключ параметра
      * @param defaultValue значение по умолчанию
      * @return символьное значение параметра или значение по умолчанию при ошибке
      */

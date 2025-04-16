@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -275,6 +276,55 @@ public class FileReadingOptions {
     }
 
     /**
+     * Обновляет стратегию обработки ошибок на основе записей в БД или других параметров.
+     *
+     * @param entityType тип сущности
+     * @param clientId идентификатор клиента
+     * @return this для цепочки вызовов
+     */
+    public FileReadingOptions updateStrategy(String entityType, Long clientId) {
+        // Пример обновления стратегии
+        // В будущем здесь может быть логика выбора оптимальной стратегии
+        // на основе типа сущности, клиента и других параметров
+
+        String entityTypeStr = getAdditionalParam("entityType", entityType);
+        if (entityTypeStr.equals("product")) {
+            // Для продуктов используем стратегию upsert по умолчанию
+            if (processingStrategy.equals("insert")) {
+                processingStrategy = "upsert";
+            }
+        }
+
+        // Обновляем параметры в зависимости от размера данных
+        Integer totalRecords = getIntAdditionalParam("totalRecords", 0);
+        if (totalRecords > 1000) {
+            // Для больших наборов данных увеличиваем размер пакета
+            batchSize = Math.max(batchSize, 1000);
+        }
+
+        return this;
+    }
+
+    /**
+     * Получает целочисленный дополнительный параметр.
+     *
+     * @param key ключ параметра
+     * @param defaultValue значение по умолчанию
+     * @return значение параметра
+     */
+    public Integer getIntAdditionalParam(String key, Integer defaultValue) {
+        String value = additionalParams.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
      * Получает целочисленный параметр из Map
      */
     private static int getIntParam(Map<String, String> params, String key, int defaultValue) {
@@ -343,6 +393,106 @@ public class FileReadingOptions {
      */
     public String getAdditionalParam(String key, String defaultValue) {
         return additionalParams.getOrDefault(key, defaultValue);
+    }
+
+    /**
+     * Валидирует параметры импорта и корректирует значения при необходимости.
+     *
+     * @return this для цепочки вызовов
+     */
+    public FileReadingOptions validate() {
+        // Проверяем и корректируем параметры
+
+        // Проверка индекса строки заголовка
+        if (headerRow < 0) {
+            headerRow = 0;
+        }
+
+        // Проверка строки начала данных
+        if (dataStartRow <= headerRow) {
+            dataStartRow = headerRow + 1;
+        }
+
+        // Проверка размера пакета
+        if (batchSize < 1) {
+            batchSize = 500;
+        } else if (batchSize > 10000) {
+            batchSize = 10000;
+        }
+
+        // Проверка стратегии обработки ошибок
+        if (!Arrays.asList("continue", "stop", "report").contains(errorHandling)) {
+            errorHandling = "continue";
+        }
+
+        // Проверка стратегии обработки дубликатов
+        if (!Arrays.asList("skip", "update", "error").contains(duplicateHandling)) {
+            duplicateHandling = "skip";
+        }
+
+        // Проверка стратегии обработки
+        if (!Arrays.asList("insert", "update", "upsert", "replace").contains(processingStrategy)) {
+            processingStrategy = "insert";
+        }
+
+        // Проверка обработки пустых значений
+        if (!Arrays.asList("empty", "null", "default").contains(emptyFieldHandling)) {
+            emptyFieldHandling = "empty";
+        }
+
+        return this;
+    }
+
+    /**
+     * Проверяет, соответствуют ли параметры требованиям для обработки файла.
+     *
+     * @return true, если параметры валидны
+     */
+    public boolean isValid() {
+        // Базовая валидация параметров
+        return batchSize > 0 &&
+                Arrays.asList("continue", "stop", "report").contains(errorHandling) &&
+                Arrays.asList("skip", "update", "error").contains(duplicateHandling) &&
+                Arrays.asList("insert", "update", "upsert", "replace").contains(processingStrategy) &&
+                Arrays.asList("empty", "null", "default").contains(emptyFieldHandling);
+    }
+
+    /**
+     * Логирует все текущие настройки на уровне DEBUG.
+     *
+     * @param logger логгер для вывода информации
+     * @return this для цепочки вызовов
+     */
+    public FileReadingOptions logSettings(org.slf4j.Logger logger) {
+        if (logger.isDebugEnabled()) {
+            logger.debug("Настройки импорта:");
+            logger.debug("- headerRow: {}", headerRow);
+            logger.debug("- dataStartRow: {}", dataStartRow);
+            logger.debug("- skipEmptyRows: {}", skipEmptyRows);
+            logger.debug("- trimWhitespace: {}", trimWhitespace);
+            logger.debug("- validateData: {}", validateData);
+            logger.debug("- dateFormat: {}", dateFormat);
+            logger.debug("- errorHandling: {}", errorHandling);
+            logger.debug("- duplicateHandling: {}", duplicateHandling);
+            logger.debug("- processingStrategy: {}", processingStrategy);
+            logger.debug("- batchSize: {}", batchSize);
+            logger.debug("- delimiter: {}", delimiter);
+            logger.debug("- quoteChar: {}", quoteChar);
+            logger.debug("- charset: {}", charset);
+            logger.debug("- escapeChar: {}", escapeChar);
+            logger.debug("- hasHeader: {}", hasHeader);
+            logger.debug("- sheetName: {}", sheetName);
+            logger.debug("- sheetIndex: {}", sheetIndex);
+            logger.debug("- evaluateFormulas: {}", evaluateFormulas);
+            logger.debug("- emptyFieldHandling: {}", emptyFieldHandling);
+
+            // Логируем дополнительные параметры
+            if (!additionalParams.isEmpty()) {
+                logger.debug("Дополнительные параметры:");
+                additionalParams.forEach((key, value) -> logger.debug("- {}: {}", key, value));
+            }
+        }
+        return this;
     }
 
     /**

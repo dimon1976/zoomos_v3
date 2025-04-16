@@ -5,6 +5,7 @@ import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
+import my.java.service.file.options.FileReadingOptions;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
@@ -37,6 +38,46 @@ public class EntityRegistry {
         addRelationship("competitor", "product", "product", EntityMetadata.RelationshipType.MANY_TO_ONE);
 
         log.info("Зарегистрировано {} сущностей", entities.size());
+    }
+
+    /**
+     * Получение всех полей для составной сущности с использованием FileReadingOptions
+     *
+     * @param mainEntityType тип основной сущности
+     * @param options параметры, влияющие на выбор полей
+     * @return карта с полями для всех связанных сущностей
+     */
+    public Map<String, EntityMetadata.FieldMetadata> getCompositeEntityFieldsWithOptions(
+            String mainEntityType,
+            FileReadingOptions options) {
+
+        Map<String, EntityMetadata.FieldMetadata> fields = new LinkedHashMap<>();
+
+        // Добавляем поля основной сущности
+        EntityMetadata mainMetadata = entities.get(mainEntityType);
+        if (mainMetadata != null) {
+            fields.putAll(mainMetadata.getPrefixedFields());
+
+            // Получаем список связанных сущностей из options
+            String relatedEntitiesStr = options.getAdditionalParam("relatedEntities", "");
+            if (!relatedEntitiesStr.isEmpty()) {
+                List<String> relationTypes = Arrays.asList(relatedEntitiesStr.split(","));
+
+                // Добавляем поля только указанных связанных сущностей
+                getRelatedEntities(mainEntityType).stream()
+                        .filter(entity -> relationTypes.contains(entity.getEntityType()))
+                        .forEach(relatedMetadata -> {
+                            fields.putAll(relatedMetadata.getPrefixedFields());
+                        });
+            } else {
+                // Если не указаны конкретные связанные сущности, добавляем все
+                getRelatedEntities(mainEntityType).forEach(relatedMetadata -> {
+                    fields.putAll(relatedMetadata.getPrefixedFields());
+                });
+            }
+        }
+
+        return fields;
     }
 
     /**

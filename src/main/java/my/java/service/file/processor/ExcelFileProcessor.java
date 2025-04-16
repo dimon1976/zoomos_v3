@@ -184,6 +184,18 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     }
 
     @Override
+    public List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
+        log.debug("Чтение сырых данных из Excel файла с FileReadingOptions: {}", filePath);
+
+        try {
+            return readFile(filePath, options != null ? options.toMap() : null);
+        } catch (IOException e) {
+            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
+            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public Map<String, Object> analyzeFile(Path filePath, Map<String, String> params) {
         log.debug("Анализ Excel файла: {}", filePath);
 

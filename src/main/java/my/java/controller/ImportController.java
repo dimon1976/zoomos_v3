@@ -10,6 +10,7 @@ import my.java.service.client.ClientService;
 import my.java.service.file.entity.CompositeEntityService;
 import my.java.service.file.importer.FileImportService;
 import my.java.service.file.mapping.FieldMappingServiceEnhanced;
+import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
 import my.java.service.file.options.FileReadingOptions;
 import org.springframework.http.ResponseEntity;
@@ -120,22 +121,20 @@ public class ImportController {
             Client client = clientService.findClientEntityById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
 
-            // Извлекаем параметры и создаем объект FileReadingOptions
+            // Извлекаем параметры из формы
             Map<String, String> params = extractParams(allParams);
             params.put("entityType", entityType);
             params.put("composite", String.valueOf(isComposite));
 
+            // Создаем объект FileReadingOptions из параметров
             FileReadingOptions options = FileReadingOptions.fromMap(params);
-
-            // Для обратной совместимости также сохраняем параметры в Map
-            // В будущем это можно будет удалить
 
             // Если выбран составной импорт, добавляем список связанных сущностей
             if (isComposite) {
                 List<String> relatedEntities = getRelatedEntities(entityType);
                 if (!relatedEntities.isEmpty()) {
-                    params.put("relatedEntities", String.join(",", relatedEntities));
-                    options.getAdditionalParams().put("relatedEntities", String.join(",", relatedEntities));
+                    String relatedEntitiesStr = String.join(",", relatedEntities);
+                    options.getAdditionalParams().put("relatedEntities", relatedEntitiesStr);
                 }
             }
 
@@ -145,9 +144,10 @@ public class ImportController {
                 fieldMapping = fieldMappingService.getMappingById(mappingId);
             }
 
-            // Начинаем асинхронный импорт
+            // Начинаем асинхронный импорт с использованием FileReadingOptions
+            // Здесь нужно обновить сигнатуру метода в сервисе
             CompletableFuture<FileOperationDto> futureOperation =
-                    fileImportService.importFileAsync(file, client, mappingId, null, params, isComposite);
+                    fileImportService.importFileAsyncWithOptions(file, client, mappingId, null, options);
 
             // Получаем ID операции
             FileOperationDto operation = futureOperation.getNow(null);
@@ -204,16 +204,19 @@ public class ImportController {
 
             FileReadingOptions options = FileReadingOptions.fromMap(params);
 
-            // Анализируем файл (используем пока существующий метод с Map для обратной совместимости)
-            Map<String, Object> result = fileImportService.analyzeFile(file);
+            // Анализируем файл с использованием FileReadingOptions
+            Map<String, Object> result = fileImportService.analyzeFileWithOptions(file, options);
             result.put("entityType", entityType);
             result.put("isComposite", isComposite);
-            result.put("options", options); // Добавляем объект параметров в результат
 
             // Если выбран составной импорт, добавляем информацию о связанных сущностях
             if (isComposite) {
                 List<String> relatedEntities = getRelatedEntities(entityType);
                 result.put("relatedEntities", relatedEntities);
+
+                // Добавляем связанные сущности в options
+                String relatedEntitiesStr = String.join(",", relatedEntities);
+                options.getAdditionalParams().put("relatedEntities", relatedEntitiesStr);
             }
 
             // Получаем доступные маппинги для данного типа сущности
@@ -221,7 +224,8 @@ public class ImportController {
 
             // Получаем метаданные полей для правильного отображения таблицы предпросмотра
             if (isComposite) {
-                result.put("fieldsMetadata", fieldMappingService.getCompositeEntityFieldsMetadata(entityType));
+                // Используем метод с FileReadingOptions
+                result.put("fieldsMetadata", fieldMappingService.getCompositeEntityFieldsMetadataWithOptions(entityType, options));
             } else {
                 var entityMetadata = entityRegistry.getEntityMetadata(entityType);
                 if (entityMetadata != null) {
@@ -234,7 +238,6 @@ public class ImportController {
             }
 
             return ResponseEntity.ok(result);
-
         } catch (Exception e) {
             log.error("Ошибка при анализе файла: {}", e.getMessage(), e);
             Map<String, String> error = new HashMap<>();
@@ -249,10 +252,9 @@ public class ImportController {
     private List<String> getRelatedEntities(String mainEntityType) {
         var relatedEntities = entityRegistry.getRelatedEntities(mainEntityType);
         return relatedEntities.stream()
-                .map(entity -> entity.getEntityType())
+                .map(EntityMetadata::getEntityType)
                 .toList();
     }
-
     /**
      * Извлечение параметров импорта из всех параметров запроса
      */

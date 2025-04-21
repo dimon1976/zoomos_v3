@@ -5,6 +5,7 @@ import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 
@@ -79,6 +80,17 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             }
             throw new FileOperationException(errorMessage, e);
         }
+    }
+
+    @Override
+    public Map<String, Object> analyzeFileWithOptions(Path filePath, FileReadingOptions options) {
+        log.debug("Анализ файла с FileReadingOptions: {}", filePath);
+
+        // Для обратной совместимости преобразуем options в Map
+        Map<String, String> params = options != null ? options.toMap() : null;
+
+        // Вызываем существующий метод анализа
+        return analyzeFile(filePath, params);
     }
 
     /**
@@ -159,6 +171,116 @@ public abstract class AbstractFileProcessor implements FileProcessor {
             log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
             throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Преобразует сырые данные в сущности с использованием FileReadingOptions.
+     *
+     * @param rawData      сырые данные из файла
+     * @param entityType   тип сущности
+     * @param client       клиент
+     * @param fieldMapping маппинг полей
+     * @param options      параметры обработки
+     * @param operation    информация об операции
+     * @return список созданных сущностей
+     */
+    protected List<ImportableEntity> convertToEntitiesWithOptions(
+            List<Map<String, String>> rawData,
+            String entityType,
+            Client client,
+            Map<String, String> fieldMapping,
+            FileReadingOptions options,
+            FileOperation operation) {
+
+        List<ImportableEntity> entities = new ArrayList<>();
+        int totalRecords = rawData.size();
+        int processedRecords = 0;
+        int successfulRecords = 0;
+        List<String> errors = new ArrayList<>();
+
+        // Получаем стратегию обработки ошибок из options
+        String errorHandling = options.getErrorHandling();
+
+        for (Map<String, String> row : rawData) {
+            processedRecords++;
+
+            try {
+                ImportableEntity entity = createEntity(entityType);
+                if (entity == null) {
+                    errors.add("Неподдерживаемый тип сущности: " + entityType);
+                    continue;
+                }
+
+                // Устанавливаем клиента для сущности, если это поддерживается
+                setClientIfSupported(entity, client);
+
+                // Применяем трансформеры к сущности, если это поддерживается
+                setTransformerIfSupported(entity);
+
+                // Применяем маппинг полей, если он предоставлен
+                Map<String, String> effectiveMapping = fieldMapping != null ? fieldMapping : entity.getFieldMappings();
+
+                // Применяем маппинг к данным строки
+                Map<String, String> mappedData = applyFieldMapping(row, effectiveMapping);
+
+                // Заполняем сущность данными
+                boolean filled = entity.fillFromMap(mappedData);
+                if (!filled) {
+                    String errorMsg = "Не удалось заполнить сущность данными из строки " + processedRecords;
+                    errors.add(errorMsg);
+
+                    // Если стратегия "stop", прекращаем обработку при ошибке
+                    if ("stop".equals(errorHandling)) {
+                        throw new FileOperationException(errorMsg);
+                    }
+
+                    continue;
+                }
+
+                // Валидация сущности - закомментировано, так как в оригинальном коде тоже было закомментировано
+                // String validationError = entity.validate();
+                // if (validationError != null) {
+                //     errors.add("Ошибка валидации в строке " + processedRecords + ": " + validationError);
+                //     continue;
+                // }
+
+                // Добавляем сущность в результат
+                entities.add(entity);
+                successfulRecords++;
+            } catch (Exception e) {
+                String errorMsg = "Ошибка в строке " + processedRecords + ": " + e.getMessage();
+                errors.add(errorMsg);
+                log.warn(errorMsg);
+
+                // Если стратегия "stop", прекращаем обработку при ошибке
+                if ("stop".equals(errorHandling)) {
+                    throw new FileOperationException(errorMsg);
+                }
+            }
+
+            // Обновляем прогресс
+            updateProgress(operation, processedRecords, totalRecords);
+        }
+
+        // Обновляем статистику операции
+        if (operation != null) {
+            operation.setProcessedRecords(processedRecords);
+        }
+
+        // Логируем итоги обработки
+        log.info("Обработка файла завершена. Всего записей: {}, успешно: {}, с ошибками: {}",
+                totalRecords, successfulRecords, errors.size());
+
+        if (!errors.isEmpty()) {
+            log.debug("Ошибки при обработке: {}", String.join("; ", errors));
+
+            // Если стратегия "report", сохраняем ошибки в additionalParams
+            if ("report".equals(errorHandling) && options != null) {
+                options.getAdditionalParams().put("errors", String.join("\n", errors));
+            }
+        }
+
+        return entities;
     }
 
     /**
@@ -319,6 +441,62 @@ public abstract class AbstractFileProcessor implements FileProcessor {
 
         return result;
     }
+
+    /**
+     * Обрабатывает файл с использованием объекта параметров FileReadingOptions.
+     *
+     * @param filePath путь к файлу
+     * @param entityType тип сущности
+     * @param client клиент
+     * @param fieldMapping маппинг полей
+     * @param options параметры чтения файла
+     * @param operation операция для отслеживания прогресса
+     * @return список созданных сущностей
+     */
+    public List<ImportableEntity> processFileWithOptions(
+            Path filePath,
+            String entityType,
+            Client client,
+            Map<String, String> fieldMapping,
+            FileReadingOptions options,
+            FileOperation operation) {
+
+        try {
+            // Вызываем метод для внутренней валидации файла (бросает исключение при проблеме)
+            validateFileInternal(filePath);
+            log.info("Начало обработки файла с FileReadingOptions: {}, тип сущности: {}, клиент: {}",
+                    filePath, entityType, client.getName());
+
+            // Обновляем статус операции
+            updateOperationStatus(operation, FileOperation.OperationStatus.PROCESSING);
+
+            // Получаем данные из файла
+            List<Map<String, String>> rawData = readRawDataWithOptions(filePath, options);
+            log.debug("Прочитано {} записей из файла", rawData.size());
+
+            // Обновляем информацию о количестве записей
+            if (operation != null) {
+                operation.setTotalRecords(rawData.size());
+            }
+
+            // Преобразуем сырые данные в сущности с использованием FileReadingOptions
+            List<ImportableEntity> entities = convertToEntitiesWithOptions(
+                    rawData, entityType, client, fieldMapping, options, operation);
+
+            log.debug("Создано {} сущностей типа {}", entities.size(), entityType);
+
+            return entities;
+        } catch (Exception e) {
+            String errorMessage = "Ошибка при обработке файла: " + e.getMessage();
+            log.error(errorMessage, e);
+            // Помечаем операцию как неудачную
+            if (operation != null) {
+                operation.markAsFailed(errorMessage);
+            }
+            throw new FileOperationException(errorMessage, e);
+        }
+    }
+
 
     /**
      * Обновляет статус операции.

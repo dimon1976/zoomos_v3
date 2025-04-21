@@ -11,6 +11,7 @@ import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
 import org.mozilla.universalchardet.UniversalDetector;
@@ -207,6 +208,23 @@ public class CsvFileProcessor extends AbstractFileProcessor {
         }
     }
 
+
+    @Override
+    public List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
+        log.debug("Чтение сырых данных из CSV файла с FileReadingOptions: {}", filePath);
+
+        try {
+            // Преобразуем options в Map для использования с существующими методами
+            Map<String, String> params = options.toMap();
+
+            // Используем существующий метод
+            return readFile(filePath, params);
+        } catch (IOException e) {
+            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
+            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
+        }
+    }
+
     @Override
     public Map<String, Object> analyzeFile(Path filePath, Map<String, String> params) {
         log.debug("Анализ CSV файла: {}", filePath);
@@ -333,8 +351,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Безопасно извлекает значение параметра из Map.
      *
-     * @param params Map с параметрами
-     * @param key ключ параметра
+     * @param params       Map с параметрами
+     * @param key          ключ параметра
      * @param defaultValue значение по умолчанию
      * @return значение параметра или значение по умолчанию, если параметр отсутствует
      */
@@ -348,8 +366,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Безопасно извлекает целочисленное значение параметра.
      *
-     * @param params Map с параметрами
-     * @param key ключ параметра
+     * @param params       Map с параметрами
+     * @param key          ключ параметра
      * @param defaultValue значение по умолчанию
      * @return целочисленное значение параметра или значение по умолчанию при ошибке
      */
@@ -366,8 +384,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     /**
      * Безопасно извлекает символьное значение параметра.
      *
-     * @param params Map с параметрами
-     * @param key ключ параметра
+     * @param params       Map с параметрами
+     * @param key          ключ параметра
      * @param defaultValue значение по умолчанию
      * @return символьное значение параметра или значение по умолчанию при ошибке
      */
@@ -384,43 +402,15 @@ public class CsvFileProcessor extends AbstractFileProcessor {
      * @return настроенные параметры чтения
      */
     private FileReadingOptions determineReadingOptions(Path filePath, Map<String, String> params) {
-        FileReadingOptions options = new FileReadingOptions();
+        // Создаем основной объект параметров из Map
+        FileReadingOptions options = params != null ?
+                FileReadingOptions.fromMap(params) : new FileReadingOptions();
 
-        // Сначала автоматически определяем параметры
+        // Пытаемся автоматически определить параметры, если они не указаны явно
         try {
             detectFileOptions(filePath, options);
         } catch (IOException e) {
             log.error("Ошибка при автоопределении параметров файла: {}", e.getMessage());
-        }
-
-        // Если параметры указаны пользователем, переопределяем их
-        if (params != null) {
-            // Применяем параметры пользователя поверх автоопределенных
-            char delimiterValue = getCharParameterSafely(params, PARAM_DELIMITER, options.getDelimiter());
-            options.setDelimiter(delimiterValue);
-
-            char quoteValue = getCharParameterSafely(params, PARAM_QUOTE_CHAR, options.getQuoteChar());
-            options.setQuoteChar(quoteValue);
-
-            try {
-                String charsetName = getParameterSafely(params, PARAM_CHARSET, options.getCharset().name());
-                options.setCharset(Charset.forName(charsetName));
-            } catch (IllegalArgumentException e) {
-                log.warn("Неизвестная кодировка: {}, используем автоопределенную",
-                        getParameterSafely(params, PARAM_CHARSET, ""));
-            }
-
-            int headerRowValue = getIntParameterSafely(params, PARAM_HEADER_ROW, options.getHeaderRow());
-            options.setHeaderRow(headerRowValue);
-
-            // Для булевых значений используем дефолтные значения из options
-            boolean skipEmptyRows = Boolean.parseBoolean(
-                    getParameterSafely(params, PARAM_SKIP_EMPTY_ROWS, String.valueOf(options.isSkipEmptyRows())));
-            options.setSkipEmptyRows(skipEmptyRows);
-
-            boolean trimWhitespace = Boolean.parseBoolean(
-                    getParameterSafely(params, PARAM_TRIM_WHITESPACE, String.valueOf(options.isTrimWhitespace())));
-            options.setTrimWhitespace(trimWhitespace);
         }
 
         return options;
@@ -931,66 +921,5 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     private boolean isDateValue(String value) {
         // Простая проверка на наличие разделителей дат
         return value.matches(".*\\d+[./\\-]\\d+[./\\-]\\d+.*");
-    }
-
-    /**
-     * Класс для хранения параметров чтения CSV файла.
-     */
-    private static class FileReadingOptions {
-        private char delimiter = DEFAULT_DELIMITER;
-        private char quoteChar = DEFAULT_QUOTE;
-        private Charset charset = DEFAULT_CHARSET;
-        private int headerRow = 0;
-        private boolean skipEmptyRows = true;
-        private boolean trimWhitespace = true;
-
-        // Геттеры и сеттеры
-        public char getDelimiter() {
-            return delimiter;
-        }
-
-        public void setDelimiter(char delimiter) {
-            this.delimiter = delimiter;
-        }
-
-        public char getQuoteChar() {
-            return quoteChar;
-        }
-
-        public void setQuoteChar(char quoteChar) {
-            this.quoteChar = quoteChar;
-        }
-
-        public Charset getCharset() {
-            return charset;
-        }
-
-        public void setCharset(Charset charset) {
-            this.charset = charset;
-        }
-
-        public int getHeaderRow() {
-            return headerRow;
-        }
-
-        public void setHeaderRow(int headerRow) {
-            this.headerRow = headerRow;
-        }
-
-        public boolean isSkipEmptyRows() {
-            return skipEmptyRows;
-        }
-
-        public void setSkipEmptyRows(boolean skipEmptyRows) {
-            this.skipEmptyRows = skipEmptyRows;
-        }
-
-        public boolean isTrimWhitespace() {
-            return trimWhitespace;
-        }
-
-        public void setTrimWhitespace(boolean trimWhitespace) {
-            this.trimWhitespace = trimWhitespace;
-        }
     }
 }

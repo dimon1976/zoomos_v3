@@ -2,6 +2,7 @@ package my.java.service.file.entity;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import my.java.exception.FileOperationException;
 import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
@@ -11,6 +12,7 @@ import my.java.service.entity.product.ProductService;
 import my.java.service.entity.region.RegionService;
 import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,180 @@ public class CompositeEntityService {
 
     // Кэш для хранения созданных сущностей Product по их внешним идентификаторам
     private final Map<String, Product> productCache = new ConcurrentHashMap<>();
+
+    /**
+     * Обработка строки данных из файла для импорта в составные сущности с использованием FileReadingOptions
+     *
+     * @param data карта данных из файла (ключ - заголовок, значение - строковое значение)
+     * @param mappedFields карта маппинга полей (ключ - заголовок файла, значение - поле сущности с префиксом)
+     * @param clientId идентификатор клиента
+     * @param options параметры обработки в формате FileReadingOptions
+     * @return список созданных сущностей
+     */
+    @Transactional
+    public List<ImportableEntity> processRowWithOptions(
+            Map<String, String> data,
+            Map<String, String> mappedFields,
+            Long clientId,
+            FileReadingOptions options) {
+
+        log.debug("Обработка строки данных для импорта в составные сущности с FileReadingOptions");
+
+        // Подготавливаем карты данных для каждой сущности
+        Map<String, Map<String, String>> entityData = prepareEntityData(data, mappedFields);
+
+        List<ImportableEntity> resultEntities = new ArrayList<>();
+
+        // Получаем стратегию обработки дубликатов из options
+        String duplicateHandling = options.getDuplicateHandling();
+
+        // Сначала обрабатываем основную сущность (Product)
+        if (entityData.containsKey("product")) {
+            Product product = processProductDataWithOptions(entityData.get("product"), clientId, duplicateHandling);
+            if (product != null) {
+                resultEntities.add(product);
+
+                // Затем обрабатываем связанные сущности
+                if (entityData.containsKey("region")) {
+                    Region region = processRegionData(entityData.get("region"), product, clientId);
+                    if (region != null) {
+                        resultEntities.add(region);
+                    }
+                }
+
+                if (entityData.containsKey("competitor")) {
+                    Competitor competitor = processCompetitorData(entityData.get("competitor"), product, clientId);
+                    if (competitor != null) {
+                        resultEntities.add(competitor);
+                    }
+                }
+            }
+        }
+
+        return resultEntities;
+    }
+
+    /**
+     * Обработка данных для сущности Product с учетом стратегии обработки дубликатов
+     *
+     * @param data данные для продукта
+     * @param clientId идентификатор клиента
+     * @param duplicateHandling стратегия обработки дубликатов
+     * @return созданный или обновленный продукт
+     */
+    private Product processProductDataWithOptions(
+            Map<String, String> data,
+            Long clientId,
+            String duplicateHandling) {
+
+        try {
+            Product product = new Product();
+            product.setTransformerFactory(transformerFactory);
+            product.setClientId(clientId);
+
+            // Заполняем поля продукта
+            boolean filled = product.fillFromMap(data);
+            if (!filled) {
+                log.error("Не удалось заполнить сущность Product данными");
+                return null;
+            }
+
+            // Проверяем существование продукта по его внешнему идентификатору
+            if (product.getProductId() != null) {
+                // Проверяем кэш
+                Product cachedProduct = productCache.get(clientId + "_" + product.getProductId());
+                if (cachedProduct != null) {
+                    log.debug("Найден продукт в кэше: {}", product.getProductId());
+
+                    // Если стратегия "error", выбрасываем исключение при дубликате
+                    if ("error".equals(duplicateHandling)) {
+                        throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                    }
+
+                    // Если стратегия "skip", просто возвращаем существующий продукт без обновления
+                    if ("skip".equals(duplicateHandling)) {
+                        return cachedProduct;
+                    }
+
+                    // Если стратегия "update", обновляем существующий продукт
+                    return updateExistingProduct(cachedProduct, product);
+                }
+
+                // Проверяем БД
+                Optional<Product> existingProduct = productService.findByProductIdAndClientId(
+                        product.getProductId(), clientId);
+
+                if (existingProduct.isPresent()) {
+                    Product existing = existingProduct.get();
+
+                    // Если стратегия "error", выбрасываем исключение при дубликате
+                    if ("error".equals(duplicateHandling)) {
+                        throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                    }
+
+                    // Если стратегия "skip", просто возвращаем существующий продукт без обновления
+                    if ("skip".equals(duplicateHandling)) {
+                        // Добавляем в кэш
+                        productCache.put(clientId + "_" + existing.getProductId(), existing);
+                        return existing;
+                    }
+
+                    // Если стратегия "update", обновляем существующий продукт
+                    Product updatedProduct = updateExistingProduct(existing, product);
+
+                    // Добавляем в кэш
+                    productCache.put(clientId + "_" + updatedProduct.getProductId(), updatedProduct);
+
+                    log.debug("Обновлен существующий продукт: {}", updatedProduct.getProductId());
+                    return updatedProduct;
+                }
+            }
+
+            // Создаем новый продукт
+            Product savedProduct = productService.saveProduct(product);
+
+            // Добавляем в кэш, если есть идентификатор
+            if (savedProduct.getProductId() != null) {
+                productCache.put(clientId + "_" + savedProduct.getProductId(), savedProduct);
+            }
+
+            log.debug("Создан новый продукт: {}", savedProduct.getId());
+            return savedProduct;
+
+        } catch (Exception e) {
+            log.error("Ошибка при обработке данных Product: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Обновляет поля существующего продукта
+     *
+     * @param existing существующий продукт
+     * @param newData новые данные
+     * @return обновленный продукт
+     */
+    private Product updateExistingProduct(Product existing, Product newData) {
+        // Обновляем поля существующего продукта
+        existing.setProductName(newData.getProductName());
+        existing.setProductBrand(newData.getProductBrand());
+        existing.setProductBar(newData.getProductBar());
+        existing.setProductDescription(newData.getProductDescription());
+        existing.setProductUrl(newData.getProductUrl());
+        existing.setProductCategory1(newData.getProductCategory1());
+        existing.setProductCategory2(newData.getProductCategory2());
+        existing.setProductCategory3(newData.getProductCategory3());
+        existing.setProductPrice(newData.getProductPrice());
+        existing.setProductAnalog(newData.getProductAnalog());
+        existing.setProductAdditional1(newData.getProductAdditional1());
+        existing.setProductAdditional2(newData.getProductAdditional2());
+        existing.setProductAdditional3(newData.getProductAdditional3());
+        existing.setProductAdditional4(newData.getProductAdditional4());
+        existing.setProductAdditional5(newData.getProductAdditional5());
+
+        // Сохраняем обновленный продукт
+        return productService.saveProduct(existing);
+    }
 
     /**
      * Обработка строки данных из файла для импорта в составные сущности

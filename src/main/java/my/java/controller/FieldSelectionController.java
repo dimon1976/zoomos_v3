@@ -4,7 +4,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.service.client.ClientService;
 import my.java.service.file.mapping.FieldMappingServiceEnhanced;
+import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
+import my.java.service.file.options.FileReadingOptions;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -57,11 +59,29 @@ public class FieldSelectionController {
      */
     @GetMapping("/composite/{mainEntityType}")
     @ResponseBody
-    public ResponseEntity<?> getCompositeEntityFields(@PathVariable String mainEntityType) {
+    public ResponseEntity<?> getCompositeEntityFields(
+            @PathVariable String mainEntityType,
+            @RequestParam(required = false) Map<String, String> params) {
         try {
             log.debug("Запрос на получение полей для составной сущности: {}", mainEntityType);
 
-            var metadata = fieldMappingService.getCompositeEntityFieldsMetadata(mainEntityType);
+            // Создаем объект FileReadingOptions из параметров запроса
+            FileReadingOptions options = FileReadingOptions.fromMap(params);
+            options.getAdditionalParams().put("entityType", mainEntityType);
+
+            // Получаем информацию о связанных сущностях
+            List<String> relatedEntities = entityRegistry.getRelatedEntities(mainEntityType)
+                    .stream()
+                    .map(EntityMetadata::getEntityType)
+                    .toList();
+
+            if (!relatedEntities.isEmpty()) {
+                String relatedEntitiesStr = String.join(",", relatedEntities);
+                options.getAdditionalParams().put("relatedEntities", relatedEntitiesStr);
+            }
+
+            // Используем новый метод с поддержкой FileReadingOptions
+            var metadata = fieldMappingService.getCompositeEntityFieldsMetadataWithOptions(mainEntityType, options);
             if (metadata.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Неизвестный тип основной сущности: " + mainEntityType));
             }

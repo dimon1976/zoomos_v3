@@ -131,10 +131,24 @@ public class ImportController {
             clientService.getClientById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
 
-            // Настраиваем FileReadingOptions
-            FileReadingOptions options = configureOptions(allParams, entityType, isComposite);
+            // Создаем базовые опции только с минимально необходимыми параметрами
+            // Остальные параметры будут обнаружены процессором файлов
+            FileReadingOptions options = new FileReadingOptions();
+            options.getAdditionalParams().put("entityType", entityType);
+            options.getAdditionalParams().put("composite", String.valueOf(isComposite));
 
-            // Анализируем файл
+            // Если указан sheetName или другие важные параметры для Excel, добавим их
+            if (allParams.containsKey("sheetName")) {
+                options.setSheetName(allParams.get("sheetName"));
+            }
+
+            if (allParams.containsKey("sheetIndex")) {
+                try {
+                    options.setSheetIndex(Integer.parseInt(allParams.get("sheetIndex")));
+                } catch (NumberFormatException ignored) {}
+            }
+
+            // Анализируем файл, позволяя процессору обнаружить параметры
             Map<String, Object> result = fileImportService.analyzeFileWithOptions(file, options);
             result.put("entityType", entityType);
             result.put("isComposite", isComposite);
@@ -150,13 +164,13 @@ public class ImportController {
     }
 
     /**
-     * Конфигурирует параметры импорта
+     * Конфигурирует параметры импорта, сохраняя указанные пользователем значения
      */
     private FileReadingOptions configureOptions(Map<String, String> allParams, String entityType, boolean isComposite) {
-        // Создаем FileReadingOptions из всех параметров
+        // Создаем FileReadingOptions из параметров пользователя
         FileReadingOptions options = FileReadingOptions.fromMap(allParams);
 
-        // Добавляем основные параметры
+        // Добавляем только необходимые параметры бизнес-логики
         options.getAdditionalParams().put("entityType", entityType);
         options.getAdditionalParams().put("composite", String.valueOf(isComposite));
 
@@ -170,7 +184,6 @@ public class ImportController {
 
         return options;
     }
-
     /**
      * Обогащает результат анализа метаданными
      */

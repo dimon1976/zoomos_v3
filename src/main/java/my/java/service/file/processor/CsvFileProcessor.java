@@ -320,6 +320,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     private List<String> readSampleLines(Path filePath, Charset charset, int lineCount) throws IOException {
         List<String> sampleLines = new ArrayList<>();
 
+
         try (BufferedReader reader = Files.newBufferedReader(filePath, charset)) {
             String line;
             int count = 0;

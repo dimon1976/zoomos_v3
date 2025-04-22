@@ -34,10 +34,10 @@ public class FileReadingOptions {
     private int batchSize = 500;
 
     // Параметры для CSV
-    private Character delimiter = ',';
-    private Character quoteChar = '"';
-    private Charset charset = StandardCharsets.UTF_8;
-    private Character escapeChar = '\\';
+    private Character delimiter;
+    private Character quoteChar;
+    private Charset charset;
+    private Character escapeChar;
     private boolean hasHeader = true;
 
     // Параметры для Excel
@@ -60,26 +60,33 @@ public class FileReadingOptions {
             return options;
         }
 
-        // Общие параметры
-        options.headerRow = getIntParam(params, "headerRow", 0);
-        options.dataStartRow = getIntParam(params, "dataStartRow", 1);
-        options.skipEmptyRows = getBooleanParam(params, "skipEmptyRows", true);
-        options.trimWhitespace = getBooleanParam(params, "trimWhitespace", true);
-        options.validateData = getBooleanParam(params, "validateData", true);
-        options.dateFormat = getStringParam(params, "dateFormat", "dd.MM.yyyy");
-        options.errorHandling = getStringParam(params, "errorHandling", "continue");
-        options.duplicateHandling = getStringParam(params, "duplicateHandling", "skip");
-        options.processingStrategy = getStringParam(params, "processingStrategy", "insert");
-        options.batchSize = getIntParam(params, "batchSize", 500);
+        // Создаем новый Map с очищенными ключами
+        Map<String, String> cleanedParams = new HashMap<>();
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            String cleanedKey = cleanParamKey(entry.getKey());
+            cleanedParams.put(cleanedKey, entry.getValue());
+        }
+
+        // Теперь работаем с cleanedParams вместо params
+        options.headerRow = getIntParam(cleanedParams, "headerRow", 0);
+        options.dataStartRow = getIntParam(cleanedParams, "dataStartRow", 1);
+        options.skipEmptyRows = getBooleanParam(cleanedParams, "skipEmptyRows", true);
+        options.trimWhitespace = getBooleanParam(cleanedParams, "trimWhitespace", true);
+        options.validateData = getBooleanParam(cleanedParams, "validateData", true);
+        options.dateFormat = getStringParam(cleanedParams, "dateFormat", "dd.MM.yyyy");
+        options.errorHandling = getStringParam(cleanedParams, "errorHandling", "continue");
+        options.duplicateHandling = getStringParam(cleanedParams, "duplicateHandling", "skip");
+        options.processingStrategy = getStringParam(cleanedParams, "processingStrategy", "insert");
+        options.batchSize = getIntParam(cleanedParams, "batchSize", 500);
 
         // CSV параметры
-        String delimiterStr = getStringParam(params, "delimiter", ",");
+        String delimiterStr = getStringParam(cleanedParams, "delimiter", ",");
         if (!delimiterStr.isEmpty()) options.delimiter = delimiterStr.charAt(0);
 
-        String quoteCharStr = getStringParam(params, "quoteChar", "\"");
+        String quoteCharStr = getStringParam(cleanedParams, "quoteChar", "\"");
         if (!quoteCharStr.isEmpty()) options.quoteChar = quoteCharStr.charAt(0);
 
-        String charsetStr = getStringParam(params, "charset", "UTF-8");
+        String charsetStr = getStringParam(cleanedParams, "encoding", "UTF-8");
         if (!charsetStr.isEmpty()) {
             try {
                 options.charset = Charset.forName(charsetStr);
@@ -88,19 +95,19 @@ public class FileReadingOptions {
             }
         }
 
-        String escapeCharStr = getStringParam(params, "escapeChar", "\\");
+        String escapeCharStr = getStringParam(cleanedParams, "escapeChar", "\\");
         if (!escapeCharStr.isEmpty()) options.escapeChar = escapeCharStr.charAt(0);
 
-        options.hasHeader = getBooleanParam(params, "hasHeader", true);
+        options.hasHeader = getBooleanParam(cleanedParams, "hasHeader", true);
 
         // Excel параметры
-        options.sheetName = getStringParam(params, "sheetName", null);
-        options.sheetIndex = getIntParam(params, "sheetIndex", 0);
-        options.evaluateFormulas = getBooleanParam(params, "evaluateFormulas", true);
-        options.emptyFieldHandling = getStringParam(params, "emptyFieldHandling", "empty");
+        options.sheetName = getStringParam(cleanedParams, "sheetName", null);
+        options.sheetIndex = getIntParam(cleanedParams, "sheetIndex", 0);
+        options.evaluateFormulas = getBooleanParam(cleanedParams, "evaluateFormulas", true);
+        options.emptyFieldHandling = getStringParam(cleanedParams, "emptyFieldHandling", "empty");
 
-        // Сохраняем дополнительные параметры
-        for (Map.Entry<String, String> entry : params.entrySet()) {
+        // Дополнительные параметры (оставляем оригинальные ключи, если нужно)
+        for (Map.Entry<String, String> entry : cleanedParams.entrySet()) {
             if (!isStandardParam(entry.getKey())) {
                 options.additionalParams.put(entry.getKey(), entry.getValue());
             }
@@ -130,7 +137,7 @@ public class FileReadingOptions {
         // CSV параметры
         params.put("delimiter", String.valueOf(delimiter));
         params.put("quoteChar", String.valueOf(quoteChar));
-        params.put("charset", charset.name());
+        params.put("encoding", charset.name());
         params.put("escapeChar", String.valueOf(escapeChar));
         params.put("hasHeader", String.valueOf(hasHeader));
 
@@ -164,6 +171,26 @@ public class FileReadingOptions {
         }
 
         return this;
+    }
+
+    /**
+     * Очищает ключ параметра от префиксов и суффиксов, например:
+     * - "params[emptyFieldHandling]" → "emptyFieldHandling"
+     * - "options[delimiter]" → "delimiter"
+     */
+    private static String cleanParamKey(String key) {
+        if (key == null) return null;
+
+        // Удаляем "params[" в начале и "]" в конце, если есть
+        if (key.startsWith("params[") && key.endsWith("]")) {
+            return key.substring(7, key.length() - 1);
+        }
+        // Аналогично для других возможных префиксов, например "options["
+        if (key.startsWith("options[") && key.endsWith("]")) {
+            return key.substring(8, key.length() - 1);
+        }
+        // Если формат не подходит, возвращаем ключ как есть
+        return key;
     }
 
     /**

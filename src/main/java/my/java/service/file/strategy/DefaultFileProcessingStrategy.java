@@ -6,6 +6,7 @@ import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
 import my.java.model.entity.ImportableEntity;
+import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.processor.FileProcessor;
 import my.java.service.file.processor.FileProcessorFactory;
 
@@ -68,20 +69,16 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
         FileProcessor processor = processorFactory.createProcessor(filePath)
                 .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
 
-
-        // Определяем параметры обработки
-        Map<String, String> processingParams = new HashMap<>();
-        if (params != null) {
-            processingParams.putAll(params);
-        }
+        // Создаем FileReadingOptions из параметров
+        FileReadingOptions options = params != null ? FileReadingOptions.fromMap(params) : new FileReadingOptions();
 
         // Устанавливаем стратегию обработки
-        configureProcessingParams(processingParams);
+        configureProcessingParams(options);
 
         try {
             // Обрабатываем файл и получаем сущности
-            List<ImportableEntity> entities = processor.processFile(
-                    filePath, entityType, client, fieldMapping, processingParams, operation);
+            List<ImportableEntity> entities = processor.processFileWithOptions(
+                    filePath, entityType, client, fieldMapping, options, operation);
 
             log.info("Файл успешно обработан, создано {} сущностей", entities.size());
             return entities;
@@ -104,9 +101,12 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
         FileProcessor processor = processorFactory.createProcessor(filePath)
                 .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
 
+        // Создаем пустой FileReadingOptions
+        FileReadingOptions options = new FileReadingOptions();
+
         try {
-            // Анализируем файл
-            Map<String, Object> analysis = processor.analyzeFile(filePath, null);
+            // Анализируем файл с использованием FileReadingOptions
+            Map<String, Object> analysis = processor.analyzeFileWithOptions(filePath, options);
 
             // Добавляем информацию о стратегии
             analysis.put("strategy", getStrategyId());
@@ -246,32 +246,32 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
     /**
      * Настраивает параметры обработки на основе переданных параметров или значений по умолчанию.
      *
-     * @param params параметры обработки
+     * @param options параметры обработки
      */
-    private void configureProcessingParams(Map<String, String> params) {
+    private void configureProcessingParams(FileReadingOptions options) {
         // Устанавливаем значения по умолчанию, если не указаны
-        if (!params.containsKey("errorHandling")) {
-            params.put("errorHandling", "continue");
+        if (!options.hasAdditionalParam("errorHandling")) {
+            options.getAdditionalParams().put("errorHandling", "continue");
         }
 
-        if (!params.containsKey("duplicateHandling")) {
-            params.put("duplicateHandling", "skip");
+        if (options.getDuplicateHandling() == null || options.getDuplicateHandling().isEmpty()) {
+            options.setDuplicateHandling("skip");
         }
 
-        if (!params.containsKey("processingStrategy")) {
-            params.put("processingStrategy", "insert");
+        if (options.getProcessingStrategy() == null || options.getProcessingStrategy().isEmpty()) {
+            options.setProcessingStrategy("insert");
         }
 
-        if (!params.containsKey("batchSize")) {
-            params.put("batchSize", "500");
+        if (options.getBatchSize() <= 0) {
+            options.setBatchSize(500);
         }
 
-        if (!params.containsKey("validateData")) {
-            params.put("validateData", "true");
+        if (!options.hasAdditionalParam("validateData")) {
+            options.getAdditionalParams().put("validateData", "true");
         }
 
-        if (!params.containsKey("trimWhitespace")) {
-            params.put("trimWhitespace", "true");
+        if (!options.hasAdditionalParam("trimWhitespace")) {
+            options.getAdditionalParams().put("trimWhitespace", "true");
         }
     }
 }

@@ -4,7 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FileOperation;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.Product;
+import my.java.model.entity.Region;
 import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
@@ -12,10 +15,7 @@ import my.java.util.PathResolver;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Абстрактный класс для процессоров файлов.
@@ -39,7 +39,6 @@ public abstract class AbstractFileProcessor implements FileProcessor {
         this.transformerFactory = transformerFactory;
     }
 
-    @Override
     public List<ImportableEntity> processFile(
             Path filePath,
             String entityType,
@@ -79,6 +78,145 @@ public abstract class AbstractFileProcessor implements FileProcessor {
                 operation.markAsFailed(errorMessage);
             }
             throw new FileOperationException(errorMessage, e);
+        }
+    }
+
+    /**
+     * Определяет тип данных для колонки.
+     *
+     * @param sampleData образец данных
+     * @param header заголовок колонки
+     * @return определенный тип данных
+     */
+    protected String detectColumnType(List<Map<String, String>> sampleData, String header) {
+        boolean isAllEmpty = true;
+        boolean couldBeInteger = true;
+        boolean couldBeDouble = true;
+        boolean couldBeBoolean = true;
+        boolean couldBeDate = true;
+
+        // Проверяем все значения в колонке
+        for (Map<String, String> row : sampleData) {
+            String value = row.get(header);
+
+            if (value == null || value.trim().isEmpty()) {
+                continue;
+            }
+
+            isAllEmpty = false;
+            value = value.trim();
+
+            // Проверяем, является ли значение целым числом
+            if (couldBeInteger) {
+                try {
+                    Integer.parseInt(value);
+                } catch (NumberFormatException e) {
+                    couldBeInteger = false;
+                }
+            }
+
+            // Проверяем, является ли значение дробным числом
+            if (couldBeDouble && !couldBeInteger) {
+                try {
+                    Double.parseDouble(value.replace(",", "."));
+                } catch (NumberFormatException e) {
+                    couldBeDouble = false;
+                }
+            }
+
+            // Проверяем, является ли значение булевым
+            if (couldBeBoolean) {
+                couldBeBoolean = isBooleanValue(value);
+            }
+
+            // Проверяем, является ли значение датой
+            if (couldBeDate) {
+                couldBeDate = isDateValue(value);
+            }
+        }
+
+        // Определяем тип на основе проверок
+        if (isAllEmpty) {
+            return "string";
+        } else if (couldBeInteger) {
+            return "integer";
+        } else if (couldBeDouble) {
+            return "double";
+        } else if (couldBeBoolean) {
+            return "boolean";
+        } else if (couldBeDate) {
+            return "date";
+        } else {
+            return "string";
+        }
+    }
+
+    /**
+     * Проверяет, является ли значение булевым.
+     */
+    protected boolean isBooleanValue(String value) {
+        String lowerValue = value.toLowerCase();
+        return lowerValue.equals("true") || lowerValue.equals("false") ||
+                lowerValue.equals("yes") || lowerValue.equals("no") ||
+                lowerValue.equals("да") || lowerValue.equals("нет") ||
+                lowerValue.equals("1") || lowerValue.equals("0");
+    }
+
+    /**
+     * Проверяет, является ли значение датой.
+     */
+    protected boolean isDateValue(String value) {
+        // Простая проверка на наличие разделителей дат
+        return value.matches(".*\\d+[./\\-]\\d+[./\\-]\\d+.*");
+    }
+
+    /**
+     * Определяет типы данных в колонках на основе образца данных.
+     *
+     * @param sampleData образец данных
+     * @return карта с типами данных для каждой колонки
+     */
+    public Map<String, String> detectColumnTypes(List<Map<String, String>> sampleData) {
+        if (sampleData == null || sampleData.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        // Получаем список всех заголовков
+        Set<String> headers = sampleData.get(0).keySet();
+        Map<String, String> columnTypes = new HashMap<>();
+
+        // Для каждой колонки определяем тип данных
+        for (String header : headers) {
+            String type = detectColumnType(sampleData, header);
+            columnTypes.put(header, type);
+        }
+
+        return columnTypes;
+    }
+
+    public ImportableEntity createEntity(String entityType) {
+        if (entityType == null) {
+            return null;
+        }
+
+        switch (entityType.toLowerCase()) {
+            case "product":
+                Product product = new Product();
+                product.setTransformerFactory(transformerFactory);
+                return product;
+            case "region":
+            case "regiondata":
+                Region region = new Region();
+                region.setTransformerFactory(transformerFactory);
+                return region;
+            case "competitor":
+            case "competitordata":
+                Competitor competitor = new Competitor();
+                competitor.setTransformerFactory(transformerFactory);
+                return competitor;
+            default:
+                log.warn("Неизвестный тип сущности: {}", entityType);
+                return null;
         }
     }
 
@@ -159,18 +297,12 @@ public abstract class AbstractFileProcessor implements FileProcessor {
 
     @Override
     public List<Map<String, String>> readRawData(Path filePath, Map<String, String> params) {
-        try {
-            log.debug("Чтение сырых данных из файла: {}", filePath);
+        // Создаем FileReadingOptions из params или используем пустой по умолчанию
+        FileReadingOptions options = params != null ?
+                FileReadingOptions.fromMap(params) : new FileReadingOptions();
 
-            // Валидация файла
-            validateFileInternal(filePath);
-
-            // Делегируем чтение конкретной реализации
-            return readFile(filePath, params);
-        } catch (Exception e) {
-            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
-            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
-        }
+        // Делегируем выполнение readRawDataWithOptions
+        return readRawDataWithOptions(filePath, options);
     }
 
     /**
@@ -370,13 +502,6 @@ public abstract class AbstractFileProcessor implements FileProcessor {
         return entities;
     }
 
-    /**
-     * Создает экземпляр сущности указанного типа.
-     *
-     * @param entityType тип сущности
-     * @return новый экземпляр сущности или null, если тип не поддерживается
-     */
-    protected abstract ImportableEntity createEntity(String entityType);
 
     /**
      * Устанавливает клиента для сущности, если это поддерживается.

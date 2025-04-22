@@ -38,25 +38,6 @@ public interface FileProcessor {
     boolean canProcess(Path filePath);
 
     /**
-     * Обрабатывает файл и создает список сущностей из его данных.
-     *
-     * @param filePath путь к файлу
-     * @param entityType тип создаваемых сущностей
-     * @param client клиент, для которого производится импорт
-     * @param fieldMapping маппинг полей файла к полям сущности
-     * @param params дополнительные параметры обработки
-     * @param operation объект операции для отслеживания прогресса
-     * @return список созданных сущностей
-     */
-    List<ImportableEntity> processFile(
-            Path filePath,
-            String entityType,
-            Client client,
-            Map<String, String> fieldMapping,
-            Map<String, String> params,
-            FileOperation operation);
-
-    /**
      * Анализирует файл и возвращает информацию о его структуре.
      *
      * @param filePath путь к файлу
@@ -64,6 +45,8 @@ public interface FileProcessor {
      * @return карта с информацией о структуре файла (заголовки, типы данных, примеры и т.д.)
      */
     Map<String, Object> analyzeFile(Path filePath, Map<String, String> params);
+
+    ImportableEntity createEntity(String entityType);
 
     /**
      * Анализирует файл с использованием объекта параметров FileReadingOptions.

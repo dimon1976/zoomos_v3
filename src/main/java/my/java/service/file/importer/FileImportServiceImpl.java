@@ -255,70 +255,6 @@ public class FileImportServiceImpl implements FileImportService {
     }
 
     @Override
-    public CompletableFuture<FileOperationDto> importFileAsync(
-            MultipartFile file,
-            Client client,
-            Long mappingId,
-            Long strategyId,
-            Map<String, String> params,
-            boolean isComposite) {
-
-        log.info("Начало асинхронного импорта файла: {}, клиент: {}, составная сущность: {}",
-                file.getOriginalFilename(), client.getName(), isComposite);
-
-        try {
-            // Сохраняем файл во временную директорию
-            Path tempFilePath = pathResolver.saveToTempFile(file, "import_" + client.getId());
-            log.debug("Файл сохранен во временную директорию: {}", tempFilePath);
-
-            // Создаем запись об операции в БД
-            FileOperation operation = createFileOperation(client, file, tempFilePath);
-
-            // Создаем копию параметров и добавляем параметр о составной сущности
-            final Map<String, String> processParams = new HashMap<>();
-            if (params != null) {
-                processParams.putAll(params);
-            }
-            processParams.put("composite", String.valueOf(isComposite));
-
-            // Создаем FileReadingOptions из параметров для будущего использования
-            FileReadingOptions options = FileReadingOptions.fromMap(processParams);
-
-            // Запускаем асинхронную обработку файла
-            CompletableFuture<FileOperationDto> future = CompletableFuture.supplyAsync(() -> {
-                try {
-                    // Обрабатываем файл и получаем результат
-                    return processUploadedFile(tempFilePath, client, mappingId, strategyId, processParams);
-                } catch (Exception e) {
-                    log.error("Ошибка при обработке файла: {}", e.getMessage(), e);
-                    operation.markAsFailed(e.getMessage());
-                    fileOperationRepository.save(operation);
-                    throw new RuntimeException("Ошибка при обработке файла: " + e.getMessage(), e);
-                }
-            }, fileProcessingExecutor);
-
-            // Сохраняем задачу в карте активных задач
-            activeImportTasks.put(operation.getId(), future);
-
-            // Настраиваем обработку завершения задачи
-            future.whenComplete((result, ex) -> {
-                if (ex != null) {
-                    log.error("Задача импорта завершилась с ошибкой: {}", ex.getMessage());
-                } else {
-                    log.info("Задача импорта успешно завершена: операция #{}", operation.getId());
-                }
-                // Удаляем задачу из карты активных задач
-                activeImportTasks.remove(operation.getId());
-            });
-
-            return future;
-        } catch (IOException e) {
-            log.error("Ошибка при сохранении файла: {}", e.getMessage(), e);
-            throw new FileOperationException("Не удалось сохранить файл: " + e.getMessage(), e);
-        }
-    }
-
-    @Override
     public FileOperationDto getImportStatus(Long operationId) {
         log.debug("Запрос статуса импорта: операция #{}", operationId);
 
@@ -351,47 +287,6 @@ public class FileImportServiceImpl implements FileImportService {
 
         // Возвращаем текущий статус из БД
         return mapToDto(operation);
-    }
-
-    @Override
-    public Map<String, Object> analyzeFile(MultipartFile file) {
-        log.info("Анализ файла: {}", file.getOriginalFilename());
-
-        try {
-            // Сохраняем файл во временную директорию
-            Path tempFilePath = pathResolver.saveToTempFile(file, "analyze");
-
-            // Получаем подходящий процессор для файла
-            Optional<FileProcessor> processorOpt = fileProcessorFactory.createProcessor(tempFilePath);
-            if (processorOpt.isEmpty()) {
-                throw new FileOperationException("Не найден подходящий процессор для файла: " + file.getOriginalFilename());
-            }
-
-            FileProcessor processor = processorOpt.get();
-
-            // Создаем пустые параметры для анализа
-            FileReadingOptions options = new FileReadingOptions();
-
-            // Для обратной совместимости преобразуем в Map
-            Map<String, String> params = options.toMap();
-
-            // Анализируем файл
-            Map<String, Object> result = processor.analyzeFile(tempFilePath, params);
-
-            // Добавляем информацию о процессоре
-            result.put("processorType", processor.getClass().getSimpleName());
-
-            // Добавляем настройки
-            result.put("options", options);
-
-            // Удаляем временный файл
-            pathResolver.deleteFile(tempFilePath);
-
-            return result;
-        } catch (IOException e) {
-            log.error("Ошибка при анализе файла: {}", e.getMessage(), e);
-            throw new FileOperationException("Не удалось проанализировать файл: " + e.getMessage(), e);
-        }
     }
 
     @Override
@@ -449,101 +344,6 @@ public class FileImportServiceImpl implements FileImportService {
 
         log.warn("Не удалось отменить импорт: операция не найдена или уже завершена: #{}", operationId);
         return false;
-    }
-
-    @Override
-    @Transactional
-    public FileOperationDto processUploadedFile(
-            Path filePath,
-            Client client,
-            Long mappingId,
-            Long strategyId,
-            Map<String, String> params) {
-
-        log.info("Обработка загруженного файла: {}, клиент: {}", filePath, client.getName());
-
-        // Создаем запись об операции, если еще не создана
-        FileOperation operation = findOrCreateFileOperation(client, filePath);
-
-        try {
-            // Получаем подходящий процессор для файла
-            Optional<FileProcessor> processorOpt = fileProcessorFactory.createProcessor(filePath);
-            if (processorOpt.isEmpty()) {
-                throw new FileOperationException("Не найден подходящий процессор для файла: " + filePath);
-            }
-
-            FileProcessor processor = processorOpt.get();
-            log.debug("Выбран процессор: {}", processor.getClass().getSimpleName());
-
-            // Преобразуем Map параметров в FileReadingOptions
-            FileReadingOptions options = FileReadingOptions.fromMap(params);
-
-            // Определяем тип сущности для импорта (можно получить из параметров)
-            String entityType = getEntityTypeFromParams(params);
-            options.getAdditionalParams().put("entityType", entityType);
-            log.debug("Тип сущности для импорта: {}", entityType);
-
-            // Проверяем, является ли импорт составным
-            boolean isComposite = isCompositeImport(params);
-            options.getAdditionalParams().put("composite", String.valueOf(isComposite));
-            log.debug("Составной импорт: {}", isComposite);
-
-            // Получаем маппинг полей
-            Map<String, String> fieldMapping = mappingId != null
-                    ? fieldMappingService.getMappingById(mappingId)
-                    : null;
-
-            // Если маппинг не указан, можем попробовать автоматически сопоставить поля
-            if (fieldMapping == null || fieldMapping.isEmpty()) {
-                Map<String, Object> fileAnalysis = processor.analyzeFile(filePath, params);
-                if (fileAnalysis.containsKey("headers")) {
-                    @SuppressWarnings("unchecked")
-                    List<String> headers = (List<String>) fileAnalysis.get("headers");
-                    fieldMapping = fieldMappingService.suggestMapping(headers, entityType);
-                    log.debug("Автоматически создан маппинг полей: {}", fieldMapping);
-                } else {
-                    throw new FileOperationException("Не удалось определить заголовки файла");
-                }
-            }
-
-            // Меняем статус операции на "в процессе"
-            operation.markAsProcessing();
-            operation = fileOperationRepository.save(operation);
-            List<ImportableEntity> entities;
-
-            // В зависимости от типа импорта, используем соответствующую логику
-            if (isComposite) {
-                // Преобразуем Map в FileReadingOptions
-                options = FileReadingOptions.fromMap(params);
-
-                // Используем метод с FileReadingOptions
-                entities = processCompositeEntitiesWithOptions(processor, filePath, entityType, client, fieldMapping, options, operation);
-            } else {
-                // Стандартная логика для одиночных сущностей
-                entities = processor.processFile(filePath, entityType, client, fieldMapping, params, operation);
-            }
-
-            // Сохраняем сущности в БД
-            int savedEntities = saveEntities(entities, entityType);
-
-            // Обновляем статус операции
-            operation.markAsCompleted(savedEntities);
-            operation = fileOperationRepository.save(operation);
-
-            log.info("Файл успешно обработан: {}, создано сущностей: {}", filePath, savedEntities);
-
-            // Перемещаем файл из временной директории в постоянную
-            Path permanentPath = pathResolver.moveFromTempToUpload(filePath, "imported_" + client.getId());
-            operation.setResultFilePath(permanentPath.toString());
-            operation = fileOperationRepository.save(operation);
-
-            return mapToDto(operation);
-        } catch (Exception e) {
-            log.error("Ошибка при обработке файла: {}", e.getMessage(), e);
-            operation.markAsFailed(e.getMessage());
-            operation = fileOperationRepository.save(operation);
-            throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
-        }
     }
 
     /**
@@ -636,36 +436,6 @@ public class FileImportServiceImpl implements FileImportService {
         }
 
         return Arrays.asList(relatedEntitiesStr.split(","));
-    }
-
-    /**
-     * Обрабатывает файл для составных сущностей.
-     *
-     * @param processor      процессор файлов
-     * @param filePath       путь к файлу
-     * @param mainEntityType основной тип сущности
-     * @param client         клиент
-     * @param fieldMapping   маппинг полей
-     * @param params         параметры
-     * @param operation      информация об операции
-     * @return список созданных сущностей
-     */
-    private List<ImportableEntity> processCompositeEntities(
-            FileProcessor processor,
-            Path filePath,
-            String mainEntityType,
-            Client client,
-            Map<String, String> fieldMapping,
-            Map<String, String> params,
-            FileOperation operation) {
-
-        log.info("Обработка составных сущностей. Основной тип: {}", mainEntityType);
-
-        // Преобразуем Map в FileReadingOptions
-        FileReadingOptions options = FileReadingOptions.fromMap(params);
-
-        // Делегируем выполнение методу с поддержкой FileReadingOptions
-        return processCompositeEntitiesWithOptions(processor, filePath, mainEntityType, client, fieldMapping, options, operation);
     }
 
     /**

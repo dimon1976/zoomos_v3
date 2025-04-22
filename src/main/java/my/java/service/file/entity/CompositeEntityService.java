@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/entity/CompositeEntityService.java
 package my.java.service.file.entity;
 
 import lombok.RequiredArgsConstructor;
@@ -10,8 +11,6 @@ import my.java.model.entity.Region;
 import my.java.service.entity.competitor.CompetitorService;
 import my.java.service.entity.product.ProductService;
 import my.java.service.entity.region.RegionService;
-import my.java.service.file.metadata.EntityMetadata;
-import my.java.service.file.metadata.EntityRegistry;
 import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import org.springframework.stereotype.Service;
@@ -19,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
 /**
  * Сервис для работы с составными сущностями при импорте и экспорте
@@ -34,17 +32,11 @@ public class CompositeEntityService {
     private final CompetitorService competitorService;
     private final ValueTransformerFactory transformerFactory;
 
-    // Кэш для хранения созданных сущностей Product по их внешним идентификаторам
+    // Кэш для хранения созданных сущностей Product
     private final Map<String, Product> productCache = new ConcurrentHashMap<>();
 
     /**
-     * Обработка строки данных из файла для импорта в составные сущности с использованием FileReadingOptions
-     *
-     * @param data карта данных из файла (ключ - заголовок, значение - строковое значение)
-     * @param mappedFields карта маппинга полей (ключ - заголовок файла, значение - поле сущности с префиксом)
-     * @param clientId идентификатор клиента
-     * @param options параметры обработки в формате FileReadingOptions
-     * @return список созданных сущностей
+     * Обработка строки данных из файла для импорта в составные сущности
      */
     @Transactional
     public List<ImportableEntity> processRowWithOptions(
@@ -53,23 +45,18 @@ public class CompositeEntityService {
             Long clientId,
             FileReadingOptions options) {
 
-        log.debug("Обработка строки данных для импорта в составные сущности с FileReadingOptions");
-
         // Подготавливаем карты данных для каждой сущности
         Map<String, Map<String, String>> entityData = prepareEntityData(data, mappedFields);
-
         List<ImportableEntity> resultEntities = new ArrayList<>();
-
-        // Получаем стратегию обработки дубликатов из options
         String duplicateHandling = options.getDuplicateHandling();
 
-        // Сначала обрабатываем основную сущность (Product)
+        // Обрабатываем основную сущность (Product)
         if (entityData.containsKey("product")) {
             Product product = processProductDataWithOptions(entityData.get("product"), clientId, duplicateHandling);
             if (product != null) {
                 resultEntities.add(product);
 
-                // Затем обрабатываем связанные сущности
+                // Обрабатываем связанные сущности
                 if (entityData.containsKey("region")) {
                     Region region = processRegionData(entityData.get("region"), product, clientId);
                     if (region != null) {
@@ -91,11 +78,6 @@ public class CompositeEntityService {
 
     /**
      * Обработка данных для сущности Product с учетом стратегии обработки дубликатов
-     *
-     * @param data данные для продукта
-     * @param clientId идентификатор клиента
-     * @param duplicateHandling стратегия обработки дубликатов
-     * @return созданный или обновленный продукт
      */
     private Product processProductDataWithOptions(
             Map<String, String> data,
@@ -108,31 +90,26 @@ public class CompositeEntityService {
             product.setClientId(clientId);
 
             // Заполняем поля продукта
-            boolean filled = product.fillFromMap(data);
-            if (!filled) {
-                log.error("Не удалось заполнить сущность Product данными");
+            if (!product.fillFromMap(data)) {
                 return null;
             }
 
             // Проверяем существование продукта по его внешнему идентификатору
             if (product.getProductId() != null) {
                 // Проверяем кэш
-                Product cachedProduct = productCache.get(clientId + "_" + product.getProductId());
+                String cacheKey = clientId + "_" + product.getProductId();
+                Product cachedProduct = productCache.get(cacheKey);
+
                 if (cachedProduct != null) {
-                    log.debug("Найден продукт в кэше: {}", product.getProductId());
-
-                    // Если стратегия "error", выбрасываем исключение при дубликате
-                    if ("error".equals(duplicateHandling)) {
-                        throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                    // Обрабатываем по выбранной стратегии
+                    switch (duplicateHandling) {
+                        case "error":
+                            throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                        case "skip":
+                            return cachedProduct;
+                        case "update":
+                            return updateExistingProduct(cachedProduct, product);
                     }
-
-                    // Если стратегия "skip", просто возвращаем существующий продукт без обновления
-                    if ("skip".equals(duplicateHandling)) {
-                        return cachedProduct;
-                    }
-
-                    // Если стратегия "update", обновляем существующий продукт
-                    return updateExistingProduct(cachedProduct, product);
                 }
 
                 // Проверяем БД
@@ -142,26 +119,18 @@ public class CompositeEntityService {
                 if (existingProduct.isPresent()) {
                     Product existing = existingProduct.get();
 
-                    // Если стратегия "error", выбрасываем исключение при дубликате
-                    if ("error".equals(duplicateHandling)) {
-                        throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                    // Обрабатываем по выбранной стратегии
+                    switch (duplicateHandling) {
+                        case "error":
+                            throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                        case "skip":
+                            productCache.put(cacheKey, existing);
+                            return existing;
+                        case "update":
+                            Product updatedProduct = updateExistingProduct(existing, product);
+                            productCache.put(cacheKey, updatedProduct);
+                            return updatedProduct;
                     }
-
-                    // Если стратегия "skip", просто возвращаем существующий продукт без обновления
-                    if ("skip".equals(duplicateHandling)) {
-                        // Добавляем в кэш
-                        productCache.put(clientId + "_" + existing.getProductId(), existing);
-                        return existing;
-                    }
-
-                    // Если стратегия "update", обновляем существующий продукт
-                    Product updatedProduct = updateExistingProduct(existing, product);
-
-                    // Добавляем в кэш
-                    productCache.put(clientId + "_" + updatedProduct.getProductId(), updatedProduct);
-
-                    log.debug("Обновлен существующий продукт: {}", updatedProduct.getProductId());
-                    return updatedProduct;
                 }
             }
 
@@ -173,21 +142,15 @@ public class CompositeEntityService {
                 productCache.put(clientId + "_" + savedProduct.getProductId(), savedProduct);
             }
 
-            log.debug("Создан новый продукт: {}", savedProduct.getId());
             return savedProduct;
-
         } catch (Exception e) {
-            log.error("Ошибка при обработке данных Product: {}", e.getMessage(), e);
+            log.error("Ошибка при обработке данных Product: {}", e.getMessage());
             return null;
         }
     }
 
     /**
      * Обновляет поля существующего продукта
-     *
-     * @param existing существующий продукт
-     * @param newData новые данные
-     * @return обновленный продукт
      */
     private Product updateExistingProduct(Product existing, Product newData) {
         // Обновляем поля существующего продукта
@@ -207,24 +170,15 @@ public class CompositeEntityService {
         existing.setProductAdditional4(newData.getProductAdditional4());
         existing.setProductAdditional5(newData.getProductAdditional5());
 
-        // Сохраняем обновленный продукт
         return productService.saveProduct(existing);
     }
 
     /**
      * Подготовка данных для каждой сущности из общей карты данных
-     *
-     * @param data карта данных из файла
-     * @param mappedFields карта маппинга полей
-     * @return карта данных для каждой сущности
      */
     private Map<String, Map<String, String>> prepareEntityData(Map<String, String> data,
                                                                Map<String, String> mappedFields) {
         Map<String, Map<String, String>> result = new HashMap<>();
-
-        // Логируем входные данные для отладки
-        log.debug("Данные для обработки: {}", data.keySet());
-        log.debug("Маппинг полей: {}", mappedFields);
 
         // Проверяем маппинг для каждого поля из входных данных
         for (Map.Entry<String, String> dataEntry : data.entrySet()) {
@@ -236,79 +190,41 @@ public class CompositeEntityService {
                 continue;
             }
 
-            // Проверяем варианты обработки:
-
-            // 1. Ключ уже в формате с префиксом (product.xxx)
+            // Ключ уже в формате с префиксом (product.xxx)
             if (key.contains(".")) {
                 String[] parts = key.split("\\.", 2);
                 if (parts.length == 2) {
-                    String entityType = parts[0];
-                    String fieldName = parts[1];
-
-                    result.computeIfAbsent(entityType, k -> new HashMap<>())
-                            .put(fieldName, value);
+                    result.computeIfAbsent(parts[0], k -> new HashMap<>())
+                            .put(parts[1], value);
                     continue;
                 }
             }
 
-            // 2. Поиск маппинга в mappedFields
-            boolean mappingFound = false;
+            // Поиск маппинга
             for (Map.Entry<String, String> mapping : mappedFields.entrySet()) {
-                // Если ключ из data совпадает с ключом из mappedFields
                 if (key.equalsIgnoreCase(mapping.getKey())) {
                     String prefixedField = mapping.getValue();
-
-                    // Если значение маппинга имеет формат с префиксом
                     if (prefixedField != null && prefixedField.contains(".")) {
                         String[] parts = prefixedField.split("\\.", 2);
-                        if (parts.length == 2) {
-                            String entityType = parts[0];
-                            String fieldName = parts[1];
-
-                            result.computeIfAbsent(entityType, k -> new HashMap<>())
-                                    .put(fieldName, value);
-                            mappingFound = true;
-                            break;
-                        }
+                        result.computeIfAbsent(parts[0], k -> new HashMap<>())
+                                .put(parts[1], value);
+                        break;
                     }
                 }
             }
-
-            if (!mappingFound) {
-                log.debug("Не найден маппинг для поля: {}", key);
-            }
         }
 
-        log.debug("Подготовленные данные по сущностям: {}", result);
         return result;
     }
 
     /**
      * Обработка данных для сущности Region
-     *
-     * @param data данные для региона
-     * @param product связанный продукт
-     * @param clientId идентификатор клиента
-     * @return созданный или обновленный регион
      */
     private Region processRegionData(Map<String, String> data, Product product, Long clientId) {
         try {
-            // Проверяем, содержит ли карта данных достаточно информации с префиксом region.
-            boolean hasRegionData = false;
-            for (String key : data.keySet()) {
-                if (key.startsWith("region")) {
-                    String value = data.get(key);
-                    if (value != null && !value.trim().isEmpty()) {
-                        hasRegionData = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!hasRegionData) {
-                log.debug("Недостаточно данных для региона");
-                return null;
-            }
+            // Проверяем наличие данных для региона
+            boolean hasRegionData = hasEntityData(data, "region");
+            if (!hasRegionData) return null;
 
             Region region = new Region();
             region.setTransformerFactory(transformerFactory);
@@ -316,18 +232,7 @@ public class CompositeEntityService {
             region.setProduct(product);
 
             // Заполняем поля региона
-            boolean filled = region.fillFromMap(data);
-            if (!filled) {
-                log.error("Не удалось заполнить сущность Region данными");
-                return null;
-            }
-
-            // Валидируем сущность
-//            String validationError = region.validate();
-//            if (validationError != null) {
-//                log.error("Ошибка валидации Region: {}", validationError);
-//                return null;
-//            }
+            if (!region.fillFromMap(data)) return null;
 
             // Проверяем существование региона
             Optional<Region> existingRegion = regionService.findByRegionAndProductId(
@@ -335,55 +240,25 @@ public class CompositeEntityService {
 
             if (existingRegion.isPresent()) {
                 Region existing = existingRegion.get();
-
-                // Обновляем поля существующего региона
                 existing.setRegionAddress(region.getRegionAddress());
-
-                // Сохраняем обновленный регион
-                Region savedRegion = regionService.saveRegion(existing);
-
-                log.debug("Обновлен существующий регион: {}", savedRegion.getRegion());
-                return savedRegion;
+                return regionService.saveRegion(existing);
             }
 
-            // Создаем новый регион
-            Region savedRegion = regionService.saveRegion(region);
-
-            log.debug("Создан новый регион: {}", savedRegion.getId());
-            return savedRegion;
-
+            return regionService.saveRegion(region);
         } catch (Exception e) {
-            log.error("Ошибка при обработке данных Region: {}", e.getMessage(), e);
+            log.error("Ошибка при обработке данных Region: {}", e.getMessage());
             return null;
         }
     }
 
     /**
      * Обработка данных для сущности Competitor
-     *
-     * @param data данные для конкурента
-     * @param product связанный продукт
-     * @param clientId идентификатор клиента
-     * @return созданный или обновленный конкурент
      */
     private Competitor processCompetitorData(Map<String, String> data, Product product, Long clientId) {
         try {
-            // Проверяем, содержит ли карта данных достаточно информации с префиксом competitor
-            boolean hasRegionData = false;
-            for (String key : data.keySet()) {
-                if (key.startsWith("competitor")) {
-                    String value = data.get(key);
-                    if (value != null && !value.trim().isEmpty()) {
-                        hasRegionData = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!hasRegionData) {
-                log.debug("Недостаточно данных для конкурента");
-                return null;
-            }
+            // Проверяем наличие данных для конкурента
+            boolean hasCompetitorData = hasEntityData(data, "competitor");
+            if (!hasCompetitorData) return null;
 
             Competitor competitor = new Competitor();
             competitor.setTransformerFactory(transformerFactory);
@@ -391,18 +266,7 @@ public class CompositeEntityService {
             competitor.setProduct(product);
 
             // Заполняем поля конкурента
-            boolean filled = competitor.fillFromMap(data);
-            if (!filled) {
-                log.error("Не удалось заполнить сущность Competitor данными");
-                return null;
-            }
-
-            // Валидируем сущность
-//            String validationError = competitor.validate();
-//            if (validationError != null) {
-//                log.error("Ошибка валидации Competitor: {}", validationError);
-//                return null;
-//            }
+            if (!competitor.fillFromMap(data)) return null;
 
             // Проверяем существование конкурента
             Optional<Competitor> existingCompetitor = competitorService.findByCompetitorNameAndProductId(
@@ -410,34 +274,34 @@ public class CompositeEntityService {
 
             if (existingCompetitor.isPresent()) {
                 Competitor existing = existingCompetitor.get();
-
-                // Обновляем поля существующего конкурента
                 updateCompetitorFields(existing, competitor);
-
-                // Сохраняем обновленного конкурента
-                Competitor savedCompetitor = competitorService.saveCompetitor(existing);
-
-                log.debug("Обновлен существующий конкурент: {}", savedCompetitor.getCompetitorName());
-                return savedCompetitor;
+                return competitorService.saveCompetitor(existing);
             }
 
-            // Создаем нового конкурента
-            Competitor savedCompetitor = competitorService.saveCompetitor(competitor);
-
-            log.debug("Создан новый конкурент: {}", savedCompetitor.getId());
-            return savedCompetitor;
-
+            return competitorService.saveCompetitor(competitor);
         } catch (Exception e) {
-            log.error("Ошибка при обработке данных Competitor: {}", e.getMessage(), e);
+            log.error("Ошибка при обработке данных Competitor: {}", e.getMessage());
             return null;
         }
     }
 
     /**
+     * Проверяет наличие данных для указанной сущности
+     */
+    private boolean hasEntityData(Map<String, String> data, String entityPrefix) {
+        for (String key : data.keySet()) {
+            if (key.startsWith(entityPrefix)) {
+                String value = data.get(key);
+                if (value != null && !value.trim().isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Обновление полей существующего конкурента
-     *
-     * @param target целевой объект для обновления
-     * @param source источник данных
      */
     private void updateCompetitorFields(Competitor target, Competitor source) {
         target.setCompetitorPrice(source.getCompetitorPrice());
@@ -457,22 +321,15 @@ public class CompositeEntityService {
 
     /**
      * Экспорт данных из составных сущностей
-     *
-     * @param mainEntityType тип основной сущности
-     * @param id идентификатор сущности
-     * @param fields список полей для экспорта
-     * @return карта данных для экспорта
      */
     public Map<String, String> exportEntityData(String mainEntityType, Long id, List<String> fields) {
         if (!"product".equals(mainEntityType)) {
-            log.error("Экспорт поддерживается только для основной сущности 'product'");
             return Collections.emptyMap();
         }
 
-        // Получаем продукт и связанные сущности
+        // Получаем продукт
         Optional<Product> productOpt = productService.findById(id);
         if (productOpt.isEmpty()) {
-            log.error("Продукт с ID {} не найден", id);
             return Collections.emptyMap();
         }
 
@@ -482,10 +339,7 @@ public class CompositeEntityService {
         // Обрабатываем каждое поле
         for (String field : fields) {
             String[] parts = field.split("\\.", 2);
-            if (parts.length != 2) {
-                log.warn("Некорректный формат поля: {}", field);
-                continue;
-            }
+            if (parts.length != 2) continue;
 
             String entityType = parts[0];
             String fieldName = parts[1];
@@ -493,24 +347,18 @@ public class CompositeEntityService {
             // В зависимости от типа сущности, получаем значение поля
             switch (entityType) {
                 case "product":
-                    addProductField(result, product, field, fieldName);
+                    addEntityField(result, product, field, fieldName);
                     break;
                 case "region":
-                    // Для региона берем первый связанный регион (если есть)
                     if (!product.getRegionList().isEmpty()) {
-                        Region region = product.getRegionList().get(0);
-                        addRegionField(result, region, field, fieldName);
+                        addEntityField(result, product.getRegionList().get(0), field, fieldName);
                     }
                     break;
                 case "competitor":
-                    // Для конкурента берем первого связанного конкурента (если есть)
                     if (!product.getCompetitorList().isEmpty()) {
-                        Competitor competitor = product.getCompetitorList().get(0);
-                        addCompetitorField(result, competitor, field, fieldName);
+                        addEntityField(result, product.getCompetitorList().get(0), field, fieldName);
                     }
                     break;
-                default:
-                    log.warn("Неизвестный тип сущности: {}", entityType);
             }
         }
 
@@ -518,78 +366,36 @@ public class CompositeEntityService {
     }
 
     /**
-     * Добавление поля продукта в результат экспорта
+     * Добавление поля сущности в результат экспорта
      */
-    private void addProductField(Map<String, String> result, Product product, String fullField, String fieldName) {
+    private void addEntityField(Map<String, String> result, Object entity, String fullField, String fieldName) {
         try {
             // Используем рефлексию для получения значения поля
-            java.lang.reflect.Method getter = product.getClass().getMethod(
+            java.lang.reflect.Method getter = entity.getClass().getMethod(
                     "get" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1));
-            Object value = getter.invoke(product);
+            Object value = getter.invoke(entity);
 
             // Преобразуем значение в строку
             result.put(fullField, value != null ? transformerFactory.toString(value, null) : "");
         } catch (Exception e) {
-            log.warn("Ошибка при получении поля {} продукта: {}", fieldName, e.getMessage());
-        }
-    }
-
-    /**
-     * Добавление поля региона в результат экспорта
-     */
-    private void addRegionField(Map<String, String> result, Region region, String fullField, String fieldName) {
-        try {
-            // Используем рефлексию для получения значения поля
-            java.lang.reflect.Method getter = region.getClass().getMethod(
-                    "get" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1));
-            Object value = getter.invoke(region);
-
-            // Преобразуем значение в строку
-            result.put(fullField, value != null ? transformerFactory.toString(value, null) : "");
-        } catch (Exception e) {
-            log.warn("Ошибка при получении поля {} региона: {}", fieldName, e.getMessage());
-        }
-    }
-
-    /**
-     * Добавление поля конкурента в результат экспорта
-     */
-    private void addCompetitorField(Map<String, String> result, Competitor competitor, String fullField, String fieldName) {
-        try {
-            // Используем рефлексию для получения значения поля
-            java.lang.reflect.Method getter = competitor.getClass().getMethod(
-                    "get" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1));
-            Object value = getter.invoke(competitor);
-
-            // Преобразуем значение в строку
-            result.put(fullField, value != null ? transformerFactory.toString(value, null) : "");
-        } catch (Exception e) {
-            log.warn("Ошибка при получении поля {} конкурента: {}", fieldName, e.getMessage());
+            log.warn("Ошибка при получении поля {} сущности: {}", fieldName, e.getMessage());
         }
     }
 
     /**
      * Создание новой сущности по типу
-     *
-     * @param entityType тип сущности
-     * @return новая сущность или null, если тип не поддерживается
      */
     public ImportableEntity createEntityInstance(String entityType) {
         ImportableEntity entity = null;
 
         switch (entityType) {
-            case "product":
-                entity = new Product();
-                break;
-            case "region":
-                entity = new Region();
-                break;
-            case "competitor":
-                entity = new Competitor();
-                break;
-            default:
+            case "product" -> entity = new Product();
+            case "region" -> entity = new Region();
+            case "competitor" -> entity = new Competitor();
+            default -> {
                 log.warn("Неизвестный тип сущности: {}", entityType);
                 return null;
+            }
         }
 
         // Устанавливаем трансформер
@@ -608,6 +414,5 @@ public class CompositeEntityService {
      */
     public void clearCache() {
         productCache.clear();
-        log.debug("Кэш продуктов очищен");
     }
 }

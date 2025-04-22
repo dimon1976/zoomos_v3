@@ -71,7 +71,8 @@ public class ImportController {
             @RequestParam(value = "mappingId", required = false) Long mappingId,
             @RequestParam(value = "composite", required = false, defaultValue = "false") boolean isComposite,
             @RequestParam Map<String, String> allParams,
-            RedirectAttributes redirectAttributes) {
+            RedirectAttributes redirectAttributes)
+    {
         if (file.isEmpty()) {
             redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите файл для загрузки");
             return "redirect:/clients/" + clientId + "/import";

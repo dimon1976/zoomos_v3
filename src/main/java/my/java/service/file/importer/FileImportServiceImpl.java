@@ -75,15 +75,10 @@ public class FileImportServiceImpl implements FileImportService {
             Path tempFilePath = pathResolver.saveToTempFile(file, "analyze");
 
             // Получаем подходящий процессор для файла
-            Optional<FileProcessor> processorOpt = fileProcessorFactory.createProcessor(tempFilePath);
-            if (processorOpt.isEmpty()) {
-                throw new FileOperationException("Не найден подходящий процессор для файла: " + file.getOriginalFilename());
-            }
-
-            FileProcessor processor = processorOpt.get();
+            FileProcessor processor = fileProcessorFactory.createProcessor(tempFilePath)
+                    .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла"));
 
             // Анализируем файл с использованием FileReadingOptions
-            // Пока вызываем существующий метод с преобразованием в Map для обратной совместимости
             Map<String, Object> result = processor.analyzeFileWithOptions(tempFilePath, options);
 
             // Добавляем информацию о процессоре
@@ -110,9 +105,8 @@ public class FileImportServiceImpl implements FileImportService {
             Long strategyId,
             FileReadingOptions options) {
 
-        log.info("Начало асинхронного импорта файла с FileReadingOptions: {}, клиент: {}, составная сущность: {}",
-                file.getOriginalFilename(), client.getName(),
-                Boolean.parseBoolean(options.getAdditionalParam("composite", "false")));
+        log.info("Начало асинхронного импорта файла с FileReadingOptions: {}, клиент: {}",
+                file.getOriginalFilename(), client.getName());
 
         try {
             // Сохраняем файл во временную директорию
@@ -165,33 +159,26 @@ public class FileImportServiceImpl implements FileImportService {
             Long strategyId,
             FileReadingOptions options) {
 
-        log.info("Обработка загруженного файла с FileReadingOptions: {}, клиент: {}", filePath, client.getName());
+        log.info("Обработка загруженного файла с FileReadingOptions: {}", filePath);
 
         // Создаем запись об операции, если еще не создана
         FileOperation operation = findOrCreateFileOperation(client, filePath);
 
         try {
-            // Валидация и логирование параметров
-            options.validate().logSettings(log);
+            // Валидация параметров
+            options.validate();
 
             // Получаем подходящий процессор для файла
-            Optional<FileProcessor> processorOpt = fileProcessorFactory.createProcessor(filePath);
-            if (processorOpt.isEmpty()) {
-                throw new FileOperationException("Не найден подходящий процессор для файла: " + filePath);
-            }
-
-            FileProcessor processor = processorOpt.get();
-            log.debug("Выбран процессор: {}", processor.getClass().getSimpleName());
+            FileProcessor processor = fileProcessorFactory.createProcessor(filePath)
+                    .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла"));
 
             // Определяем тип сущности для импорта из дополнительных параметров
             String entityType = options.getAdditionalParam("entityType", "product");
-            log.debug("Тип сущности для импорта: {}", entityType);
 
             // Проверяем, является ли импорт составным
             boolean isComposite = Boolean.parseBoolean(options.getAdditionalParam("composite", "false"));
-            log.debug("Составной импорт: {}", isComposite);
 
-            // Обновляем стратегию обработки на основе типа сущности и клиента
+            // Обновляем стратегию обработки
             options.updateStrategy(entityType, client.getId());
 
             // Получаем маппинг полей
@@ -199,7 +186,7 @@ public class FileImportServiceImpl implements FileImportService {
                     ? fieldMappingService.getMappingById(mappingId)
                     : null;
 
-            // Если маппинг не указан, можем попробовать автоматически сопоставить поля
+            // Если маппинг не указан, попытка автоматического сопоставления
             if (fieldMapping == null || fieldMapping.isEmpty()) {
                 Map<String, Object> fileAnalysis = processor.analyzeFileWithOptions(filePath, options);
                 if (fileAnalysis.containsKey("headers")) {
@@ -224,7 +211,7 @@ public class FileImportServiceImpl implements FileImportService {
 
             // В зависимости от типа импорта, используем соответствующую логику
             if (isComposite) {
-                // Логика для составных сущностей с использованием FileReadingOptions
+                // Логика для составных сущностей
                 entities = processCompositeEntitiesWithOptions(processor, filePath, entityType, client, fieldMapping, options, operation);
             } else {
                 // Стандартная логика для одиночных сущностей
@@ -351,7 +338,7 @@ public class FileImportServiceImpl implements FileImportService {
      *
      * @param processor      процессор файлов
      * @param filePath       путь к файлу
-     * @param mainEntityType основной тип сущности
+     * @param entityType основной тип сущности
      * @param client         клиент
      * @param fieldMapping   маппинг полей
      * @param options        параметры обработки
@@ -361,19 +348,13 @@ public class FileImportServiceImpl implements FileImportService {
     private List<ImportableEntity> processCompositeEntitiesWithOptions(
             FileProcessor processor,
             Path filePath,
-            String mainEntityType,
+            String entityType,
             Client client,
             Map<String, String> fieldMapping,
             FileReadingOptions options,
             FileOperation operation) {
 
-        log.info("Обработка составных сущностей с FileReadingOptions. Основной тип: {}", mainEntityType);
-
-        // Получаем связанные сущности
-        List<String> relatedEntities = getRelatedEntitiesFromOptions(options);
-        log.debug("Связанные сущности: {}", relatedEntities);
-
-        // Используем процессор для получения сырых данных из файла
+        // Получаем сырые данные из файла
         List<Map<String, String>> rawData = processor.readRawDataWithOptions(filePath, options);
         log.debug("Прочитано {} строк данных из файла", rawData.size());
 
@@ -385,6 +366,7 @@ public class FileImportServiceImpl implements FileImportService {
         // Результирующий список сущностей
         List<ImportableEntity> resultEntities = new ArrayList<>();
         int processedRecords = 0;
+        String errorHandling = options.getErrorHandling();
 
         // Обрабатываем каждую строку данных
         for (Map<String, String> row : rawData) {
@@ -394,21 +376,25 @@ public class FileImportServiceImpl implements FileImportService {
                 // Применяем маппинг полей перед обработкой
                 Map<String, String> mappedData = applyFieldMapping(row, fieldMapping);
 
-                // Обрабатываем строку данных и получаем список сущностей с FileReadingOptions
+                // Обрабатываем строку данных и получаем список сущностей
                 List<ImportableEntity> entitiesFromRow = compositeEntityService.processRowWithOptions(
                         mappedData, fieldMapping, client.getId(), options);
 
                 // Добавляем созданные сущности в результат
                 resultEntities.addAll(entitiesFromRow);
-
             } catch (Exception e) {
                 // Обработка ошибок в зависимости от настроек
-                String errorHandling = options.getErrorHandling();
                 if ("stop".equals(errorHandling)) {
                     throw new FileOperationException("Ошибка при обработке строки " + processedRecords + ": " + e.getMessage());
                 } else {
                     log.warn("Ошибка при обработке строки {}: {}", processedRecords, e.getMessage());
                 }
+            }
+
+            // Обновляем прогресс
+            if (operation != null) {
+                int progress = (int) (((double) processedRecords / rawData.size()) * 100);
+                operation.setProcessingProgress(progress);
             }
         }
 
@@ -417,25 +403,6 @@ public class FileImportServiceImpl implements FileImportService {
 
         log.info("Обработка составных сущностей завершена. Создано сущностей: {}", resultEntities.size());
         return resultEntities;
-    }
-
-    /**
-     * Получает список связанных сущностей из параметров FileReadingOptions.
-     *
-     * @param options параметры обработки
-     * @return список связанных сущностей
-     */
-    private List<String> getRelatedEntitiesFromOptions(FileReadingOptions options) {
-        if (options == null) {
-            return Collections.emptyList();
-        }
-
-        String relatedEntitiesStr = options.getAdditionalParam("relatedEntities", "");
-        if (relatedEntitiesStr.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        return Arrays.asList(relatedEntitiesStr.split(","));
     }
 
     /**
@@ -462,20 +429,6 @@ public class FileImportServiceImpl implements FileImportService {
         }
 
         return result;
-    }
-
-
-    /**
-     * Проверяет, является ли импорт составным.
-     *
-     * @param params параметры импорта
-     * @return true, если импорт составной
-     */
-    private boolean isCompositeImport(Map<String, String> params) {
-        if (params == null) {
-            return false;
-        }
-        return Boolean.parseBoolean(params.getOrDefault("composite", "false"));
     }
 
     @Override
@@ -599,20 +552,6 @@ public class FileImportServiceImpl implements FileImportService {
             return fileName.substring(lastDotIndex + 1).toUpperCase();
         }
         return "UNKNOWN";
-    }
-
-    /**
-     * Получает тип сущности из параметров.
-     * Если тип не указан, возвращает значение по умолчанию.
-     *
-     * @param params параметры
-     * @return тип сущности
-     */
-    private String getEntityTypeFromParams(Map<String, String> params) {
-        if (params != null && params.containsKey("entityType")) {
-            return params.get("entityType");
-        }
-        return "product"; // По умолчанию - продукт
     }
 
     /**

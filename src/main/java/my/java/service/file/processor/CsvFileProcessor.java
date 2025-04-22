@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/processor/CsvFileProcessor.java
 package my.java.service.file.processor;
 
 import com.opencsv.CSVParser;
@@ -7,10 +8,6 @@ import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvException;
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
-import my.java.model.entity.Competitor;
-import my.java.model.entity.ImportableEntity;
-import my.java.model.entity.Product;
-import my.java.model.entity.Region;
 import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
@@ -32,33 +29,12 @@ import java.util.*;
 @Slf4j
 public class CsvFileProcessor extends AbstractFileProcessor {
 
-    private static final String[] SUPPORTED_EXTENSIONS = new String[]{"csv", "txt"};
-    private static final String[] SUPPORTED_MIME_TYPES = new String[]{"text/csv", "text/plain"};
-
-    // Возможные разделители для автоопределения
+    private static final String[] SUPPORTED_EXTENSIONS = {"csv", "txt"};
+    private static final String[] SUPPORTED_MIME_TYPES = {"text/csv", "text/plain"};
     private static final char[] POSSIBLE_DELIMITERS = {',', ';', '\t', '|'};
+    private static final int SAMPLE_SIZE = 10;
+    private static final int MAX_HEADER_ROW = 10;
 
-    // Параметры по умолчанию
-    private static final char DEFAULT_DELIMITER = ',';
-    private static final char DEFAULT_QUOTE = '"';
-    private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
-    private static final int SAMPLE_SIZE = 10000; // Размер выборки для анализа
-    private static final int MAX_HEADER_ROW = 10; // Максимальный номер строки для поиска заголовков
-
-    // Константы для имен параметров
-    private static final String PARAM_DELIMITER = "delimiter";
-    private static final String PARAM_QUOTE_CHAR = "quoteChar";
-    private static final String PARAM_CHARSET = "charset";
-    private static final String PARAM_HEADER_ROW = "headerRow";
-    private static final String PARAM_SKIP_EMPTY_ROWS = "skipEmptyRows";
-    private static final String PARAM_TRIM_WHITESPACE = "trimWhitespace";
-
-    /**
-     * Конструктор для CSV процессора.
-     *
-     * @param pathResolver       утилита для работы с путями
-     * @param transformerFactory фабрика трансформеров значений
-     */
     @Autowired
     public CsvFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
         super(pathResolver, transformerFactory);
@@ -76,29 +52,21 @@ public class CsvFileProcessor extends AbstractFileProcessor {
 
     @Override
     public boolean canProcess(Path filePath) {
-        if (filePath == null || !Files.exists(filePath)) {
-            return false;
-        }
+        if (filePath == null || !Files.exists(filePath)) return false;
 
         String fileName = filePath.getFileName().toString().toLowerCase();
         for (String ext : SUPPORTED_EXTENSIONS) {
-            if (fileName.endsWith("." + ext)) {
-                return true;
-            }
+            if (fileName.endsWith("." + ext)) return true;
         }
-
-        // Можно добавить дополнительную проверку содержимого файла
         return false;
     }
 
     @Override
-    protected List<Map<String, String>> readFile(Path filePath, Map<String, String> params) throws IOException {
-        log.debug("Чтение CSV файла: {}", filePath);
+    protected List<Map<String, String>> readFileWithOptions(Path filePath, FileReadingOptions options) throws IOException {
+        // Дополнительно определяем параметры, если они не заданы
+        detectFileOptionsIfNeeded(filePath, options);
 
-        // Определяем параметры чтения
-        FileReadingOptions options = determineReadingOptions(filePath, params);
-
-        // Создаем CSVParser с настроенными параметрами
+        // Создаем CSV Parser
         CSVParser parser = new CSVParserBuilder()
                 .withSeparator(options.getDelimiter())
                 .withQuoteChar(options.getQuoteChar())
@@ -114,120 +82,71 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                      .build()) {
 
             // Читаем заголовки
-            String[] headers = determineHeaders(filePath, options);
+            String[] headers = readHeaders(csvReader, options);
             if (headers == null || headers.length == 0) {
-                throw new FileOperationException("Не удалось определить заголовки в CSV файле: " + filePath);
+                throw new FileOperationException("Не удалось определить заголовки в CSV файле");
             }
 
             // Читаем данные
             String[] record;
-            int rowNumber = options.getHeaderRow() + 1; // строки начинаются с 1
-
             while ((record = csvReader.readNext()) != null) {
+                if (options.isSkipEmptyRows() && isEmptyRecord(record)) continue;
+
                 Map<String, String> row = new HashMap<>();
-
-                // Преобразуем запись в Map
                 for (int i = 0; i < headers.length; i++) {
-                    if (i < record.length) {
-                        row.put(headers[i], record[i]);
-                    } else {
-                        // Если значение отсутствует, добавляем пустую строку
-                        row.put(headers[i], "");
+                    String value = i < record.length ? record[i] : "";
+                    if (options.isTrimWhitespace() && value != null) {
+                        value = value.trim();
                     }
+                    row.put(headers[i], value);
                 }
-
                 result.add(row);
-                rowNumber++;
             }
-
-            log.debug("Прочитано {} записей из CSV файла", result.size());
         } catch (CsvException e) {
-            log.error("Ошибка при чтении CSV файла: {}", e.getMessage());
             throw new IOException("Ошибка при чтении CSV файла: " + e.getMessage(), e);
         }
-
         return result;
     }
 
     @Override
     protected void validateFileType(Path filePath) {
-        if (filePath == null) {
-            throw new FileOperationException("Путь к файлу не может быть null");
-        }
-
-        if (!Files.exists(filePath)) {
-            throw new FileOperationException("Файл не существует: " + filePath);
-        }
-
-        if (!Files.isRegularFile(filePath)) {
-            throw new FileOperationException("Указанный путь не является файлом: " + filePath);
-        }
-
-        if (!Files.isReadable(filePath)) {
-            throw new FileOperationException("Файл не доступен для чтения: " + filePath);
-        }
-
         String fileName = filePath.getFileName().toString().toLowerCase();
-        boolean isValidExtension = false;
-
         for (String ext : SUPPORTED_EXTENSIONS) {
             if (fileName.endsWith("." + ext)) {
-                isValidExtension = true;
-                break;
+                return;
             }
         }
-
-        if (!isValidExtension) {
-            throw new FileOperationException("Неподдерживаемый тип файла. Ожидается файл с расширением: "
-                    + String.join(", ", SUPPORTED_EXTENSIONS));
-        }
+        throw new FileOperationException("Неподдерживаемый тип файла. Ожидается: " +
+                String.join(", ", SUPPORTED_EXTENSIONS));
     }
 
     @Override
-    public List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
-        log.debug("Чтение сырых данных из CSV файла с FileReadingOptions: {}", filePath);
-
-        try {
-            // Преобразуем options в Map для использования с существующими методами
-            Map<String, String> params = options.toMap();
-
-            // Используем существующий метод
-            return readFile(filePath, params);
-        } catch (IOException e) {
-            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
-            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
-        }
-    }
-
-    @Override
-    public Map<String, Object> analyzeFile(Path filePath, Map<String, String> params) {
-        log.debug("Анализ CSV файла: {}", filePath);
-
+    public Map<String, Object> analyzeFileWithOptions(Path filePath, FileReadingOptions options) {
         Map<String, Object> result = new HashMap<>();
 
         try {
-            // Определяем параметры чтения
-            FileReadingOptions options = determineReadingOptions(filePath, params);
+            // Дополнительно определяем параметры, если они не заданы
+            detectFileOptionsIfNeeded(filePath, options);
             result.put("detectedOptions", options);
 
-            // Определяем заголовки
-            String[] headers = determineHeaders(filePath, options);
-            result.put("headers", headers);
+            // Считываем образец данных
+            List<Map<String, String>> sampleData = getSampleData(filePath, options);
+            if (sampleData.isEmpty()) {
+                result.put("error", "Не удалось получить образец данных");
+                return result;
+            }
 
-            // Получаем образец данных
-            List<Map<String, String>> sampleData = getSampleData(filePath, options, headers);
+            // Получаем заголовки
+            result.put("headers", sampleData.get(0).keySet().toArray(new String[0]));
             result.put("sampleData", sampleData);
 
             // Оцениваем количество строк
-            int estimatedRows = estimateRecordCount(filePath);
-            result.put("estimatedRows", estimatedRows);
+            result.put("estimatedRows", estimateRecordCount(filePath));
 
-            // Определяем типы данных в колонках
-            Map<String, String> columnTypes = detectColumnTypes(sampleData);
-            result.put("columnTypes", columnTypes);
+            // Определяем типы данных
+            result.put("columnTypes", detectColumnTypes(sampleData));
 
         } catch (Exception e) {
-            log.error("Ошибка при анализе CSV файла: {}", e.getMessage());
             result.put("error", e.getMessage());
         }
 
@@ -235,49 +154,18 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     }
 
     @Override
-    public boolean validateFile(Path filePath) {
-        log.debug("Валидация CSV файла: {}", filePath);
-
-        if (!Files.exists(filePath)) {
-            log.error("Файл не существует: {}", filePath);
-            return false;
-        }
-
-        if (!Files.isRegularFile(filePath)) {
-            log.error("Путь не является файлом: {}", filePath);
-            return false;
-        }
-
-        if (!Files.isReadable(filePath)) {
-            log.error("Файл не доступен для чтения: {}", filePath);
-            return false;
-        }
-
-        try {
-            // Проверяем, можно ли прочитать заголовки
-            FileReadingOptions options = determineReadingOptions(filePath, null);
-            String[] headers = determineHeaders(filePath, options);
-
-            return headers != null && headers.length > 0;
-        } catch (Exception e) {
-            log.error("Ошибка при валидации CSV файла: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    @Override
     public int estimateRecordCount(Path filePath) {
-        log.debug("Оценка количества записей в CSV файле: {}", filePath);
-
         try {
             // Получаем размер файла
             long fileSize = Files.size(filePath);
 
-            // Читаем небольшую часть файла для определения средней длины строки
+            // Считываем часть файла для определения средней длины строки
+            FileReadingOptions options = new FileReadingOptions();
+            detectFileOptionsIfNeeded(filePath, options);
+
             int sampleLines = 100;
             long sampleSize = 0;
 
-            FileReadingOptions options = determineReadingOptions(filePath, null);
             try (BufferedReader reader = Files.newBufferedReader(filePath, options.getCharset())) {
                 String line;
                 int lineCount = 0;
@@ -287,9 +175,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                     lineCount++;
                 }
 
-                if (lineCount == 0) {
-                    return 0;
-                }
+                if (lineCount == 0) return 0;
 
                 // Вычисляем среднюю длину строки
                 double avgLineLength = (double) sampleSize / lineCount;
@@ -298,7 +184,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                 return Math.max(0, (int) (fileSize / avgLineLength) - (options.getHeaderRow() + 1));
             }
         } catch (Exception e) {
-            log.error("Ошибка при оценке количества записей: {}", e.getMessage());
+            log.warn("Ошибка при оценке количества записей: {}", e.getMessage());
             return -1;
         }
     }
@@ -311,121 +197,96 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     @Override
     public Map<String, Object> getConfigParameters() {
         Map<String, Object> params = new HashMap<>();
-
-        params.put(PARAM_DELIMITER, "Разделитель полей (по умолчанию: ,)");
-        params.put(PARAM_QUOTE_CHAR, "Символ кавычек (по умолчанию: \")");
-        params.put(PARAM_CHARSET, "Кодировка файла (по умолчанию: UTF-8)");
-        params.put(PARAM_HEADER_ROW, "Номер строки заголовка (с 0, по умолчанию: 0)");
-        params.put(PARAM_SKIP_EMPTY_ROWS, "Пропускать пустые строки (по умолчанию: true)");
-        params.put(PARAM_TRIM_WHITESPACE, "Удалять пробельные символы (по умолчанию: true)");
-
+        params.put("delimiter", "Разделитель полей (по умолчанию: ,)");
+        params.put("quoteChar", "Символ кавычек (по умолчанию: \")");
+        params.put("charset", "Кодировка файла (по умолчанию: UTF-8)");
+        params.put("headerRow", "Номер строки заголовка (с 0, по умолчанию: 0)");
+        params.put("skipEmptyRows", "Пропускать пустые строки (по умолчанию: true)");
+        params.put("trimWhitespace", "Удалять пробельные символы (по умолчанию: true)");
         return params;
     }
 
     /**
-     * Безопасно извлекает значение параметра из Map.
-     *
-     * @param params       Map с параметрами
-     * @param key          ключ параметра
-     * @param defaultValue значение по умолчанию
-     * @return значение параметра или значение по умолчанию, если параметр отсутствует
+     * Получает образец данных из файла
      */
-    private String getParameterSafely(Map<String, String> params, String key, String defaultValue) {
-        if (params == null || !params.containsKey(key) || params.get(key) == null || params.get(key).isEmpty()) {
-            return defaultValue;
-        }
-        return params.get(key);
-    }
-
-    /**
-     * Безопасно извлекает целочисленное значение параметра.
-     *
-     * @param params       Map с параметрами
-     * @param key          ключ параметра
-     * @param defaultValue значение по умолчанию
-     * @return целочисленное значение параметра или значение по умолчанию при ошибке
-     */
-    private int getIntParameterSafely(Map<String, String> params, String key, int defaultValue) {
-        String value = getParameterSafely(params, key, String.valueOf(defaultValue));
+    private List<Map<String, String>> getSampleData(Path filePath, FileReadingOptions options) {
         try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            log.warn("Не удалось преобразовать параметр {} в число: {}", key, value);
-            return defaultValue;
+            // Считываем первые несколько строк данных
+            List<Map<String, String>> allData = readRawDataWithOptions(filePath, options);
+            int sampleSize = Math.min(SAMPLE_SIZE, allData.size());
+            return allData.subList(0, sampleSize);
+        } catch (Exception e) {
+            log.warn("Ошибка при получении образца данных: {}", e.getMessage());
+            return Collections.emptyList();
         }
     }
 
     /**
-     * Безопасно извлекает символьное значение параметра.
-     *
-     * @param params       Map с параметрами
-     * @param key          ключ параметра
-     * @param defaultValue значение по умолчанию
-     * @return символьное значение параметра или значение по умолчанию при ошибке
+     * Определяет, является ли запись пустой
      */
-    private char getCharParameterSafely(Map<String, String> params, String key, char defaultValue) {
-        String value = getParameterSafely(params, key, String.valueOf(defaultValue));
-        return value.isEmpty() ? defaultValue : value.charAt(0);
+    private boolean isEmptyRecord(String[] record) {
+        if (record == null || record.length == 0) return true;
+
+        for (String value : record) {
+            if (value != null && !value.trim().isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
-     * Определяет параметры чтения CSV файла, комбинируя автоопределение и пользовательские настройки.
-     *
-     * @param filePath путь к файлу
-     * @param params   параметры, указанные пользователем
-     * @return настроенные параметры чтения
+     * Читает заголовки из CSV-ридера
      */
-    private FileReadingOptions determineReadingOptions(Path filePath, Map<String, String> params) {
-        // Создаем основной объект параметров из Map
-        FileReadingOptions options = params != null ?
-                FileReadingOptions.fromMap(params) : new FileReadingOptions();
+    private String[] readHeaders(CSVReader csvReader, FileReadingOptions options) throws IOException, CsvException {
+        String[] headers = csvReader.readNext();
 
-        // Пытаемся автоматически определить параметры, если они не указаны явно
-        try {
-            detectFileOptions(filePath, options);
-        } catch (IOException e) {
-            log.error("Ошибка при автоопределении параметров файла: {}", e.getMessage());
+        if (headers != null && options.isTrimWhitespace()) {
+            // Удаляем пробелы и обрабатываем заголовки
+            for (int i = 0; i < headers.length; i++) {
+                headers[i] = headers[i].trim();
+
+                // Если заголовок пустой, генерируем имя
+                if (headers[i].isEmpty()) {
+                    headers[i] = "Column" + (i + 1);
+                }
+            }
         }
 
-        return options;
+        return headers;
     }
 
     /**
-     * Автоматически определяет параметры CSV файла.
-     *
-     * @param filePath путь к файлу
-     * @param options  объект для сохранения определенных параметров
-     * @throws IOException если возникла ошибка при чтении файла
+     * Определяет параметры чтения CSV файла, если они не заданы
      */
-    private void detectFileOptions(Path filePath, FileReadingOptions options) throws IOException {
-        // Определяем кодировку
-        Charset charset = detectCharset(filePath);
-        options.setCharset(charset);
-
-        // Читаем первые несколько строк для анализа
-        List<String> sampleLines = readSampleLines(filePath, charset, 5);
-        if (sampleLines.isEmpty()) {
-            return;
+    private void detectFileOptionsIfNeeded(Path filePath, FileReadingOptions options) throws IOException {
+        // Определяем кодировку, если не задана
+        if (options.getCharset() == null) {
+            options.setCharset(detectCharset(filePath));
         }
 
-        // Определяем разделитель
-        char delimiter = detectDelimiter(sampleLines);
-        options.setDelimiter(delimiter);
+        // Определяем разделитель и символ кавычек, если не заданы
+        List<String> sampleLines = readSampleLines(filePath, options.getCharset(), 5);
+        if (!sampleLines.isEmpty()) {
+            // Разделитель
+            if (options.getDelimiter() == null || options.getDelimiter() == ',') {
+                options.setDelimiter(detectDelimiter(sampleLines));
+            }
 
-        // Определяем символ кавычек (по умолчанию используем двойные кавычки)
-        options.setQuoteChar(detectQuoteChar(sampleLines, delimiter));
+            // Символ кавычек
+            if (options.getQuoteChar() == null || options.getQuoteChar() == '"') {
+                options.setQuoteChar(detectQuoteChar(sampleLines, options.getDelimiter()));
+            }
 
-        // Определяем номер строки заголовка
-        int headerRow = detectHeaderRow(sampleLines, delimiter, options.getQuoteChar());
-        options.setHeaderRow(headerRow);
+            // Строка заголовка
+            if (options.getHeaderRow() < 0) {
+                options.setHeaderRow(detectHeaderRow(sampleLines, options.getDelimiter(), options.getQuoteChar()));
+            }
+        }
     }
 
     /**
-     * Определяет кодировку файла.
-     *
-     * @param filePath путь к файлу
-     * @return определенная кодировка
-     * @throws IOException если возникла ошибка при чтении файла
+     * Определяет кодировку файла
      */
     private Charset detectCharset(Path filePath) throws IOException {
         UniversalDetector detector = new UniversalDetector(null);
@@ -450,17 +311,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
             }
         }
 
-        return DEFAULT_CHARSET;
+        return StandardCharsets.UTF_8;
     }
 
     /**
-     * Читает первые несколько строк файла для анализа.
-     *
-     * @param filePath  путь к файлу
-     * @param charset   кодировка файла
-     * @param lineCount количество строк для чтения
-     * @return список прочитанных строк
-     * @throws IOException если возникла ошибка при чтении файла
+     * Читает первые несколько строк файла для анализа
      */
     private List<String> readSampleLines(Path filePath, Charset charset, int lineCount) throws IOException {
         List<String> sampleLines = new ArrayList<>();
@@ -481,14 +336,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     }
 
     /**
-     * Определяет разделитель полей в CSV файле.
-     *
-     * @param sampleLines образец строк из файла
-     * @return определенный разделитель
+     * Определяет разделитель полей в CSV файле
      */
     private char detectDelimiter(List<String> sampleLines) {
         if (sampleLines.isEmpty()) {
-            return DEFAULT_DELIMITER;
+            return ',';
         }
 
         // Подсчитываем частоту возможных разделителей
@@ -505,15 +357,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
         return delimiterCounts.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
-                .orElse(DEFAULT_DELIMITER);
+                .orElse(',');
     }
 
     /**
-     * Подсчитывает количество вхождений разделителя в строке.
-     *
-     * @param line      строка для анализа
-     * @param delimiter разделитель
-     * @return количество вхождений разделителя
+     * Подсчитывает количество вхождений разделителя в строке
      */
     private int countDelimiter(String line, char delimiter) {
         int count = 0;
@@ -534,11 +382,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     }
 
     /**
-     * Определяет символ кавычек в CSV файле.
-     *
-     * @param sampleLines образец строк из файла
-     * @param delimiter   определенный разделитель
-     * @return символ кавычек
+     * Определяет символ кавычек в CSV файле
      */
     private char detectQuoteChar(List<String> sampleLines, char delimiter) {
         // Сначала проверяем двойные кавычки (наиболее распространены)
@@ -552,16 +396,11 @@ public class CsvFileProcessor extends AbstractFileProcessor {
         }
 
         // По умолчанию используем двойные кавычки
-        return DEFAULT_QUOTE;
+        return '"';
     }
 
     /**
-     * Проверяет, подходит ли указанный символ кавычек для данного образца строк.
-     *
-     * @param sampleLines образец строк
-     * @param delimiter   разделитель
-     * @param quoteChar   символ кавычек для проверки
-     * @return true, если символ кавычек подходит
+     * Проверяет, подходит ли указанный символ кавычек для данного образца строк
      */
     private boolean isQuoteCharSuitable(List<String> sampleLines, char delimiter, char quoteChar) {
         for (String line : sampleLines) {
@@ -571,7 +410,8 @@ public class CsvFileProcessor extends AbstractFileProcessor {
                 String trimmed = part.trim();
 
                 // Проверяем, обрамлено ли значение кавычками
-                if (trimmed.length() >= 2 && trimmed.charAt(0) == quoteChar && trimmed.charAt(trimmed.length() - 1) == quoteChar) {
+                if (trimmed.length() >= 2 && trimmed.charAt(0) == quoteChar &&
+                        trimmed.charAt(trimmed.length() - 1) == quoteChar) {
                     return true;
                 }
             }
@@ -581,12 +421,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     }
 
     /**
-     * Определяет номер строки с заголовками.
-     *
-     * @param sampleLines образец строк
-     * @param delimiter   разделитель
-     * @param quoteChar   символ кавычек
-     * @return номер строки с заголовками (с 0)
+     * Определяет номер строки с заголовками
      */
     private int detectHeaderRow(List<String> sampleLines, char delimiter, char quoteChar) {
         if (sampleLines.isEmpty()) {
@@ -600,7 +435,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
 
             boolean isHeader = true;
             for (String part : parts) {
-                // Заголовки обычно состоят из букв и цифр и не содержат много пробелов
+                // Заголовки обычно содержат буквы и цифры и не содержат много пробелов
                 if (part.trim().isEmpty() || part.contains("  ") || !part.matches(".*[a-zA-Zа-яА-Я0-9].*")) {
                     isHeader = false;
                     break;
@@ -617,12 +452,7 @@ public class CsvFileProcessor extends AbstractFileProcessor {
     }
 
     /**
-     * Разбивает строку CSV с учетом кавычек.
-     *
-     * @param line      строка для разбиения
-     * @param delimiter разделитель
-     * @param quoteChar символ кавычек
-     * @return массив полей
+     * Разбивает строку CSV с учетом кавычек
      */
     private String[] splitCsvLine(String line, char delimiter, char quoteChar) {
         List<String> result = new ArrayList<>();
@@ -644,137 +474,5 @@ public class CsvFileProcessor extends AbstractFileProcessor {
 
         result.add(current.toString());
         return result.toArray(new String[0]);
-    }
-
-    /**
-     * Определяет заголовки CSV файла.
-     *
-     * @param filePath путь к файлу
-     * @param options  параметры чтения
-     * @return массив заголовков
-     * @throws IOException если возникла ошибка при чтении файла
-     */
-    private String[] determineHeaders(Path filePath, FileReadingOptions options) throws IOException {
-        CSVParser parser = new CSVParserBuilder()
-                .withSeparator(options.getDelimiter())
-                .withQuoteChar(options.getQuoteChar())
-                .build();
-
-        try (Reader reader = Files.newBufferedReader(filePath, options.getCharset());
-             CSVReader csvReader = new CSVReaderBuilder(reader)
-                     .withCSVParser(parser)
-                     .withSkipLines(options.getHeaderRow())
-                     .build()) {
-            // Добавить прямо перед строкой String[] headers = csvReader.readNext();
-            log.info("Чтение заголовков из файла: {}", filePath);
-            log.info("Настройки чтения: разделитель='{}', кавычки='{}', строка заголовка={}, кодировка={}",
-                    options.getDelimiter(), options.getQuoteChar(), options.getHeaderRow(), options.getCharset());
-            try {
-                // Попробуем прочитать первые несколько байт файла для диагностики
-                byte[] firstBytes = Files.readAllBytes(filePath);
-                String fileStart = new String(Arrays.copyOf(firstBytes, Math.min(100, firstBytes.length)), options.getCharset());
-                log.info("Начало файла: [{}]", fileStart.replace("\n", "\\n").replace("\r", "\\r"));
-            } catch (Exception e) {
-                log.warn("Не удалось прочитать начало файла для диагностики: {}", e.getMessage());
-            }
-            String[] headers = csvReader.readNext();
-
-            if (headers != null && options.isTrimWhitespace()) {
-                // Удаляем пробелы и обрабатываем заголовки
-                for (int i = 0; i < headers.length; i++) {
-                    headers[i] = headers[i].trim();
-
-                    // Если заголовок пустой, генерируем имя
-                    if (headers[i].isEmpty()) {
-                        headers[i] = "Column" + (i + 1);
-                    }
-                }
-            }
-
-            return headers;
-        } catch (CsvException e) {
-            log.error("Ошибка при определении заголовков: {}", e.getMessage());
-            throw new IOException("Ошибка при определении заголовков: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Получает образец данных из файла.
-     *
-     * @param filePath путь к файлу
-     * @param options  параметры чтения
-     * @param headers  заголовки
-     * @return список записей из файла
-     * @throws IOException если возникла ошибка при чтении файла
-     */
-    private List<Map<String, String>> getSampleData(Path filePath, FileReadingOptions options, String[] headers)
-            throws IOException {
-
-        if (headers == null || headers.length == 0) {
-            throw new FileOperationException("Не удалось определить заголовки");
-        }
-
-        CSVParser parser = new CSVParserBuilder()
-                .withSeparator(options.getDelimiter())
-                .withQuoteChar(options.getQuoteChar())
-                .build();
-
-        List<Map<String, String>> sampleData = new ArrayList<>();
-        int sampleRows = 10; // Количество строк в образце
-
-        try (Reader reader = Files.newBufferedReader(filePath, options.getCharset());
-             CSVReader csvReader = new CSVReaderBuilder(reader)
-                     .withCSVParser(parser)
-                     .withSkipLines(options.getHeaderRow() + 1) // +1 для пропуска самих заголовков
-                     .build()) {
-
-            String[] record;
-            while ((record = csvReader.readNext()) != null && sampleData.size() < sampleRows) {
-                if (options.isSkipEmptyRows() && isEmptyRecord(record)) {
-                    continue;
-                }
-
-                Map<String, String> row = new HashMap<>();
-
-                for (int i = 0; i < headers.length; i++) {
-                    if (i < record.length) {
-                        String value = record[i];
-                        if (options.isTrimWhitespace()) {
-                            value = value.trim();
-                        }
-                        row.put(headers[i], value);
-                    } else {
-                        row.put(headers[i], "");
-                    }
-                }
-
-                sampleData.add(row);
-            }
-
-            return sampleData;
-        } catch (CsvException e) {
-            log.error("Ошибка при получении образца данных: {}", e.getMessage());
-            throw new IOException("Ошибка при получении образца данных: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Проверяет, является ли запись пустой.
-     *
-     * @param record запись для проверки
-     * @return true, если запись пустая
-     */
-    private boolean isEmptyRecord(String[] record) {
-        if (record == null || record.length == 0) {
-            return true;
-        }
-
-        for (String value : record) {
-            if (value != null && !value.trim().isEmpty()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

@@ -62,24 +62,7 @@ public interface FileImportService {
      */
     Map<String, Object> analyzeFileWithOptions(MultipartFile file, FileReadingOptions options);
 
-    /**
-     * Асинхронно обрабатывает загруженный файл и сохраняет результаты в БД.
-     *
-     * @param file        загруженный файл
-     * @param client      клиент, для которого осуществляется импорт
-     * @param mappingId   идентификатор маппинга полей (может быть null для автоопределения)
-     * @param strategyId  идентификатор стратегии обработки (может быть null для стратегии по умолчанию)
-     * @param params      дополнительные параметры для обработки
-     * @param isComposite флаг, указывающий, что импортируется составная сущность
-     * @return объект Future с DTO операции импорта
-     */
-    CompletableFuture<FileOperationDto> importFileAsync(
-            MultipartFile file,
-            Client client,
-            Long mappingId,
-            Long strategyId,
-            Map<String, String> params,
-            boolean isComposite);
+
 
     /**
      * Возвращает статус операции импорта файла.
@@ -89,13 +72,6 @@ public interface FileImportService {
      */
     FileOperationDto getImportStatus(Long operationId);
 
-    /**
-     * Анализирует файл и определяет его структуру.
-     *
-     * @param file загруженный файл
-     * @return информация о структуре файла (заголовки, типы данных и т.д.)
-     */
-    Map<String, Object> analyzeFile(MultipartFile file);
 
     /**
      * Получает список доступных маппингов полей для клиента и типа сущности.
@@ -122,22 +98,6 @@ public interface FileImportService {
      */
     boolean cancelImport(Long operationId);
 
-    /**
-     * Обрабатывает уже загруженный файл.
-     *
-     * @param filePath   путь к файлу
-     * @param client     клиент, для которого осуществляется импорт
-     * @param mappingId  идентификатор маппинга полей
-     * @param strategyId идентификатор стратегии обработки
-     * @param params     дополнительные параметры для обработки
-     * @return DTO созданной операции
-     */
-    FileOperationDto processUploadedFile(
-            Path filePath,
-            Client client,
-            Long mappingId,
-            Long strategyId,
-            Map<String, String> params);
 
     /**
      * Возвращает экземпляр сущности указанного типа.

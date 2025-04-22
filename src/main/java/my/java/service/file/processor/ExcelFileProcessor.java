@@ -44,7 +44,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     /**
      * Конструктор для Excel процессора.
      *
-     * @param pathResolver утилита для работы с путями
+     * @param pathResolver       утилита для работы с путями
      * @param transformerFactory фабрика трансформеров значений
      */
     @Autowired
@@ -155,31 +155,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
         if (!isValid) {
             throw new FileOperationException("Неподдерживаемый тип файла. Ожидается Excel файл (XLSX или XLS).");
-        }
-    }
-
-    @Override
-    protected ImportableEntity createEntity(String entityType) {
-        if (entityType == null) {
-            return null;
-        }
-
-        switch (entityType.toLowerCase()) {
-            case "product":
-                Product product = new Product();
-                product.setTransformerFactory(transformerFactory);
-                return product;
-            case "regiondata":
-                Region region = new Region();
-                region.setTransformerFactory(transformerFactory);
-                return region;
-            case "competitordata":
-                Competitor competitor = new Competitor();
-                competitor.setTransformerFactory(transformerFactory);
-                return competitor;
-            default:
-                log.warn("Неизвестный тип сущности: {}", entityType);
-                return null;
         }
     }
 
@@ -352,7 +327,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
      * Выбирает лист для обработки на основе параметров.
      *
      * @param workbook книга Excel
-     * @param options параметры чтения
+     * @param options  параметры чтения
      * @return выбранный лист
      */
     private Sheet selectSheet(Workbook workbook, FileReadingOptions options) {
@@ -419,7 +394,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     /**
      * Определяет индекс строки с заголовками.
      *
-     * @param sheet лист Excel
+     * @param sheet   лист Excel
      * @param options параметры чтения
      * @return индекс строки с заголовками или -1, если не найден
      */
@@ -505,7 +480,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     /**
      * Преобразует строку Excel в карту.
      *
-     * @param row строка Excel
+     * @param row     строка Excel
      * @param headers заголовки
      * @return карта с данными строки
      */
@@ -605,9 +580,9 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     /**
      * Получает образец данных из листа Excel.
      *
-     * @param sheet лист Excel
+     * @param sheet          лист Excel
      * @param headerRowIndex индекс строки с заголовками
-     * @param headers заголовки
+     * @param headers        заголовки
      * @return список образцов данных
      */
     private List<Map<String, String>> getSampleData(Sheet sheet, int headerRowIndex, String[] headers) {
@@ -625,122 +600,4 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
         return sampleData;
     }
 
-    /**
-     * Определяет типы данных в колонках на основе образца данных.
-     *
-     * @param sampleData образец данных
-     * @return карта с типами данных для каждой колонки
-     */
-    private Map<String, String> detectColumnTypes(List<Map<String, String>> sampleData) {
-        if (sampleData == null || sampleData.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        // Получаем список всех заголовков
-        Set<String> headers = sampleData.get(0).keySet();
-        Map<String, String> columnTypes = new HashMap<>();
-
-        // Для каждой колонки определяем тип данных
-        for (String header : headers) {
-            String type = detectColumnType(sampleData, header);
-            columnTypes.put(header, type);
-        }
-
-        return columnTypes;
-    }
-
-    /**
-     * Определяет тип данных для колонки.
-     *
-     * @param sampleData образец данных
-     * @param header заголовок колонки
-     * @return определенный тип данных
-     */
-    private String detectColumnType(List<Map<String, String>> sampleData, String header) {
-        boolean isAllEmpty = true;
-        boolean couldBeInteger = true;
-        boolean couldBeDouble = true;
-        boolean couldBeBoolean = true;
-        boolean couldBeDate = true;
-
-        // Проверяем все значения в колонке
-        for (Map<String, String> row : sampleData) {
-            String value = row.get(header);
-
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            isAllEmpty = false;
-            value = value.trim();
-
-            // Проверяем, является ли значение целым числом
-            if (couldBeInteger) {
-                try {
-                    Integer.parseInt(value);
-                } catch (NumberFormatException e) {
-                    couldBeInteger = false;
-                }
-            }
-
-            // Проверяем, является ли значение дробным числом
-            if (couldBeDouble && !couldBeInteger) {
-                try {
-                    Double.parseDouble(value.replace(",", "."));
-                } catch (NumberFormatException e) {
-                    couldBeDouble = false;
-                }
-            }
-
-            // Проверяем, является ли значение булевым
-            if (couldBeBoolean) {
-                couldBeBoolean = isBooleanValue(value);
-            }
-
-            // Проверяем, является ли значение датой
-            if (couldBeDate) {
-                couldBeDate = isDateValue(value);
-            }
-        }
-
-        // Определяем тип на основе проверок
-        if (isAllEmpty) {
-            return "string";
-        } else if (couldBeInteger) {
-            return "integer";
-        } else if (couldBeDouble) {
-            return "double";
-        } else if (couldBeBoolean) {
-            return "boolean";
-        } else if (couldBeDate) {
-            return "date";
-        } else {
-            return "string";
-        }
-    }
-
-    /**
-     * Проверяет, является ли значение булевым.
-     *
-     * @param value значение для проверки
-     * @return true, если значение булево
-     */
-    private boolean isBooleanValue(String value) {
-        String lowerValue = value.toLowerCase();
-        return lowerValue.equals("true") || lowerValue.equals("false") ||
-                lowerValue.equals("yes") || lowerValue.equals("no") ||
-                lowerValue.equals("да") || lowerValue.equals("нет") ||
-                lowerValue.equals("1") || lowerValue.equals("0");
-    }
-
-    /**
-     * Проверяет, является ли значение датой.
-     *
-     * @param value значение для проверки
-     * @return true, если значение похоже на дату
-     */
-    private boolean isDateValue(String value) {
-        // Простая проверка на наличие разделителей дат
-        return value.matches(".*\\d+[./\\-]\\d+[./\\-]\\d+.*");
-    }
 }

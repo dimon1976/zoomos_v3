@@ -1,9 +1,9 @@
+// src/main/java/my/java/service/file/mapping/FieldMappingServiceEnhanced.java
 package my.java.service.file.mapping;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
-import my.java.model.entity.ImportableEntity;
 import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
 import my.java.service.file.options.FileReadingOptions;
@@ -35,9 +35,8 @@ public class FieldMappingServiceEnhanced {
 
         try {
             // Получаем информацию о маппинге
-            String mappingSql = "SELECT id, name, description, client_id, entity_type, composite FROM field_mappings WHERE id = ? AND is_active = true";
-            Map<String, Object> mapping = jdbcTemplate.queryForMap(mappingSql, mappingId);
-            boolean isComposite = (boolean) mapping.getOrDefault("composite", false);
+            String mappingSql = "SELECT id FROM field_mappings WHERE id = ? AND is_active = true";
+            jdbcTemplate.queryForObject(mappingSql, Long.class, mappingId);
 
             // Получаем детали маппинга
             String detailsSql = "SELECT source_field, target_field FROM field_mapping_details WHERE field_mapping_id = ? ORDER BY order_index";
@@ -46,9 +45,10 @@ public class FieldMappingServiceEnhanced {
             // Преобразуем детали в карту маппинга
             Map<String, String> fieldMapping = new HashMap<>();
             for (Map<String, Object> detail : details) {
-                String sourceField = (String) detail.get("source_field");
-                String targetField = (String) detail.get("target_field");
-                fieldMapping.put(sourceField, targetField);
+                fieldMapping.put(
+                        (String) detail.get("source_field"),
+                        (String) detail.get("target_field")
+                );
             }
 
             return fieldMapping;
@@ -60,7 +60,6 @@ public class FieldMappingServiceEnhanced {
 
     /**
      * Получает список всех доступных маппингов для клиента и типа сущности
-     * с учетом составных сущностей
      */
     public List<Map<String, Object>> getAvailableMappingsForClient(Long clientId, String entityType) {
         String sql = """
@@ -85,8 +84,7 @@ public class FieldMappingServiceEnhanced {
         try {
             return jdbcTemplate.queryForList(sql, clientId, entityType, entityType);
         } catch (Exception e) {
-            log.error("Ошибка при получении доступных маппингов для клиента {}, тип сущности {}: {}",
-                    clientId, entityType, e.getMessage());
+            log.error("Ошибка при получении доступных маппингов: {}", e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -98,14 +96,14 @@ public class FieldMappingServiceEnhanced {
     public Long createMapping(String name, String description, Long clientId, String entityType,
                               Map<String, String> fieldMapping, boolean isComposite, List<String> relatedEntities) {
         try {
-            // Проверяем, что имя маппинга уникально для клиента и типа сущности
+            // Проверяем уникальность имени маппинга
             String checkSql = "SELECT COUNT(*) FROM field_mappings WHERE name = ? AND client_id = ? AND entity_type = ?";
             int count = jdbcTemplate.queryForObject(checkSql, Integer.class, name, clientId, entityType);
             if (count > 0) {
-                throw new FileOperationException("Маппинг с именем '" + name + "' уже существует для этого клиента и типа сущности");
+                throw new FileOperationException("Маппинг с именем '" + name + "' уже существует");
             }
 
-            // Подготавливаем строку с перечислением связанных сущностей
+            // Подготавливаем строку со связанными сущностями
             String relatedEntitiesStr = relatedEntities != null ? String.join(",", relatedEntities) : null;
 
             // Вставляем запись о маппинге
@@ -128,8 +126,7 @@ public class FieldMappingServiceEnhanced {
                 jdbcTemplate.update(insertDetailSql, mappingId, entry.getKey(), entry.getValue(), false, order++);
             }
 
-            log.info("Создан новый маппинг полей: id={}, name={}, entityType={}, composite={}, полей={}",
-                    mappingId, name, entityType, isComposite, fieldMapping.size());
+            log.info("Создан новый маппинг полей: id={}, name={}, полей={}", mappingId, name, fieldMapping.size());
             return mappingId;
         } catch (FileOperationException e) {
             throw e;
@@ -143,7 +140,7 @@ public class FieldMappingServiceEnhanced {
      * Сопоставляет заголовки из файла с полями сущности с учетом префиксов
      */
     public Map<String, String> suggestMapping(List<String> headers, String entityType) {
-        // Проверяем, является ли сущность основной
+        // Проверяем метаданные сущности
         EntityMetadata metadata = entityRegistry.getEntityMetadata(entityType);
         if (metadata == null) {
             log.warn("Не найдены метаданные для типа сущности: {}", entityType);
@@ -153,13 +150,10 @@ public class FieldMappingServiceEnhanced {
         Map<String, String> suggestedMapping = new HashMap<>();
         Map<String, EntityMetadata.FieldMetadata> fieldsToMap;
 
-        if (metadata.isMainEntity()) {
-            // Если это основная сущность, берем поля и связанных сущностей тоже
-            fieldsToMap = entityRegistry.getCompositeEntityFields(entityType);
-        } else {
-            // Иначе берем только поля указанной сущности
-            fieldsToMap = entityRegistry.getPrefixedFieldsForEntity(entityType);
-        }
+        // Получаем поля в зависимости от типа сущности
+        fieldsToMap = metadata.isMainEntity()
+                ? entityRegistry.getCompositeEntityFields(entityType)
+                : entityRegistry.getPrefixedFieldsForEntity(entityType);
 
         // Создаем обратную карту для поиска по отображаемым именам
         Map<String, String> displayToField = new HashMap<>();
@@ -167,17 +161,17 @@ public class FieldMappingServiceEnhanced {
             displayToField.put(fieldMetadata.getDisplayName().toLowerCase(), fieldName);
         });
 
-        // Для каждого заголовка из файла ищем совпадение
+        // Для каждого заголовка ищем совпадение
         for (String header : headers) {
             String lowerHeader = header.toLowerCase();
 
-            // Прямое совпадение по отображаемому имени
+            // Прямое совпадение
             if (displayToField.containsKey(lowerHeader)) {
                 suggestedMapping.put(header, displayToField.get(lowerHeader));
                 continue;
             }
 
-            // Поиск по приблизительному совпадению
+            // Приблизительное совпадение
             String bestMatch = findBestMatch(lowerHeader, displayToField.keySet());
             if (bestMatch != null) {
                 suggestedMapping.put(header, displayToField.get(bestMatch));
@@ -189,10 +183,6 @@ public class FieldMappingServiceEnhanced {
 
     /**
      * Получает метаданные о полях для составной сущности с использованием FileReadingOptions
-     *
-     * @param mainEntityType тип основной сущности
-     * @param options параметры обработки
-     * @return метаданные о полях сущности
      */
     public Map<String, Object> getCompositeEntityFieldsMetadataWithOptions(
             String mainEntityType,
@@ -207,7 +197,7 @@ public class FieldMappingServiceEnhanced {
             return result;
         }
 
-        // Получаем все поля основной и связанных сущностей с использованием options
+        // Получаем все поля
         Map<String, EntityMetadata.FieldMetadata> allFields =
                 entityRegistry.getCompositeEntityFieldsWithOptions(mainEntityType, options);
 
@@ -218,12 +208,13 @@ public class FieldMappingServiceEnhanced {
             String[] parts = fieldName.split("\\.");
             String entityPrefix = parts[0];
 
-            Map<String, Object> fieldInfo = new HashMap<>();
-            fieldInfo.put("name", fieldName);
-            fieldInfo.put("displayName", fieldMetadata.getDisplayName());
-            fieldInfo.put("type", fieldMetadata.getType().getSimpleName());
-            fieldInfo.put("required", fieldMetadata.isRequired());
-            fieldInfo.put("exportable", fieldMetadata.isExportable());
+            Map<String, Object> fieldInfo = Map.of(
+                    "name", fieldName,
+                    "displayName", fieldMetadata.getDisplayName(),
+                    "type", fieldMetadata.getType().getSimpleName(),
+                    "required", fieldMetadata.isRequired(),
+                    "exportable", fieldMetadata.isExportable()
+            );
 
             fieldsByEntity.computeIfAbsent(entityPrefix, k -> new ArrayList<>()).add(fieldInfo);
         });
@@ -231,33 +222,35 @@ public class FieldMappingServiceEnhanced {
         // Добавляем информацию о сущностях
         List<Map<String, Object>> entities = new ArrayList<>();
 
-        // Добавляем основную сущность
-        Map<String, Object> mainEntityInfo = new HashMap<>();
-        mainEntityInfo.put("type", mainEntityType);
-        mainEntityInfo.put("displayName", mainMetadata.getDisplayName());
-        mainEntityInfo.put("isMain", true);
-        mainEntityInfo.put("fields", fieldsByEntity.getOrDefault(mainEntityType, Collections.emptyList()));
+        // Основная сущность
+        Map<String, Object> mainEntityInfo = Map.of(
+                "type", mainEntityType,
+                "displayName", mainMetadata.getDisplayName(),
+                "isMain", true,
+                "fields", fieldsByEntity.getOrDefault(mainEntityType, Collections.emptyList())
+        );
         entities.add(mainEntityInfo);
 
-        // Получаем список связанных сущностей из options
+        // Получаем связанные сущности из опций
         String relatedEntitiesStr = options.getAdditionalParam("relatedEntities", "");
         List<String> relationTypes = relatedEntitiesStr.isEmpty()
                 ? Collections.emptyList()
                 : Arrays.asList(relatedEntitiesStr.split(","));
 
-        // Добавляем связанные сущности
+        // Связанные сущности
         List<EntityMetadata> relatedEntities = entityRegistry.getRelatedEntities(mainEntityType);
         for (EntityMetadata relatedMetadata : relatedEntities) {
-            // Если указаны конкретные связанные сущности, проверяем наличие в списке
+            // Проверяем наличие в списке, если он указан
             if (!relationTypes.isEmpty() && !relationTypes.contains(relatedMetadata.getEntityType())) {
                 continue;
             }
 
-            Map<String, Object> relatedEntityInfo = new HashMap<>();
-            relatedEntityInfo.put("type", relatedMetadata.getEntityType());
-            relatedEntityInfo.put("displayName", relatedMetadata.getDisplayName());
-            relatedEntityInfo.put("isMain", false);
-            relatedEntityInfo.put("fields", fieldsByEntity.getOrDefault(relatedMetadata.getEntityType(), Collections.emptyList()));
+            Map<String, Object> relatedEntityInfo = Map.of(
+                    "type", relatedMetadata.getEntityType(),
+                    "displayName", relatedMetadata.getDisplayName(),
+                    "isMain", false,
+                    "fields", fieldsByEntity.getOrDefault(relatedMetadata.getEntityType(), Collections.emptyList())
+            );
             entities.add(relatedEntityInfo);
         }
 
@@ -289,7 +282,7 @@ public class FieldMappingServiceEnhanced {
             }
         }
 
-        // Устанавливаем минимальный порог схожести
+        // Минимальный порог схожести
         return maxScore > 3 ? bestMatch : null;
     }
 

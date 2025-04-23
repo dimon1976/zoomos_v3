@@ -56,24 +56,96 @@ public class CompositeEntityService {
             if (product != null) {
                 resultEntities.add(product);
 
-                // Обрабатываем связанные сущности
-                if (entityData.containsKey("region")) {
-                    Region region = processRegionData(entityData.get("region"), product, clientId);
-                    if (region != null) {
-                        resultEntities.add(region);
-                    }
-                }
+                // Обработка связанных сущностей в одном цикле
+                for (Map.Entry<String, Map<String, String>> entry : entityData.entrySet()) {
+                    String entityType = entry.getKey();
+                    Map<String, String> entityDataMap = entry.getValue();
 
-                if (entityData.containsKey("competitor")) {
-                    Competitor competitor = processCompetitorData(entityData.get("competitor"), product, clientId);
-                    if (competitor != null) {
-                        resultEntities.add(competitor);
+                    if ("product".equals(entityType)) {
+                        continue; // Основную сущность уже обработали
+                    }
+
+                    ImportableEntity relatedEntity = processRelatedEntity(
+                            entityType, entityDataMap, product, clientId);
+
+                    if (relatedEntity != null) {
+                        resultEntities.add(relatedEntity);
                     }
                 }
             }
         }
 
         return resultEntities;
+    }
+
+    /**
+     * Обрабатывает связанную сущность в зависимости от ее типа
+     */
+    private ImportableEntity processRelatedEntity(
+            String entityType,
+            Map<String, String> data,
+            Product product,
+            Long clientId) {
+
+        // Проверяем наличие данных для сущности
+        if (!hasEntityData(data, entityType)) {
+            return null;
+        }
+
+        try {
+            switch (entityType) {
+                case "region":
+                    Region region = new Region();
+                    region.setTransformerFactory(transformerFactory);
+                    region.setClientId(clientId);
+                    region.setProduct(product);
+
+                    if (!region.fillFromMap(data)) {
+                        return null;
+                    }
+
+                    // Проверяем существование и обновляем/создаем
+                    Optional<Region> existingRegion = regionService.findByRegionAndProductId(
+                            region.getRegion(), product.getId());
+
+                    if (existingRegion.isPresent()) {
+                        Region existing = existingRegion.get();
+                        existing.setRegionAddress(region.getRegionAddress());
+                        return regionService.saveRegion(existing);
+                    }
+
+                    return regionService.saveRegion(region);
+
+                case "competitor":
+                    Competitor competitor = new Competitor();
+                    competitor.setTransformerFactory(transformerFactory);
+                    competitor.setClientId(clientId);
+                    competitor.setProduct(product);
+
+                    if (!competitor.fillFromMap(data)) {
+                        return null;
+                    }
+
+                    // Проверяем существование и обновляем/создаем
+                    Optional<Competitor> existingCompetitor = competitorService.findByCompetitorNameAndProductId(
+                            competitor.getCompetitorName(), product.getId());
+
+                    if (existingCompetitor.isPresent()) {
+                        Competitor existing = existingCompetitor.get();
+                        updateCompetitorFields(existing, competitor);
+                        return competitorService.saveCompetitor(existing);
+                    }
+
+                    return competitorService.saveCompetitor(competitor);
+
+                default:
+                    log.warn("Неизвестный тип связанной сущности: {}", entityType);
+                    return null;
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при обработке связанной сущности {}: {}", entityType, e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -176,42 +248,39 @@ public class CompositeEntityService {
     /**
      * Подготовка данных для каждой сущности из общей карты данных
      */
-    private Map<String, Map<String, String>> prepareEntityData(Map<String, String> data,
-                                                               Map<String, String> mappedFields) {
+    private Map<String, Map<String, String>> prepareEntityData(
+            Map<String, String> data,
+            Map<String, String> mappedFields) {
+
         Map<String, Map<String, String>> result = new HashMap<>();
 
-        // Проверяем маппинг для каждого поля из входных данных
-        for (Map.Entry<String, String> dataEntry : data.entrySet()) {
-            String key = dataEntry.getKey();
-            String value = dataEntry.getValue();
-
-            // Пропускаем пустые значения
-            if (value == null || value.trim().isEmpty()) {
-                continue;
-            }
-
-            // Ключ уже в формате с префиксом (product.xxx)
-            if (key.contains(".")) {
-                String[] parts = key.split("\\.", 2);
-                if (parts.length == 2) {
-                    result.computeIfAbsent(parts[0], k -> new HashMap<>())
-                            .put(parts[1], value);
-                    continue;
-                }
-            }
-
-            // Поиск маппинга
-            for (Map.Entry<String, String> mapping : mappedFields.entrySet()) {
-                if (key.equalsIgnoreCase(mapping.getKey())) {
-                    String prefixedField = mapping.getValue();
-                    if (prefixedField != null && prefixedField.contains(".")) {
-                        String[] parts = prefixedField.split("\\.", 2);
+        // Добавляем данные с уже имеющимися префиксами
+        data.entrySet().stream()
+                .filter(e -> e.getKey().contains(".") && !e.getValue().trim().isEmpty())
+                .forEach(e -> {
+                    String[] parts = e.getKey().split("\\.", 2);
+                    if (parts.length == 2) {
                         result.computeIfAbsent(parts[0], k -> new HashMap<>())
-                                .put(parts[1], value);
-                        break;
+                                .put(parts[1], e.getValue());
                     }
-                }
-            }
+                });
+
+        // Добавляем данные с префиксами из маппинга
+        if (mappedFields != null) {
+            mappedFields.entrySet().stream()
+                    .filter(mapping -> data.containsKey(mapping.getKey()) &&
+                            !data.get(mapping.getKey()).trim().isEmpty() &&
+                            mapping.getValue().contains("."))
+                    .forEach(mapping -> {
+                        String sourceField = mapping.getKey();
+                        String targetField = mapping.getValue();
+                        String[] parts = targetField.split("\\.", 2);
+
+                        if (parts.length == 2) {
+                            result.computeIfAbsent(parts[0], k -> new HashMap<>())
+                                    .put(parts[1], data.get(sourceField));
+                        }
+                    });
         }
 
         return result;

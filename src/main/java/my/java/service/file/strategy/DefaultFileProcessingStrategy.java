@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/strategy/DefaultFileProcessingStrategy.java
 package my.java.service.file.strategy;
 
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,6 @@ import java.util.*;
 
 /**
  * Стандартная стратегия обработки файлов.
- * Используется по умолчанию, если не указана конкретная стратегия.
  */
 @Component
 @Slf4j
@@ -26,7 +26,6 @@ import java.util.*;
 public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
     private final FileProcessorFactory processorFactory;
-
 
     @Override
     public String getStrategyId() {
@@ -45,7 +44,6 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
     @Override
     public List<String> getSupportedFileTypes() {
-        // Поддерживаем все типы файлов, которые поддерживаются зарегистрированными процессорами
         return new ArrayList<>(processorFactory.getSupportedFileExtensions());
     }
 
@@ -58,7 +56,23 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
             Map<String, String> params,
             FileOperation operation) {
 
-        log.info("Обработка файла стандартной стратегией: {}, тип сущности: {}", filePath, entityType);
+        // Создаем FileReadingOptions из параметров
+        FileReadingOptions options = params != null ?
+                FileReadingOptions.fromMap(params) : new FileReadingOptions();
+
+        return processFileWithOptions(filePath, entityType, client, fieldMapping, options, operation);
+    }
+
+    /**
+     * Обрабатывает файл с использованием FileReadingOptions
+     */
+    public List<ImportableEntity> processFileWithOptions(
+            Path filePath,
+            String entityType,
+            Client client,
+            Map<String, String> fieldMapping,
+            FileReadingOptions options,
+            FileOperation operation) {
 
         // Проверяем существование файла
         if (!Files.exists(filePath)) {
@@ -67,31 +81,23 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
         // Получаем подходящий процессор для файла
         FileProcessor processor = processorFactory.createProcessor(filePath)
-                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
+                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла"));
 
-        // Создаем FileReadingOptions из параметров
-        FileReadingOptions options = params != null ? FileReadingOptions.fromMap(params) : new FileReadingOptions();
-
-        // Устанавливаем стратегию обработки
-        configureProcessingParams(options);
+        // Настраиваем параметры обработки
+        configureProcessingOptions(options);
 
         try {
             // Обрабатываем файл и получаем сущности
-            List<ImportableEntity> entities = processor.processFileWithOptions(
+            return processor.processFileWithOptions(
                     filePath, entityType, client, fieldMapping, options, operation);
-
-            log.info("Файл успешно обработан, создано {} сущностей", entities.size());
-            return entities;
         } catch (Exception e) {
-            log.error("Ошибка при обработке файла: {}", e.getMessage(), e);
+            log.error("Ошибка при обработке файла: {}", e.getMessage());
             throw new FileOperationException("Ошибка при обработке файла: " + e.getMessage(), e);
         }
     }
 
     @Override
     public Map<String, Object> analyzeFile(Path filePath) {
-        log.debug("Анализ файла: {}", filePath);
-
         // Проверяем существование файла
         if (!Files.exists(filePath)) {
             throw new FileOperationException("Файл не найден: " + filePath);
@@ -99,29 +105,22 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
         // Получаем подходящий процессор для файла
         FileProcessor processor = processorFactory.createProcessor(filePath)
-                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла: " + filePath));
-
-        // Создаем пустой FileReadingOptions
-        FileReadingOptions options = new FileReadingOptions();
+                .orElseThrow(() -> new FileOperationException("Не найден подходящий процессор для файла"));
 
         try {
-            // Анализируем файл с использованием FileReadingOptions
-            Map<String, Object> analysis = processor.analyzeFileWithOptions(filePath, options);
-
-            // Добавляем информацию о стратегии
+            // Анализируем файл с минимальными параметрами
+            Map<String, Object> analysis = processor.analyzeFileWithOptions(filePath, new FileReadingOptions());
             analysis.put("strategy", getStrategyId());
             analysis.put("strategyName", getDisplayName());
-
             return analysis;
         } catch (Exception e) {
-            log.error("Ошибка при анализе файла: {}", e.getMessage(), e);
+            log.error("Ошибка при анализе файла: {}", e.getMessage());
             throw new FileOperationException("Ошибка при анализе файла: " + e.getMessage(), e);
         }
     }
 
     @Override
     public boolean isCompatibleWithFile(Path filePath) {
-        // Проверяем, есть ли подходящий процессор для файла
         return processorFactory.createProcessor(filePath).isPresent();
     }
 
@@ -130,40 +129,36 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
         Map<String, Object> params = new HashMap<>();
 
         // Параметры обработки ошибок
-        Map<String, String> errorHandlingOptions = new HashMap<>();
-        errorHandlingOptions.put("stop", "Остановить при первой ошибке");
-        errorHandlingOptions.put("continue", "Пропускать ошибочные записи и продолжать");
-        errorHandlingOptions.put("report", "Собирать ошибки в отчет и продолжать");
-
-        params.put("errorHandling", errorHandlingOptions);
+        params.put("errorHandling", Map.of(
+                "stop", "Остановить при первой ошибке",
+                "continue", "Пропускать ошибочные записи и продолжать",
+                "report", "Собирать ошибки в отчет и продолжать"
+        ));
 
         // Параметры обработки дубликатов
-        Map<String, String> duplicateHandlingOptions = new HashMap<>();
-        duplicateHandlingOptions.put("skip", "Пропускать дубликаты");
-        duplicateHandlingOptions.put("update", "Обновлять существующие записи");
-        duplicateHandlingOptions.put("error", "Выдавать ошибку при дубликате");
-
-        params.put("duplicateHandling", duplicateHandlingOptions);
+        params.put("duplicateHandling", Map.of(
+                "skip", "Пропускать дубликаты",
+                "update", "Обновлять существующие записи",
+                "error", "Выдавать ошибку при дубликате"
+        ));
 
         // Параметры стратегии обработки
-        Map<String, String> processingStrategyOptions = new HashMap<>();
-        processingStrategyOptions.put("insert", "Только вставка новых записей");
-        processingStrategyOptions.put("update", "Обновление существующих записей");
-        processingStrategyOptions.put("upsert", "Вставка новых и обновление существующих");
-        processingStrategyOptions.put("replace", "Замена всех существующих записей");
-
-        params.put("processingStrategy", processingStrategyOptions);
+        params.put("processingStrategy", Map.of(
+                "insert", "Только вставка новых записей",
+                "update", "Обновление существующих записей",
+                "upsert", "Вставка новых и обновление существующих",
+                "replace", "Замена всех существующих записей"
+        ));
 
         // Параметры размера пакета
-        Map<String, String> batchSizeOptions = new HashMap<>();
-        batchSizeOptions.put("100", "100 записей");
-        batchSizeOptions.put("500", "500 записей");
-        batchSizeOptions.put("1000", "1000 записей");
-        batchSizeOptions.put("5000", "5000 записей");
+        params.put("batchSize", Map.of(
+                "100", "100 записей",
+                "500", "500 записей",
+                "1000", "1000 записей",
+                "5000", "5000 записей"
+        ));
 
-        params.put("batchSize", batchSizeOptions);
-
-        // Параметры валидации
+        // Другие параметры
         params.put("validateData", "Валидировать данные перед импортом");
         params.put("trimWhitespace", "Удалять лишние пробелы в строковых полях");
 
@@ -172,50 +167,11 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
     @Override
     public boolean validateParameters(Map<String, String> params) {
-        // Проверяем обязательные параметры
-        if (params == null) {
-            return false;
-        }
+        if (params == null) return false;
 
-        // Проверяем допустимость значений параметров
-        if (params.containsKey("errorHandling")) {
-            String errorHandling = params.get("errorHandling");
-            if (!Arrays.asList("stop", "continue", "report").contains(errorHandling)) {
-                log.warn("Недопустимое значение параметра errorHandling: {}", errorHandling);
-                return false;
-            }
-        }
-
-        if (params.containsKey("duplicateHandling")) {
-            String duplicateHandling = params.get("duplicateHandling");
-            if (!Arrays.asList("skip", "update", "error").contains(duplicateHandling)) {
-                log.warn("Недопустимое значение параметра duplicateHandling: {}", duplicateHandling);
-                return false;
-            }
-        }
-
-        if (params.containsKey("processingStrategy")) {
-            String processingStrategy = params.get("processingStrategy");
-            if (!Arrays.asList("insert", "update", "upsert", "replace").contains(processingStrategy)) {
-                log.warn("Недопустимое значение параметра processingStrategy: {}", processingStrategy);
-                return false;
-            }
-        }
-
-        if (params.containsKey("batchSize")) {
-            try {
-                int batchSize = Integer.parseInt(params.get("batchSize"));
-                if (batchSize <= 0) {
-                    log.warn("Недопустимое значение параметра batchSize: {}", batchSize);
-                    return false;
-                }
-            } catch (NumberFormatException e) {
-                log.warn("Параметр batchSize не является целым числом: {}", params.get("batchSize"));
-                return false;
-            }
-        }
-
-        return true;
+        // Преобразуем в FileReadingOptions и используем его валидацию
+        FileReadingOptions options = FileReadingOptions.fromMap(params);
+        return options.isValid();
     }
 
     @Override
@@ -223,11 +179,10 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
         try {
             // Получаем размер файла
             long fileSize = Files.size(filePath);
-
-            // Оцениваем требуемую память (примерно 2x от размера файла для обработки в памяти)
+            // Оцениваем требуемую память (примерно 2x от размера файла)
             return fileSize * 2;
         } catch (Exception e) {
-            log.error("Ошибка при оценке требуемой памяти: {}", e.getMessage());
+            log.warn("Ошибка при оценке требуемой памяти: {}", e.getMessage());
             return -1;
         }
     }
@@ -239,16 +194,13 @@ public class DefaultFileProcessingStrategy implements FileProcessingStrategy {
 
     @Override
     public int getPriority() {
-        // Стандартная стратегия имеет самый низкий приоритет
-        return 0;
+        return 0; // Самый низкий приоритет
     }
 
     /**
      * Настраивает параметры обработки на основе переданных параметров или значений по умолчанию.
-     *
-     * @param options параметры обработки
      */
-    private void configureProcessingParams(FileReadingOptions options) {
+    private void configureProcessingOptions(FileReadingOptions options) {
         // Устанавливаем значения по умолчанию, если не указаны
         if (!options.hasAdditionalParam("errorHandling")) {
             options.getAdditionalParams().put("errorHandling", "continue");

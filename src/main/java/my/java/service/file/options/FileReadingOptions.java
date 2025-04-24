@@ -80,23 +80,29 @@ public class FileReadingOptions {
         options.batchSize = getIntParam(cleanedParams, "batchSize", 500);
 
         // CSV параметры
-        String delimiterStr = getStringParam(cleanedParams, "delimiter", ",");
-        if (!delimiterStr.isEmpty()) options.delimiter = delimiterStr.charAt(0);
+        String delimiterStr = getStringParam(cleanedParams, "delimiter", null);
+        if (!isAuto(delimiterStr) && delimiterStr != null && !delimiterStr.isEmpty()) {
+            options.delimiter = delimiterStr.charAt(0);
+        }
 
-        String quoteCharStr = getStringParam(cleanedParams, "quoteChar", "\"");
-        if (!quoteCharStr.isEmpty()) options.quoteChar = quoteCharStr.charAt(0);
+        String quoteCharStr = getStringParam(cleanedParams, "quoteChar", null);
+        if (!isAuto(quoteCharStr) && quoteCharStr != null && !quoteCharStr.isEmpty()) {
+            options.quoteChar = quoteCharStr.charAt(0);
+        }
 
-        String charsetStr = getStringParam(cleanedParams, "encoding", "UTF-8");
-        if (!charsetStr.isEmpty()) {
+        String charsetStr = getStringParam(cleanedParams, "encoding", null);
+        if (!isAuto(charsetStr) && charsetStr != null && !charsetStr.isEmpty()) {
             try {
                 options.charset = Charset.forName(charsetStr);
             } catch (Exception e) {
-                // Используем UTF-8 по умолчанию
+                // Можно залогировать: некорректная кодировка
             }
         }
 
-        String escapeCharStr = getStringParam(cleanedParams, "escapeChar", "\\");
-        if (!escapeCharStr.isEmpty()) options.escapeChar = escapeCharStr.charAt(0);
+        String escapeCharStr = getStringParam(cleanedParams, "escapeChar", null);
+        if (!isAuto(escapeCharStr) && escapeCharStr != null && !escapeCharStr.isEmpty()) {
+            options.escapeChar = escapeCharStr.charAt(0);
+        }
 
         options.hasHeader = getBooleanParam(cleanedParams, "hasHeader", true);
 
@@ -115,6 +121,11 @@ public class FileReadingOptions {
 
         return options;
     }
+
+    private static boolean isAuto(String value) {
+        return value != null && value.equalsIgnoreCase("auto");
+    }
+
 
     /**
      * Преобразует объект в Map<String, String>

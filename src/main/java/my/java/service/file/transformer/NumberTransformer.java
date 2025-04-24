@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/transformer/NumberTransformer.java
 package my.java.service.file.transformer;
 
 import lombok.extern.slf4j.Slf4j;
@@ -9,17 +10,11 @@ import java.text.ParseException;
 import java.util.Locale;
 
 /**
- * Трансформатор для числовых значений
- * @param <T> конкретный числовой тип (Integer, Double, и т.д.)
+ * Базовый трансформатор для числовых значений
  */
 @Slf4j
 public abstract class NumberTransformer<T extends Number> extends AbstractValueTransformer<T> {
 
-    /**
-     * Конструктор трансформатора чисел
-     *
-     * @param targetType тип числовых данных
-     */
     protected NumberTransformer(Class<T> targetType) {
         super(targetType);
     }
@@ -33,71 +28,46 @@ public abstract class NumberTransformer<T extends Number> extends AbstractValueT
         try {
             return parseNumber(value.trim(), params);
         } catch (Exception e) {
-            log.warn("Could not parse number from '{}': {}", value, e.getMessage());
             return null;
         }
     }
 
     /**
      * Преобразует строку в число с учетом локали и формата
-     *
-     * @param value строковое представление числа
-     * @param params параметры форматирования
-     * @return преобразованное число
-     * @throws ParseException если преобразование невозможно
      */
     protected abstract T parseNumber(String value, String params) throws ParseException;
 
     /**
-     * Получает экземпляр NumberFormat на основе указанных параметров
-     *
-     * @param params параметры форматирования
-     * @return настроенный NumberFormat
+     * Получает экземпляр NumberFormat на основе параметров
      */
     protected NumberFormat getNumberFormat(String params) {
         Locale locale = Locale.getDefault();
 
-        // Проверяем, указана ли локаль в параметрах
-        if (params != null && params.contains("locale=")) {
-            String localeParam = extractParameter(params, "locale", null);
-            if (localeParam != null) {
-                // Формат локали: "язык_страна", например "ru_RU"
-                String[] localeParts = localeParam.split("_");
-                if (localeParts.length == 2) {
-                    locale = new Locale(localeParts[0], localeParts[1]);
-                } else if (localeParts.length == 1) {
-                    locale = new Locale(localeParts[0]);
-                }
+        // Проверяем локаль
+        String localeParam = extractParameter(params, "locale", null);
+        if (localeParam != null) {
+            String[] localeParts = localeParam.split("_");
+            if (localeParts.length == 2) {
+                locale = new Locale(localeParts[0], localeParts[1]);
+            } else if (localeParts.length == 1) {
+                locale = new Locale(localeParts[0]);
             }
         }
 
-        // Получаем формат числа
+        // Формат числа
         String pattern = extractParameter(params, "pattern", null);
-        if (pattern != null) {
-            // Используем указанный шаблон
-            return new DecimalFormat(pattern);
-        } else {
-            // Используем стандартный числовой формат для локали
-            return NumberFormat.getNumberInstance(locale);
-        }
+        return pattern != null ? new DecimalFormat(pattern) : NumberFormat.getNumberInstance(locale);
     }
 
     /**
      * Извлекает значение параметра из строки параметров
-     *
-     * @param params строка параметров
-     * @param paramName имя параметра
-     * @param defaultValue значение по умолчанию
-     * @return значение параметра или значение по умолчанию
      */
     protected String extractParameter(String params, String paramName, String defaultValue) {
         if (params == null) {
             return defaultValue;
         }
 
-        // Параметры в формате "param1=value1|param2=value2|..."
-        String[] parts = params.split("\\|");
-        for (String part : parts) {
+        for (String part : params.split("\\|")) {
             if (part.startsWith(paramName + "=")) {
                 return part.substring((paramName + "=").length());
             }
@@ -124,9 +94,7 @@ class IntegerTransformer extends NumberTransformer<Integer> {
 
     @Override
     public String toString(Integer value, String params) {
-        if (value == null) {
-            return "";
-        }
+        if (value == null) return "";
 
         try {
             return getNumberFormat(params).format(value);
@@ -153,9 +121,7 @@ class LongTransformer extends NumberTransformer<Long> {
 
     @Override
     public String toString(Long value, String params) {
-        if (value == null) {
-            return "";
-        }
+        if (value == null) return "";
 
         try {
             return getNumberFormat(params).format(value);
@@ -177,14 +143,16 @@ class DoubleTransformer extends NumberTransformer<Double> {
 
     @Override
     protected Double parseNumber(String value, String params) throws ParseException {
+        // Заменяем запятую на точку для поддержки разных форматов
+        if (value.contains(",") && !value.contains(".")) {
+            value = value.replace(',', '.');
+        }
         return getNumberFormat(params).parse(value).doubleValue();
     }
 
     @Override
     public String toString(Double value, String params) {
-        if (value == null) {
-            return "";
-        }
+        if (value == null) return "";
 
         try {
             return getNumberFormat(params).format(value);

@@ -1,9 +1,8 @@
+// src/main/java/my/java/service/file/transformer/BooleanTransformer.java
 package my.java.service.file.transformer;
 
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -12,17 +11,14 @@ import java.util.Set;
 @Component
 public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
 
-    private static final Set<String> TRUE_VALUES = new HashSet<>(Arrays.asList(
+    private static final Set<String> TRUE_VALUES = Set.of(
             "true", "yes", "y", "1", "да", "д", "истина", "вкл", "on", "включено"
-    ));
+    );
 
-    private static final Set<String> FALSE_VALUES = new HashSet<>(Arrays.asList(
+    private static final Set<String> FALSE_VALUES = Set.of(
             "false", "no", "n", "0", "нет", "н", "ложь", "выкл", "off", "выключено"
-    ));
+    );
 
-    /**
-     * Конструктор трансформатора булевых значений
-     */
     public BooleanTransformer() {
         super(Boolean.class);
     }
@@ -35,21 +31,17 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
 
         String normalizedValue = value.trim().toLowerCase();
 
-        // Проверяем, есть ли значение в списке TRUE_VALUES
         if (TRUE_VALUES.contains(normalizedValue)) {
             return Boolean.TRUE;
         }
 
-        // Проверяем, есть ли значение в списке FALSE_VALUES
         if (FALSE_VALUES.contains(normalizedValue)) {
             return Boolean.FALSE;
         }
 
-        // Если значение не распознано, пытаемся использовать стандартный метод
         try {
             return Boolean.valueOf(normalizedValue);
         } catch (Exception e) {
-            // Возвращаем null, если не удалось преобразовать
             return null;
         }
     }
@@ -57,10 +49,7 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
     @Override
     protected Boolean handleEmpty(String params) {
         String defaultValue = getDefaultValue(params, null);
-        if (defaultValue != null) {
-            return transform(defaultValue, null);
-        }
-        return null;
+        return defaultValue != null ? transform(defaultValue, null) : null;
     }
 
     @Override
@@ -69,11 +58,9 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
             return "";
         }
 
-        // Проверяем, есть ли указание формата в параметрах
+        // Проверяем формат в параметрах
         if (params != null && !params.isEmpty()) {
-            // Формат: "true=Да|false=Нет"
-            String[] parts = params.split("\\|");
-            for (String part : parts) {
+            for (String part : params.split("\\|")) {
                 if (value && part.startsWith("true=")) {
                     return part.substring("true=".length());
                 } else if (!value && part.startsWith("false=")) {
@@ -82,7 +69,6 @@ public class BooleanTransformer extends AbstractValueTransformer<Boolean> {
             }
         }
 
-        // По умолчанию возвращаем стандартный текст
         return value ? "true" : "false";
     }
 }

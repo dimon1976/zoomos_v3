@@ -156,7 +156,7 @@ public class FileImportServiceImpl implements FileImportService {
 
             // Обрабатываем данные
             List<ImportableEntity> entities = isComposite
-                    ? processCompositeEntitiesWithOptions(processor, filePath, entityType, client, fieldMapping, options, operation)
+                    ? processCompositeEntitiesWithOptions(processor, filePath, client, fieldMapping, options, operation)
                     : processor.processFileWithOptions(filePath, entityType, client, fieldMapping, options, operation);
 
             // Сохраняем сущности в БД
@@ -267,7 +267,6 @@ public class FileImportServiceImpl implements FileImportService {
     private List<ImportableEntity> processCompositeEntitiesWithOptions(
             FileProcessor processor,
             Path filePath,
-            String entityType,
             Client client,
             Map<String, String> fieldMapping,
             FileReadingOptions options,

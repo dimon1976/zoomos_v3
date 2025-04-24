@@ -127,42 +127,6 @@ public class FileReadingOptions {
     }
 
 
-    /**
-     * Преобразует объект в Map<String, String>
-     */
-    public Map<String, String> toMap() {
-        Map<String, String> params = new HashMap<>();
-
-        // Базовые параметры
-        params.put("headerRow", String.valueOf(headerRow));
-        params.put("dataStartRow", String.valueOf(dataStartRow));
-        params.put("skipEmptyRows", String.valueOf(skipEmptyRows));
-        params.put("trimWhitespace", String.valueOf(trimWhitespace));
-        params.put("validateData", String.valueOf(validateData));
-        params.put("dateFormat", dateFormat);
-        params.put("errorHandling", errorHandling);
-        params.put("duplicateHandling", duplicateHandling);
-        params.put("processingStrategy", processingStrategy);
-        params.put("batchSize", String.valueOf(batchSize));
-
-        // CSV параметры
-        params.put("delimiter", String.valueOf(delimiter));
-        params.put("quoteChar", String.valueOf(quoteChar));
-        params.put("encoding", charset.name());
-        params.put("escapeChar", String.valueOf(escapeChar));
-        params.put("hasHeader", String.valueOf(hasHeader));
-
-        // Excel параметры
-        if (sheetName != null) params.put("sheetName", sheetName);
-        params.put("sheetIndex", String.valueOf(sheetIndex));
-        params.put("evaluateFormulas", String.valueOf(evaluateFormulas));
-        params.put("emptyFieldHandling", emptyFieldHandling);
-
-        // Дополнительные параметры
-        params.putAll(additionalParams);
-
-        return params;
-    }
 
     /**
      * Обновляет стратегию обработки на основе типа сущности и клиента
@@ -202,6 +166,32 @@ public class FileReadingOptions {
         }
         // Если формат не подходит, возвращаем ключ как есть
         return key;
+    }
+
+    // Добавление метода копирования в FileReadingOptions
+    public FileReadingOptions copy() {
+        return FileReadingOptions.builder()
+                .headerRow(headerRow)
+                .dataStartRow(dataStartRow)
+                .skipEmptyRows(skipEmptyRows)
+                .trimWhitespace(trimWhitespace)
+                .validateData(validateData)
+                .dateFormat(dateFormat)
+                .errorHandling(errorHandling)
+                .duplicateHandling(duplicateHandling)
+                .processingStrategy(processingStrategy)
+                .batchSize(batchSize)
+                .delimiter(delimiter)
+                .quoteChar(quoteChar)
+                .charset(charset)
+                .escapeChar(escapeChar)
+                .hasHeader(hasHeader)
+                .sheetName(sheetName)
+                .sheetIndex(sheetIndex)
+                .evaluateFormulas(evaluateFormulas)
+                .emptyFieldHandling(emptyFieldHandling)
+                .additionalParams(new HashMap<>(additionalParams))
+                .build();
     }
 
     /**
@@ -269,25 +259,6 @@ public class FileReadingOptions {
                 Arrays.asList("skip", "update", "error").contains(duplicateHandling) &&
                 Arrays.asList("insert", "update", "upsert", "replace").contains(processingStrategy) &&
                 Arrays.asList("empty", "null", "default").contains(emptyFieldHandling);
-    }
-
-    /**
-     * Логирует настройки
-     */
-    public FileReadingOptions logSettings(Logger logger) {
-        if (logger.isDebugEnabled()) {
-            logger.debug("Настройки импорта: headerRow={}, dataStartRow={}, skipEmptyRows={}, trimWhitespace={}, " +
-                            "validateData={}, dateFormat={}, errorHandling={}, duplicateHandling={}, processingStrategy={}, " +
-                            "batchSize={}, delimiter={}, quoteChar={}, charset={}, hasHeader={}, шаблон={}",
-                    headerRow, dataStartRow, skipEmptyRows, trimWhitespace, validateData, dateFormat,
-                    errorHandling, duplicateHandling, processingStrategy, batchSize, delimiter, quoteChar,
-                    charset, hasHeader, sheetName);
-
-            if (!additionalParams.isEmpty()) {
-                logger.debug("Дополнительные параметры: {}", additionalParams);
-            }
-        }
-        return this;
     }
 
     /**

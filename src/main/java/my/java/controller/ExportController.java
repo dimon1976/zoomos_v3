@@ -101,7 +101,7 @@ public class ExportController {
             operation.setFileName("export_" + entityType + "." + format);
             operation.setFileType(format.toUpperCase());
             operation.setStatus(FileOperation.OperationStatus.PENDING);
-            operation.setProcessingParams(params.toString());
+
 
             FileOperation savedOperation = fileOperationRepository.save(operation);
 

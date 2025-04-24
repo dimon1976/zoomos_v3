@@ -446,18 +446,7 @@ public class FileImportServiceImpl implements FileImportService {
     private FileOperationDto mapToDto(FileOperation operation) {
         if (operation == null) return null;
 
-        return FileOperationDto.builder()
-                .id(operation.getId())
-                .clientId(operation.getClient() != null ? operation.getClient().getId() : null)
-                .operationType(operation.getOperationType())
-                .fileName(operation.getFileName())
-                .fileType(operation.getFileType())
-                .recordCount(operation.getRecordCount())
-                .status(operation.getStatus())
-                .errorMessage(operation.getErrorMessage())
-                .startedAt(operation.getStartedAt())
-                .completedAt(operation.getCompletedAt())
-                .build();
+        return FileOperationDto.fromEntity(operation);
     }
 
     @Override

@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/transformer/StringTransformer.java
 package my.java.service.file.transformer;
 
 import org.springframework.stereotype.Component;
@@ -18,25 +19,33 @@ public class StringTransformer extends AbstractValueTransformer<String> {
     @Override
     public String transform(String value, String params) {
         if (isEmpty(value)) {
-            return handleEmpty(params);
+            return getDefaultValue(params, "");
         }
 
-        // Параметры могут содержать указание на обрезку пробелов
-        boolean trim = true;
-        if (params != null && params.contains("trim=false")) {
-            trim = false;
-        }
-
+        // Обрезаем пробелы, если требуется
+        boolean trim = !extractParam(params, "trim", "true").equals("false");
         return trim ? value.trim() : value;
     }
 
     @Override
-    protected String handleEmpty(String params) {
-        return getDefaultValue(params, "");
+    public String toString(String value, String params) {
+        return value != null ? value : "";
     }
 
-    @Override
-    public String toString(String value, String params) {
-        return value;
+    /**
+     * Извлекает значение параметра
+     */
+    private String extractParam(String params, String key, String defaultValue) {
+        if (params == null || params.isEmpty()) {
+            return defaultValue;
+        }
+
+        for (String part : params.split("\\|")) {
+            if (part.startsWith(key + "=")) {
+                return part.substring(key.length() + 1);
+            }
+        }
+
+        return defaultValue;
     }
 }

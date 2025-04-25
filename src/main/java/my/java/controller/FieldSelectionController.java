@@ -1,3 +1,4 @@
+// src/main/java/my/java/controller/FieldSelectionController.java
 package my.java.controller;
 
 import lombok.RequiredArgsConstructor;
@@ -35,17 +36,18 @@ public class FieldSelectionController {
     @ResponseBody
     public ResponseEntity<?> getEntityFields(@PathVariable String entityType) {
         try {
-            log.debug("Запрос на получение полей для сущности: {}", entityType);
-
             var entityMetadata = entityRegistry.getEntityMetadata(entityType);
             if (entityMetadata == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Неизвестный тип сущности: " + entityType));
+                return ResponseEntity.badRequest().body(
+                        Map.of("error", "Неизвестный тип сущности: " + entityType)
+                );
             }
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("entityType", entityType);
-            result.put("displayName", entityMetadata.getDisplayName());
-            result.put("fields", entityMetadata.getPrefixedFields());
+            Map<String, Object> result = Map.of(
+                    "entityType", entityType,
+                    "displayName", entityMetadata.getDisplayName(),
+                    "fields", entityMetadata.getPrefixedFields()
+            );
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {
@@ -63,27 +65,26 @@ public class FieldSelectionController {
             @PathVariable String mainEntityType,
             @RequestParam(required = false) Map<String, String> params) {
         try {
-            log.debug("Запрос на получение полей для составной сущности: {}", mainEntityType);
-
-            // Создаем объект FileReadingOptions из параметров запроса
+            // Создаем объект FileReadingOptions из параметров
             FileReadingOptions options = FileReadingOptions.fromMap(params);
             options.getAdditionalParams().put("entityType", mainEntityType);
 
-            // Получаем информацию о связанных сущностях
+            // Получаем связанные сущности
             List<String> relatedEntities = entityRegistry.getRelatedEntities(mainEntityType)
                     .stream()
                     .map(EntityMetadata::getEntityType)
                     .toList();
 
             if (!relatedEntities.isEmpty()) {
-                String relatedEntitiesStr = String.join(",", relatedEntities);
-                options.getAdditionalParams().put("relatedEntities", relatedEntitiesStr);
+                options.getAdditionalParams().put("relatedEntities", String.join(",", relatedEntities));
             }
 
-            // Используем новый метод с поддержкой FileReadingOptions
+            // Получаем метаданные
             var metadata = fieldMappingService.getCompositeEntityFieldsMetadataWithOptions(mainEntityType, options);
             if (metadata.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Неизвестный тип основной сущности: " + mainEntityType));
+                return ResponseEntity.badRequest().body(
+                        Map.of("error", "Неизвестный тип основной сущности: " + mainEntityType)
+                );
             }
 
             return ResponseEntity.ok(metadata);
@@ -103,17 +104,12 @@ public class FieldSelectionController {
             @RequestParam String entityType,
             @RequestParam(defaultValue = "false") boolean composite) {
         try {
-            log.debug("Запрос на получение доступных маппингов для клиента: {}, тип: {}, составной: {}",
-                    clientId, entityType, composite);
-
             // Проверяем существование клиента
-            var clientOpt = clientService.getClientById(clientId);
-            if (clientOpt.isEmpty()) {
+            if (clientService.getClientById(clientId).isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Клиент не найден: " + clientId));
             }
 
             var mappings = fieldMappingService.getAvailableMappingsForClient(clientId, entityType);
-
             return ResponseEntity.ok(Map.of("mappings", mappings));
         } catch (Exception e) {
             log.error("Ошибка при получении доступных маппингов: {}", e.getMessage(), e);
@@ -135,12 +131,8 @@ public class FieldSelectionController {
             @RequestParam(defaultValue = "false") boolean composite,
             @RequestParam(required = false) List<String> relatedEntities) {
         try {
-            log.debug("Запрос на создание маппинга полей: {}, клиент: {}, тип: {}",
-                    name, clientId, entityType);
-
             // Проверяем существование клиента
-            var clientOpt = clientService.getClientById(clientId);
-            if (clientOpt.isEmpty()) {
+            if (clientService.getClientById(clientId).isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Клиент не найден: " + clientId));
             }
 

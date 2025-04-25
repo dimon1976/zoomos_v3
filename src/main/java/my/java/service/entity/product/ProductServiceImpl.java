@@ -1,4 +1,4 @@
-// src/main/java/my/java/service/product/ProductServiceImpl.java
+// src/main/java/my/java/service/entity/product/ProductServiceImpl.java
 package my.java.service.entity.product;
 
 import lombok.RequiredArgsConstructor;
@@ -28,26 +28,20 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public int saveProducts(List<Product> products) {
-        if (products == null || products.isEmpty()) {
-            return 0;
-        }
-
+        if (products == null || products.isEmpty()) return 0;
         log.debug("Сохранение {} продуктов", products.size());
-        List<Product> savedProducts = productRepository.saveAll(products);
-        return savedProducts.size();
+        return productRepository.saveAll(products).size();
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<Product> findById(Long id) {
-        log.debug("Поиск продукта по ID: {}", id);
         return productRepository.findById(id);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<Product> findByProductIdAndClientId(String productId, Long clientId) {
-        log.debug("Поиск продукта по productId: {} и clientId: {}", productId, clientId);
         return productRepository.findByProductId(productId)
                 .filter(product -> product.getClientId().equals(clientId));
     }
@@ -55,40 +49,31 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public List<Product> findByClientId(Long clientId) {
-        log.debug("Поиск продуктов по clientId: {}", clientId);
         return productRepository.findByClientId(clientId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<Product> findByClientIdAndDataSource(Long clientId, String dataSource) {
-        log.debug("Поиск продуктов по clientId: {} и dataSource: {}", clientId, dataSource);
         return productRepository.findByClientIdAndDataSource(clientId, dataSource);
     }
 
     @Override
     @Transactional
     public void deleteProduct(Long id) {
-        log.debug("Удаление продукта по ID: {}", id);
         productRepository.deleteById(id);
     }
 
     @Override
     @Transactional
     public int deleteByFileIdAndClientId(Long fileId, Long clientId) {
-        log.debug("Удаление продуктов по fileId: {} и clientId: {}", fileId, clientId);
-
-        // Сначала подсчитываем количество продуктов для удаления
         List<Product> productsToDelete = productRepository.findByClientId(clientId)
                 .stream()
                 .filter(product -> fileId.equals(product.getFileId()))
                 .toList();
 
-        if (productsToDelete.isEmpty()) {
-            return 0;
-        }
+        if (productsToDelete.isEmpty()) return 0;
 
-        // Удаляем продукты
         productRepository.deleteByFileIdAndClientId(fileId, clientId);
         return productsToDelete.size();
     }
@@ -96,31 +81,20 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public Product upsertProduct(Product product) {
-        log.debug("Обновление/создание продукта: {}", product.getProductName());
-
-        // Проверяем существование продукта по внешнему ID и клиенту
         if (product.getProductId() != null && product.getClientId() != null) {
             Optional<Product> existingProduct = findByProductIdAndClientId(
                     product.getProductId(), product.getClientId());
 
             if (existingProduct.isPresent()) {
-                // Обновляем существующий продукт
                 Product existing = existingProduct.get();
-                // Обновляем все поля, кроме ID и созданных связей
                 copyProductFields(product, existing);
                 return productRepository.save(existing);
             }
         }
 
-        // Создаем новый продукт
         return productRepository.save(product);
     }
 
-    /**
-     * Копирует поля из исходного продукта в целевой продукт
-     * @param source исходный продукт
-     * @param target целевой продукт
-     */
     private void copyProductFields(Product source, Product target) {
         target.setProductName(source.getProductName());
         target.setProductBrand(source.getProductBrand());
@@ -139,7 +113,5 @@ public class ProductServiceImpl implements ProductService {
         target.setProductAdditional5(source.getProductAdditional5());
         target.setDataSource(source.getDataSource());
         target.setFileId(source.getFileId());
-
-        // Не копируем связанные сущности и ID
     }
 }

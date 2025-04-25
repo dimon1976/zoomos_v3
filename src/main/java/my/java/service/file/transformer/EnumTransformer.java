@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/transformer/EnumTransformer.java
 package my.java.service.file.transformer;
 
 import lombok.extern.slf4j.Slf4j;
@@ -13,9 +14,6 @@ import java.util.Map;
 @Slf4j
 public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
 
-    /**
-     * Конструктор трансформатора перечислений
-     */
     @SuppressWarnings("unchecked")
     public EnumTransformer() {
         super((Class<Enum<?>>) (Class<?>) Enum.class);
@@ -24,12 +22,11 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
     @Override
     public Enum<?> transform(String value, String params) {
         if (isEmpty(value)) {
-            return handleEmpty(params);
+            return null;
         }
 
         String enumClassName = extractParameter(params, "class", null);
         if (enumClassName == null) {
-            log.warn("Enum class not specified in params: {}", params);
             return null;
         }
 
@@ -47,17 +44,10 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
 
             return getEnumValue(enumClass, value.trim());
         } catch (ClassNotFoundException e) {
-            log.warn("Enum class not found: {}", enumClassName, e);
             return null;
         } catch (Exception e) {
-            log.warn("Error transforming string to enum: {}", e.getMessage(), e);
             return null;
         }
-    }
-
-    @Override
-    protected Enum<?> handleEmpty(String params) {
-        return null;
     }
 
     @Override
@@ -84,8 +74,7 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
             return defaultValue;
         }
 
-        String[] parts = params.split("\\|");
-        for (String part : parts) {
+        for (String part : params.split("\\|")) {
             if (part.startsWith(paramName + "=")) {
                 return part.substring((paramName + "=").length());
             }
@@ -101,8 +90,7 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
             return result;
         }
 
-        String[] pairs = mapping.split(",");
-        for (String pair : pairs) {
+        for (String pair : mapping.split(",")) {
             String[] keyValue = pair.split("=");
             if (keyValue.length == 2) {
                 result.put(keyValue[0].trim().toLowerCase(), keyValue[1].trim());
@@ -117,6 +105,7 @@ public class EnumTransformer extends AbstractValueTransformer<Enum<?>> {
         try {
             return Enum.valueOf((Class<E>) enumClass, value);
         } catch (IllegalArgumentException e) {
+            // Пробуем поиск без учета регистра
             for (Enum<?> enumValue : enumClass.getEnumConstants()) {
                 if (enumValue.name().equalsIgnoreCase(value)) {
                     return enumValue;

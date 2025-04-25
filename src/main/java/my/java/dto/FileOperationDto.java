@@ -1,33 +1,30 @@
+// src/main/java/my/java/dto/FileOperationDto.java (предполагаемый путь)
 package my.java.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-import my.java.model.FileOperation.OperationStatus;
-import my.java.model.FileOperation.OperationType;
+import my.java.model.FileOperation;
 
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * DTO для передачи информации о файловых операциях
+ */
 @Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class FileOperationDto {
-
     private Long id;
     private Long clientId;
-    private String clientName;
-    private OperationType operationType;
+    private FileOperation.OperationType operationType;
     private String fileName;
     private String fileType;
     private Integer recordCount;
-    private OperationStatus status;
+    private FileOperation.OperationStatus status;
     private String errorMessage;
     private ZonedDateTime startedAt;
     private ZonedDateTime completedAt;
-    private String createdBy;
+
 
     // Вспомогательные методы для форматирования дат
     public String getFormattedStartedAt() {
@@ -38,34 +35,26 @@ public class FileOperationDto {
         return formatDateTime(completedAt);
     }
 
-    // Получение продолжительности операции (в секундах или "В процессе"/"Не завершено")
-    public String getDuration() {
-        if (startedAt == null) {
-            return "Н/Д";
-        }
+    /**
+     * Создает DTO из сущности
+     */
+    public static FileOperationDto fromEntity(FileOperation operation) {
+        if (operation == null) return null;
 
-        if (completedAt == null) {
-            if (status == OperationStatus.PROCESSING || status == OperationStatus.PENDING) {
-                return "В процессе";
-            }
-            return "Не завершено";
-        }
-
-        long durationSeconds = completedAt.toEpochSecond() - startedAt.toEpochSecond();
-
-        // Форматирование длительности
-        if (durationSeconds < 60) {
-            return durationSeconds + " сек";
-        } else if (durationSeconds < 3600) {
-            long minutes = durationSeconds / 60;
-            long seconds = durationSeconds % 60;
-            return String.format("%d мин %d сек", minutes, seconds);
-        } else {
-            long hours = durationSeconds / 3600;
-            long minutes = (durationSeconds % 3600) / 60;
-            return String.format("%d ч %d мин", hours, minutes);
-        }
+        return FileOperationDto.builder()
+                .id(operation.getId())
+                .clientId(operation.getClient() != null ? operation.getClient().getId() : null)
+                .operationType(operation.getOperationType())
+                .fileName(operation.getFileName())
+                .fileType(operation.getFileType())
+                .recordCount(operation.getRecordCount())
+                .status(operation.getStatus())
+                .errorMessage(operation.getErrorMessage())
+                .startedAt(operation.getStartedAt())
+                .completedAt(operation.getCompletedAt())
+                .build();
     }
+
 
     // Получение типа операции в виде текста для отображения
     public String getOperationTypeDisplay() {
@@ -78,8 +67,6 @@ public class FileOperationDto {
                 return "Импорт";
             case EXPORT:
                 return "Экспорт";
-            case PROCESS:
-                return "Обработка";
             default:
                 return operationType.toString();
         }
@@ -132,4 +119,6 @@ public class FileOperationDto {
         }
         return dateTime.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
     }
+
+
 }

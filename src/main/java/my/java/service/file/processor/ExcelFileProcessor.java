@@ -2,10 +2,6 @@ package my.java.service.file.processor;
 
 import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
-import my.java.model.entity.Competitor;
-import my.java.model.entity.ImportableEntity;
-import my.java.model.entity.Product;
-import my.java.model.entity.Region;
 import my.java.service.file.options.FileReadingOptions;
 import my.java.service.file.transformer.ValueTransformerFactory;
 import my.java.util.PathResolver;
@@ -26,27 +22,15 @@ import java.util.*;
 @Slf4j
 public class ExcelFileProcessor extends AbstractFileProcessor {
 
-    private static final String[] SUPPORTED_EXTENSIONS = new String[]{"xlsx", "xls"};
-    private static final String[] SUPPORTED_MIME_TYPES = new String[]{
+    private static final String[] SUPPORTED_EXTENSIONS = {"xlsx", "xls"};
+    private static final String[] SUPPORTED_MIME_TYPES = {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/vnd.ms-excel"
     };
-
-    // Максимальное количество строк для проверки при поиске заголовков
     private static final int MAX_HEADER_ROW = 10;
-
-    // Максимальное количество пустых строк подряд
     private static final int MAX_EMPTY_ROWS = 5;
-
-    // Максимальное количество строк для образца
     private static final int SAMPLE_SIZE = 10;
 
-    /**
-     * Конструктор для Excel процессора.
-     *
-     * @param pathResolver       утилита для работы с путями
-     * @param transformerFactory фабрика трансформеров значений
-     */
     @Autowired
     public ExcelFileProcessor(PathResolver pathResolver, ValueTransformerFactory transformerFactory) {
         super(pathResolver, transformerFactory);
@@ -79,11 +63,8 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     }
 
     @Override
-    protected List<Map<String, String>> readFile(Path filePath, Map<String, String> params) throws IOException {
-        log.debug("Чтение Excel файла: {}", filePath);
-
-        // Определяем параметры чтения
-        FileReadingOptions options = determineReadingOptions(params);
+    protected List<Map<String, String>> readFileWithOptions(Path filePath, FileReadingOptions options) throws IOException {
+        log.debug("Чтение Excel файла с FileReadingOptions: {}", filePath);
 
         try (InputStream is = Files.newInputStream(filePath);
              Workbook workbook = WorkbookFactory.create(is)) {
@@ -102,7 +83,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
             }
 
             // Получаем заголовки
-            String[] headers = extractHeaders(sheet.getRow(headerRowIndex));
+            String[] headers = extractHeaders(sheet.getRow(headerRowIndex), options);
             if (headers == null || headers.length == 0) {
                 throw new FileOperationException("Не удалось извлечь заголовки из Excel файла");
             }
@@ -129,7 +110,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
                 emptyRowCount = 0;
 
                 // Преобразуем строку в Map
-                Map<String, String> rowData = rowToMap(row, headers);
+                Map<String, String> rowData = rowToMap(row, headers, options);
                 result.add(rowData);
             }
 
@@ -158,20 +139,18 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
         }
     }
 
-    @Override
-    public List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
-        log.debug("Чтение сырых данных из Excel файла с FileReadingOptions: {}", filePath);
-
-        try {
-            return readFile(filePath, options != null ? options.toMap() : null);
-        } catch (IOException e) {
-            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
-            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
-        }
-    }
+//    @Override
+//    public List<Map<String, String>> readRawDataWithOptions(Path filePath, FileReadingOptions options) {
+//        try {
+//            return readFileWithOptions(filePath, options);
+//        } catch (IOException e) {
+//            log.error("Ошибка при чтении сырых данных: {}", e.getMessage(), e);
+//            throw new FileOperationException("Ошибка при чтении сырых данных: " + e.getMessage(), e);
+//        }
+//    }
 
     @Override
-    public Map<String, Object> analyzeFile(Path filePath, Map<String, String> params) {
+    public Map<String, Object> analyzeFileWithOptions(Path filePath, FileReadingOptions options) {
         log.debug("Анализ Excel файла: {}", filePath);
 
         Map<String, Object> result = new HashMap<>();
@@ -183,8 +162,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
             List<Map<String, Object>> sheetsInfo = getWorkbookInfo(workbook);
             result.put("sheets", sheetsInfo);
 
-            // Определяем параметры чтения
-            FileReadingOptions options = determineReadingOptions(params);
+            // Сохраняем параметры
             result.put("options", options);
 
             // Выбираем лист для анализа
@@ -201,11 +179,11 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
                 return result;
             }
 
-            String[] headers = extractHeaders(sheet.getRow(headerRowIndex));
+            String[] headers = extractHeaders(sheet.getRow(headerRowIndex), options);
             result.put("headers", headers);
 
             // Получаем образец данных
-            List<Map<String, String>> sampleData = getSampleData(sheet, headerRowIndex, headers);
+            List<Map<String, String>> sampleData = getSampleData(sheet, headerRowIndex, headers, options);
             result.put("sampleData", sampleData);
 
             // Определяем приблизительное количество строк
@@ -225,44 +203,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     }
 
     @Override
-    public boolean validateFile(Path filePath) {
-        log.debug("Валидация Excel файла: {}", filePath);
-
-        if (!Files.exists(filePath)) {
-            log.error("Файл не существует: {}", filePath);
-            return false;
-        }
-
-        if (!Files.isRegularFile(filePath)) {
-            log.error("Путь не является файлом: {}", filePath);
-            return false;
-        }
-
-        if (!Files.isReadable(filePath)) {
-            log.error("Файл не доступен для чтения: {}", filePath);
-            return false;
-        }
-
-        try (InputStream is = Files.newInputStream(filePath)) {
-            // Проверяем, можно ли открыть файл как Excel
-            Workbook workbook = WorkbookFactory.create(is);
-
-            // Проверяем, есть ли в файле хотя бы один лист
-            if (workbook.getNumberOfSheets() == 0) {
-                log.error("В файле нет листов");
-                return false;
-            }
-
-            // Проверяем, есть ли в файле данные
-            Sheet sheet = workbook.getSheetAt(0);
-            return sheet.getLastRowNum() > 0;
-        } catch (Exception e) {
-            log.error("Ошибка при валидации Excel файла: {}", e.getMessage(), e);
-            return false;
-        }
-    }
-
-    @Override
     public int estimateRecordCount(Path filePath) {
         log.debug("Оценка количества записей в Excel файле: {}", filePath);
 
@@ -277,7 +217,8 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
             }
 
             // Определяем строку с заголовками
-            int headerRowIndex = determineHeaderRowIndex(sheet, new FileReadingOptions());
+            FileReadingOptions options = new FileReadingOptions();
+            int headerRowIndex = determineHeaderRowIndex(sheet, options);
             if (headerRowIndex < 0) {
                 return 0;
             }
@@ -310,25 +251,7 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
     }
 
     /**
-     * Определяет параметры чтения Excel файла.
-     *
-     * @param params параметры, указанные пользователем
-     * @return настроенные параметры чтения
-     */
-    private FileReadingOptions determineReadingOptions(Map<String, String> params) {
-        // Создаем параметры из Map или используем значения по умолчанию
-        FileReadingOptions options = params != null ?
-                FileReadingOptions.fromMap(params) : new FileReadingOptions();
-
-        return options;
-    }
-
-    /**
      * Выбирает лист для обработки на основе параметров.
-     *
-     * @param workbook книга Excel
-     * @param options  параметры чтения
-     * @return выбранный лист
      */
     private Sheet selectSheet(Workbook workbook, FileReadingOptions options) {
         // Если указано имя листа, ищем по имени
@@ -337,7 +260,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
             if (sheet != null) {
                 return sheet;
             }
-
             log.warn("Лист с именем '{}' не найден, используем первый лист", options.getSheetName());
         }
 
@@ -356,9 +278,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Получает информацию обо всех листах в книге.
-     *
-     * @param workbook книга Excel
-     * @return список с информацией о листах
      */
     private List<Map<String, Object>> getWorkbookInfo(Workbook workbook) {
         List<Map<String, Object>> sheetsInfo = new ArrayList<>();
@@ -381,8 +300,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
             }
 
             sheetInfo.put("columnCount", columnCount);
-
-            // Добавляем информацию о наличии данных
             sheetInfo.put("isEmpty", sheet.getLastRowNum() <= 0);
 
             sheetsInfo.add(sheetInfo);
@@ -393,10 +310,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Определяет индекс строки с заголовками.
-     *
-     * @param sheet   лист Excel
-     * @param options параметры чтения
-     * @return индекс строки с заголовками или -1, если не найден
      */
     private int determineHeaderRowIndex(Sheet sheet, FileReadingOptions options) {
         // Если указан индекс заголовка, используем его
@@ -418,9 +331,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Проверяет, является ли строка заголовком.
-     *
-     * @param row строка для проверки
-     * @return true, если строка похожа на заголовок
      */
     private boolean isHeaderRow(Row row) {
         if (row == null || row.getLastCellNum() <= 0) {
@@ -446,11 +356,8 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Извлекает заголовки из строки.
-     *
-     * @param headerRow строка с заголовками
-     * @return массив заголовков
      */
-    private String[] extractHeaders(Row headerRow) {
+    private String[] extractHeaders(Row headerRow, FileReadingOptions options) {
         if (headerRow == null) {
             return new String[0];
         }
@@ -466,6 +373,8 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
                 // Если заголовок пустой, генерируем имя
                 if (header == null || header.trim().isEmpty()) {
                     header = "Column" + (i + 1);
+                } else if (options.isTrimWhitespace()) {
+                    header = header.trim();
                 }
 
                 headers[i] = header;
@@ -479,12 +388,8 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Преобразует строку Excel в карту.
-     *
-     * @param row     строка Excel
-     * @param headers заголовки
-     * @return карта с данными строки
      */
-    private Map<String, String> rowToMap(Row row, String[] headers) {
+    private Map<String, String> rowToMap(Row row, String[] headers, FileReadingOptions options) {
         Map<String, String> rowData = new HashMap<>();
 
         for (int i = 0; i < headers.length; i++) {
@@ -493,6 +398,9 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
             if (cell != null) {
                 value = getCellValueAsString(cell);
+                if (options.isTrimWhitespace() && value != null) {
+                    value = value.trim();
+                }
             }
 
             rowData.put(headers[i], value);
@@ -503,9 +411,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Получает значение ячейки в виде строки.
-     *
-     * @param cell ячейка Excel
-     * @return значение ячейки в виде строки
      */
     private String getCellValueAsString(Cell cell) {
         if (cell == null) {
@@ -555,9 +460,6 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Проверяет, является ли строка Excel пустой.
-     *
-     * @param row строка для проверки
-     * @return true, если строка пустая
      */
     private boolean isEmptyRow(Row row) {
         if (row == null) {
@@ -579,25 +481,19 @@ public class ExcelFileProcessor extends AbstractFileProcessor {
 
     /**
      * Получает образец данных из листа Excel.
-     *
-     * @param sheet          лист Excel
-     * @param headerRowIndex индекс строки с заголовками
-     * @param headers        заголовки
-     * @return список образцов данных
      */
-    private List<Map<String, String>> getSampleData(Sheet sheet, int headerRowIndex, String[] headers) {
+    private List<Map<String, String>> getSampleData(Sheet sheet, int headerRowIndex, String[] headers, FileReadingOptions options) {
         List<Map<String, String>> sampleData = new ArrayList<>();
         int dataStartRow = headerRowIndex + 1;
 
         for (int i = dataStartRow; i <= sheet.getLastRowNum() && sampleData.size() < SAMPLE_SIZE; i++) {
             Row row = sheet.getRow(i);
             if (row != null && !isEmptyRow(row)) {
-                Map<String, String> rowData = rowToMap(row, headers);
+                Map<String, String> rowData = rowToMap(row, headers, options);
                 sampleData.add(rowData);
             }
         }
 
         return sampleData;
     }
-
 }

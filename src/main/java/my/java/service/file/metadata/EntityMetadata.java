@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/metadata/EntityMetadata.java
 package my.java.service.file.metadata;
 
 import lombok.Builder;
@@ -26,6 +27,9 @@ public class EntityMetadata {
         this.displayName = displayName;
     }
 
+    /**
+     * Добавляет поле к метаданным сущности
+     */
     public void addField(String fieldName, String displayName, Class<?> type, boolean required, boolean exportable) {
         fields.put(fieldName, FieldMetadata.builder()
                 .name(fieldName)
@@ -36,6 +40,9 @@ public class EntityMetadata {
                 .build());
     }
 
+    /**
+     * Добавляет связь к метаданным сущности
+     */
     public void addRelationship(String relatedEntityType, String relationshipField, RelationshipType type) {
         relationships.add(RelationshipMetadata.builder()
                 .relatedEntityType(relatedEntityType)
@@ -45,18 +52,13 @@ public class EntityMetadata {
     }
 
     /**
-     * Получить все поля с префиксом сущности
-     * @return карта полей с префиксом
+     * Получает все поля с префиксом сущности
      */
     public Map<String, FieldMetadata> getPrefixedFields() {
-        Map<String, FieldMetadata> prefixedFields = new LinkedHashMap<>();
-
-        fields.forEach((fieldName, metadata) -> {
-            String prefixedName = entityType + "." + fieldName;
-            prefixedFields.put(prefixedName, metadata);
-        });
-
-        return prefixedFields;
+        return fields.entrySet().stream()
+                .collect(HashMap::new,
+                        (map, entry) -> map.put(entityType + "." + entry.getKey(), entry.getValue()),
+                        HashMap::putAll);
     }
 
     /**

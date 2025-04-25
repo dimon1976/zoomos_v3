@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/options/FileReadingOptions.java
 package my.java.service.file.options;
 
 import lombok.Data;
@@ -10,19 +11,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
 
 /**
  * Класс для хранения параметров чтения и обработки файлов.
- * Объединяет параметры для различных типов файлов (CSV, Excel и др.) и предоставляет
- * типизированный доступ к ним.
- * <p>
- * Преимущества использования этого класса вместо Map<String, String>:
- * <ul>
- *     <li>Типовая безопасность (ошибки выявляются на этапе компиляции)</li>
- *     <li>Самодокументируемый код (поля класса ясно показывают доступные параметры)</li>
- *     <li>Удобный доступ через геттеры/сеттеры вместо работы со строковыми ключами</li>
- *     <li>Возможность валидации значений параметров</li>
- * </ul>
  */
 @Data
 @Builder
@@ -30,275 +22,126 @@ import java.util.Map;
 @AllArgsConstructor
 public class FileReadingOptions {
     // Общие параметры для всех типов файлов
-    /**
-     * Номер строки с заголовками (начиная с 0).
-     */
     private int headerRow = 0;
-
-    /**
-     * Номер строки, с которой начинаются данные (обычно headerRow + 1).
-     */
     private int dataStartRow = 1;
-
-    /**
-     * Пропускать пустые строки при обработке.
-     */
     private boolean skipEmptyRows = true;
-
-    /**
-     * Удалять лишние пробелы в начале и конце значений.
-     */
     private boolean trimWhitespace = true;
-
-    /**
-     * Выполнять валидацию данных перед импортом.
-     */
     private boolean validateData = true;
-
-    /**
-     * Формат даты по умолчанию для преобразования строк в даты.
-     */
     private String dateFormat = "dd.MM.yyyy";
-
-    // Параметры обработки данных
-    /**
-     * Определяет поведение при ошибках обработки:
-     * <ul>
-     *     <li>continue - продолжать обработку, пропуская ошибочные записи</li>
-     *     <li>stop - остановить обработку при первой ошибке</li>
-     *     <li>report - собирать отчет об ошибках и продолжать</li>
-     * </ul>
-     */
     private String errorHandling = "continue";
-
-    /**
-     * Определяет поведение при обнаружении дубликатов:
-     * <ul>
-     *     <li>skip - пропускать дубликаты</li>
-     *     <li>update - обновлять существующие записи</li>
-     *     <li>error - выдавать ошибку при дубликатах</li>
-     * </ul>
-     */
     private String duplicateHandling = "skip";
-
-    /**
-     * Стратегия обработки данных:
-     * <ul>
-     *     <li>insert - только вставка новых записей</li>
-     *     <li>update - обновление существующих записей</li>
-     *     <li>upsert - вставка новых и обновление существующих</li>
-     *     <li>replace - замена всех существующих записей</li>
-     * </ul>
-     */
     private String processingStrategy = "insert";
-
-    /**
-     * Размер пакета при массовой вставке/обновлении данных.
-     */
     private int batchSize = 500;
 
     // Параметры для CSV
-    /**
-     * Разделитель полей в CSV-файле.
-     */
-    private Character delimiter = ',';
-
-    /**
-     * Символ обрамления текста в CSV-файле.
-     */
-    private Character quoteChar = '"';
-
-    /**
-     * Кодировка файла.
-     */
-    private Charset charset = StandardCharsets.UTF_8;
-
-    /**
-     * Символ экранирования в CSV-файле.
-     */
-    private Character escapeChar = '\\';
-
-    /**
-     * Признак наличия заголовков в файле.
-     */
+    private Character delimiter;
+    private Character quoteChar;
+    private Charset charset;
+    private Character escapeChar;
     private boolean hasHeader = true;
 
     // Параметры для Excel
-    /**
-     * Имя листа в Excel-файле.
-     */
     private String sheetName;
-
-    /**
-     * Индекс листа в Excel-файле (начиная с 0).
-     */
     private Integer sheetIndex = 0;
-
-    /**
-     * Вычислять формулы в Excel-файле.
-     */
     private boolean evaluateFormulas = true;
 
     // Параметры обработки пустых значений
-    /**
-     * Определяет поведение при обнаружении пустых ячеек:
-     * <ul>
-     *     <li>empty - оставлять пустыми</li>
-     *     <li>null - установить NULL</li>
-     *     <li>default - использовать значения по умолчанию</li>
-     * </ul>
-     */
     private String emptyFieldHandling = "empty";
 
-    // Формат-специфичные параметры хранятся в Map
-    /**
-     * Дополнительные параметры, которые не имеют типизированных полей.
-     */
+    // Дополнительные параметры
     private Map<String, String> additionalParams = new HashMap<>();
 
     /**
      * Создает экземпляр FileReadingOptions из Map параметров
-     *
-     * @param params карта параметров
-     * @return объект FileReadingOptions
      */
     public static FileReadingOptions fromMap(Map<String, String> params) {
-        if (params == null || params.isEmpty()) {
-            return new FileReadingOptions();
-        }
-
         FileReadingOptions options = new FileReadingOptions();
-
-        // Общие параметры
-        options.setHeaderRow(getIntParam(params, "headerRow", 0));
-        options.setDataStartRow(getIntParam(params, "dataStartRow", 1));
-        options.setSkipEmptyRows(getBooleanParam(params, "skipEmptyRows", true));
-        options.setTrimWhitespace(getBooleanParam(params, "trimWhitespace", true));
-        options.setValidateData(getBooleanParam(params, "validateData", true));
-        options.setDateFormat(getStringParam(params, "dateFormat", "dd.MM.yyyy"));
-
-        // Параметры обработки данных
-        options.setErrorHandling(getStringParam(params, "errorHandling", "continue"));
-        options.setDuplicateHandling(getStringParam(params, "duplicateHandling", "skip"));
-        options.setProcessingStrategy(getStringParam(params, "processingStrategy", "insert"));
-        options.setBatchSize(getIntParam(params, "batchSize", 500));
-
-        // Параметры для CSV
-        String delimiterStr = getStringParam(params, "delimiter", ",");
-        if (delimiterStr != null && !delimiterStr.isEmpty()) {
-            options.setDelimiter(delimiterStr.charAt(0));
+        if (params == null || params.isEmpty()) {
+            return options;
         }
 
-        String quoteCharStr = getStringParam(params, "quoteChar", "\"");
-        if (quoteCharStr != null && !quoteCharStr.isEmpty()) {
-            options.setQuoteChar(quoteCharStr.charAt(0));
+        // Создаем новый Map с очищенными ключами
+        Map<String, String> cleanedParams = new HashMap<>();
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            String cleanedKey = cleanParamKey(entry.getKey());
+            cleanedParams.put(cleanedKey, entry.getValue());
         }
 
-        String charsetStr = getStringParam(params, "charset", "UTF-8");
-        if (charsetStr != null && !charsetStr.isEmpty()) {
+        // Теперь работаем с cleanedParams вместо params
+        options.headerRow = getIntParam(cleanedParams, "headerRow", 0);
+        options.dataStartRow = getIntParam(cleanedParams, "dataStartRow", 1);
+        options.skipEmptyRows = getBooleanParam(cleanedParams, "skipEmptyRows", true);
+        options.trimWhitespace = getBooleanParam(cleanedParams, "trimWhitespace", true);
+        options.validateData = getBooleanParam(cleanedParams, "validateData", true);
+        options.dateFormat = getStringParam(cleanedParams, "dateFormat", "dd.MM.yyyy");
+        options.errorHandling = getStringParam(cleanedParams, "errorHandling", "continue");
+        options.duplicateHandling = getStringParam(cleanedParams, "duplicateHandling", "skip");
+        options.processingStrategy = getStringParam(cleanedParams, "processingStrategy", "insert");
+        options.batchSize = getIntParam(cleanedParams, "batchSize", 500);
+
+        // CSV параметры
+        String delimiterStr = getStringParam(cleanedParams, "delimiter", null);
+        if (!isAuto(delimiterStr) && delimiterStr != null && !delimiterStr.isEmpty()) {
+            options.delimiter = delimiterStr.charAt(0);
+        }
+
+        String quoteCharStr = getStringParam(cleanedParams, "quoteChar", null);
+        if (!isAuto(quoteCharStr) && quoteCharStr != null && !quoteCharStr.isEmpty()) {
+            options.quoteChar = quoteCharStr.charAt(0);
+        }
+
+        String charsetStr = getStringParam(cleanedParams, "encoding", null);
+        if (!isAuto(charsetStr) && charsetStr != null && !charsetStr.isEmpty()) {
             try {
-                options.setCharset(Charset.forName(charsetStr));
+                options.charset = Charset.forName(charsetStr);
             } catch (Exception e) {
-                // При ошибке используем UTF-8
+                // Можно залогировать: некорректная кодировка
             }
         }
 
-        String escapeCharStr = getStringParam(params, "escapeChar", "\\");
-        if (escapeCharStr != null && !escapeCharStr.isEmpty()) {
-            options.setEscapeChar(escapeCharStr.charAt(0));
+        String escapeCharStr = getStringParam(cleanedParams, "escapeChar", null);
+        if (!isAuto(escapeCharStr) && escapeCharStr != null && !escapeCharStr.isEmpty()) {
+            options.escapeChar = escapeCharStr.charAt(0);
         }
 
-        options.setHasHeader(getBooleanParam(params, "hasHeader", true));
+        options.hasHeader = getBooleanParam(cleanedParams, "hasHeader", true);
 
-        // Параметры для Excel
-        options.setSheetName(getStringParam(params, "sheetName", null));
-        options.setSheetIndex(getIntParam(params, "sheetIndex", 0));
-        options.setEvaluateFormulas(getBooleanParam(params, "evaluateFormulas", true));
+        // Excel параметры
+        options.sheetName = getStringParam(cleanedParams, "sheetName", null);
+        options.sheetIndex = getIntParam(cleanedParams, "sheetIndex", 0);
+        options.evaluateFormulas = getBooleanParam(cleanedParams, "evaluateFormulas", true);
+        options.emptyFieldHandling = getStringParam(cleanedParams, "emptyFieldHandling", "empty");
 
-        // Параметры обработки пустых значений
-        options.setEmptyFieldHandling(getStringParam(params, "emptyFieldHandling", "empty"));
-
-        // Сохраняем все дополнительные параметры
-        for (Map.Entry<String, String> entry : params.entrySet()) {
+        // Дополнительные параметры (оставляем оригинальные ключи, если нужно)
+        for (Map.Entry<String, String> entry : cleanedParams.entrySet()) {
             if (!isStandardParam(entry.getKey())) {
-                options.getAdditionalParams().put(entry.getKey(), entry.getValue());
+                options.additionalParams.put(entry.getKey(), entry.getValue());
             }
         }
 
         return options;
     }
 
-
-    /**
-     * Преобразует объект FileReadingOptions обратно в Map<String, String>.
-     * Это полезно для обратной совместимости.
-     *
-     * @return карта параметров
-     */
-    public Map<String, String> toMap() {
-        Map<String, String> params = new HashMap<>();
-
-        // Общие параметры
-        params.put("headerRow", String.valueOf(headerRow));
-        params.put("dataStartRow", String.valueOf(dataStartRow));
-        params.put("skipEmptyRows", String.valueOf(skipEmptyRows));
-        params.put("trimWhitespace", String.valueOf(trimWhitespace));
-        params.put("validateData", String.valueOf(validateData));
-        params.put("dateFormat", dateFormat);
-
-        // Параметры обработки данных
-        params.put("errorHandling", errorHandling);
-        params.put("duplicateHandling", duplicateHandling);
-        params.put("processingStrategy", processingStrategy);
-        params.put("batchSize", String.valueOf(batchSize));
-
-        // Параметры для CSV
-        params.put("delimiter", String.valueOf(delimiter));
-        params.put("quoteChar", String.valueOf(quoteChar));
-        params.put("charset", charset.name());
-        params.put("escapeChar", String.valueOf(escapeChar));
-        params.put("hasHeader", String.valueOf(hasHeader));
-
-        // Параметры для Excel
-        if (sheetName != null) {
-            params.put("sheetName", sheetName);
-        }
-        params.put("sheetIndex", String.valueOf(sheetIndex));
-        params.put("evaluateFormulas", String.valueOf(evaluateFormulas));
-
-        // Параметры обработки пустых значений
-        params.put("emptyFieldHandling", emptyFieldHandling);
-
-        // Добавляем все дополнительные параметры
-        params.putAll(additionalParams);
-
-        return params;
+    private static boolean isAuto(String value) {
+        return value != null && value.equalsIgnoreCase("auto");
     }
 
+
+
     /**
-     * Обновляет стратегию обработки ошибок на основе записей в БД или других параметров.
-     *
-     * @param entityType тип сущности
-     * @param clientId идентификатор клиента
-     * @return this для цепочки вызовов
+     * Обновляет стратегию обработки на основе типа сущности и клиента
      */
     public FileReadingOptions updateStrategy(String entityType, Long clientId) {
-        // Пример обновления стратегии
-        // В будущем здесь может быть логика выбора оптимальной стратегии
-        // на основе типа сущности, клиента и других параметров
-
         String entityTypeStr = getAdditionalParam("entityType", entityType);
-        if (entityTypeStr.equals("product")) {
-            // Для продуктов используем стратегию upsert по умолчанию
-            if (processingStrategy.equals("insert")) {
-                processingStrategy = "upsert";
-            }
+
+        // Оптимизированная логика выбора стратегии
+        if (entityTypeStr.equals("product") && processingStrategy.equals("insert")) {
+            processingStrategy = "upsert";
         }
 
-        // Обновляем параметры в зависимости от размера данных
+        // Оптимизация для больших данных
         Integer totalRecords = getIntAdditionalParam("totalRecords", 0);
         if (totalRecords > 1000) {
-            // Для больших наборов данных увеличиваем размер пакета
             batchSize = Math.max(batchSize, 1000);
         }
 
@@ -306,86 +149,63 @@ public class FileReadingOptions {
     }
 
     /**
-     * Получает целочисленный дополнительный параметр.
-     *
-     * @param key ключ параметра
-     * @param defaultValue значение по умолчанию
-     * @return значение параметра
+     * Очищает ключ параметра от префиксов и суффиксов, например:
+     * - "params[emptyFieldHandling]" → "emptyFieldHandling"
+     * - "options[delimiter]" → "delimiter"
+     */
+    private static String cleanParamKey(String key) {
+        if (key == null) return null;
+
+        // Удаляем "params[" в начале и "]" в конце, если есть
+        if (key.startsWith("params[") && key.endsWith("]")) {
+            return key.substring(7, key.length() - 1);
+        }
+        // Аналогично для других возможных префиксов, например "options["
+        if (key.startsWith("options[") && key.endsWith("]")) {
+            return key.substring(8, key.length() - 1);
+        }
+        // Если формат не подходит, возвращаем ключ как есть
+        return key;
+    }
+
+    // Добавление метода копирования в FileReadingOptions
+    public FileReadingOptions copy() {
+        return FileReadingOptions.builder()
+                .headerRow(headerRow)
+                .dataStartRow(dataStartRow)
+                .skipEmptyRows(skipEmptyRows)
+                .trimWhitespace(trimWhitespace)
+                .validateData(validateData)
+                .dateFormat(dateFormat)
+                .errorHandling(errorHandling)
+                .duplicateHandling(duplicateHandling)
+                .processingStrategy(processingStrategy)
+                .batchSize(batchSize)
+                .delimiter(delimiter)
+                .quoteChar(quoteChar)
+                .charset(charset)
+                .escapeChar(escapeChar)
+                .hasHeader(hasHeader)
+                .sheetName(sheetName)
+                .sheetIndex(sheetIndex)
+                .evaluateFormulas(evaluateFormulas)
+                .emptyFieldHandling(emptyFieldHandling)
+                .additionalParams(new HashMap<>(additionalParams))
+                .build();
+    }
+
+    /**
+     * Получает дополнительный целочисленный параметр
      */
     public Integer getIntAdditionalParam(String key, Integer defaultValue) {
         String value = additionalParams.get(key);
-        if (value == null) {
-            return defaultValue;
-        }
+        if (value == null) return defaultValue;
+
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
-    }
-
-    /**
-     * Получает целочисленный параметр из Map
-     */
-    private static int getIntParam(Map<String, String> params, String key, int defaultValue) {
-        if (params == null || !params.containsKey(key)) {
-            return defaultValue;
-        }
-
-        try {
-            return Integer.parseInt(params.get(key));
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    /**
-     * Получает логический параметр из Map
-     */
-    private static boolean getBooleanParam(Map<String, String> params, String key, boolean defaultValue) {
-        if (params == null || !params.containsKey(key)) {
-            return defaultValue;
-        }
-
-        String value = params.get(key);
-        return "true".equalsIgnoreCase(value) || "yes".equalsIgnoreCase(value) || "1".equals(value);
-    }
-
-    /**
-     * Получает строковый параметр из Map
-     */
-    private static String getStringParam(Map<String, String> params, String key, String defaultValue) {
-        if (params == null || !params.containsKey(key)) {
-            return defaultValue;
-        }
-
-        return params.get(key);
-    }
-
-    /**
-     * Проверяет, является ли параметр стандартным
-     */
-    private static boolean isStandardParam(String key) {
-        // Список всех стандартных параметров
-        return key.equals("headerRow") ||
-                key.equals("dataStartRow") ||
-                key.equals("skipEmptyRows") ||
-                key.equals("trimWhitespace") ||
-                key.equals("validateData") ||
-                key.equals("dateFormat") ||
-                key.equals("errorHandling") ||
-                key.equals("duplicateHandling") ||
-                key.equals("processingStrategy") ||
-                key.equals("batchSize") ||
-                key.equals("delimiter") ||
-                key.equals("quoteChar") ||
-                key.equals("charset") ||
-                key.equals("escapeChar") ||
-                key.equals("hasHeader") ||
-                key.equals("sheetName") ||
-                key.equals("sheetIndex") ||
-                key.equals("evaluateFormulas") ||
-                key.equals("emptyFieldHandling");
     }
 
     /**
@@ -396,60 +216,44 @@ public class FileReadingOptions {
     }
 
     /**
-     * Валидирует параметры импорта и корректирует значения при необходимости.
-     *
-     * @return this для цепочки вызовов
+     * Валидирует параметры и корректирует их при необходимости
      */
     public FileReadingOptions validate() {
-        // Проверяем и корректируем параметры
+        // Коррекция параметров
+        headerRow = Math.max(0, headerRow);
+        dataStartRow = Math.max(headerRow + 1, dataStartRow);
+        batchSize = Math.max(1, Math.min(10000, batchSize));
 
-        // Проверка индекса строки заголовка
-        if (headerRow < 0) {
-            headerRow = 0;
-        }
+        // Проверка значений перечислений
+        errorHandling = validateEnum(errorHandling,
+                new String[]{"continue", "stop", "report"}, "continue");
 
-        // Проверка строки начала данных
-        if (dataStartRow <= headerRow) {
-            dataStartRow = headerRow + 1;
-        }
+        duplicateHandling = validateEnum(duplicateHandling,
+                new String[]{"skip", "update", "error"}, "skip");
 
-        // Проверка размера пакета
-        if (batchSize < 1) {
-            batchSize = 500;
-        } else if (batchSize > 10000) {
-            batchSize = 10000;
-        }
+        processingStrategy = validateEnum(processingStrategy,
+                new String[]{"insert", "update", "upsert", "replace"}, "insert");
 
-        // Проверка стратегии обработки ошибок
-        if (!Arrays.asList("continue", "stop", "report").contains(errorHandling)) {
-            errorHandling = "continue";
-        }
-
-        // Проверка стратегии обработки дубликатов
-        if (!Arrays.asList("skip", "update", "error").contains(duplicateHandling)) {
-            duplicateHandling = "skip";
-        }
-
-        // Проверка стратегии обработки
-        if (!Arrays.asList("insert", "update", "upsert", "replace").contains(processingStrategy)) {
-            processingStrategy = "insert";
-        }
-
-        // Проверка обработки пустых значений
-        if (!Arrays.asList("empty", "null", "default").contains(emptyFieldHandling)) {
-            emptyFieldHandling = "empty";
-        }
+        emptyFieldHandling = validateEnum(emptyFieldHandling,
+                new String[]{"empty", "null", "default"}, "empty");
 
         return this;
     }
 
     /**
-     * Проверяет, соответствуют ли параметры требованиям для обработки файла.
-     *
-     * @return true, если параметры валидны
+     * Проверяет принадлежность значения к списку допустимых
+     */
+    private String validateEnum(String value, String[] validValues, String defaultValue) {
+        for (String validValue : validValues) {
+            if (validValue.equals(value)) return value;
+        }
+        return defaultValue;
+    }
+
+    /**
+     * Проверяет валидность параметров
      */
     public boolean isValid() {
-        // Базовая валидация параметров
         return batchSize > 0 &&
                 Arrays.asList("continue", "stop", "report").contains(errorHandling) &&
                 Arrays.asList("skip", "update", "error").contains(duplicateHandling) &&
@@ -458,47 +262,39 @@ public class FileReadingOptions {
     }
 
     /**
-     * Логирует все текущие настройки на уровне DEBUG.
-     *
-     * @param logger логгер для вывода информации
-     * @return this для цепочки вызовов
-     */
-    public FileReadingOptions logSettings(org.slf4j.Logger logger) {
-        if (logger.isDebugEnabled()) {
-            logger.debug("Настройки импорта:");
-            logger.debug("- headerRow: {}", headerRow);
-            logger.debug("- dataStartRow: {}", dataStartRow);
-            logger.debug("- skipEmptyRows: {}", skipEmptyRows);
-            logger.debug("- trimWhitespace: {}", trimWhitespace);
-            logger.debug("- validateData: {}", validateData);
-            logger.debug("- dateFormat: {}", dateFormat);
-            logger.debug("- errorHandling: {}", errorHandling);
-            logger.debug("- duplicateHandling: {}", duplicateHandling);
-            logger.debug("- processingStrategy: {}", processingStrategy);
-            logger.debug("- batchSize: {}", batchSize);
-            logger.debug("- delimiter: {}", delimiter);
-            logger.debug("- quoteChar: {}", quoteChar);
-            logger.debug("- charset: {}", charset);
-            logger.debug("- escapeChar: {}", escapeChar);
-            logger.debug("- hasHeader: {}", hasHeader);
-            logger.debug("- sheetName: {}", sheetName);
-            logger.debug("- sheetIndex: {}", sheetIndex);
-            logger.debug("- evaluateFormulas: {}", evaluateFormulas);
-            logger.debug("- emptyFieldHandling: {}", emptyFieldHandling);
-
-            // Логируем дополнительные параметры
-            if (!additionalParams.isEmpty()) {
-                logger.debug("Дополнительные параметры:");
-                additionalParams.forEach((key, value) -> logger.debug("- {}: {}", key, value));
-            }
-        }
-        return this;
-    }
-
-    /**
      * Проверяет наличие дополнительного параметра
      */
     public boolean hasAdditionalParam(String key) {
         return additionalParams.containsKey(key);
+    }
+
+    // Приватные вспомогательные методы
+    private static int getIntParam(Map<String, String> params, String key, int defaultValue) {
+        if (params == null || !params.containsKey(key)) return defaultValue;
+
+        try {
+            return Integer.parseInt(params.get(key));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static boolean getBooleanParam(Map<String, String> params, String key, boolean defaultValue) {
+        if (params == null || !params.containsKey(key)) return defaultValue;
+
+        String value = params.get(key);
+        return "true".equalsIgnoreCase(value) || "yes".equalsIgnoreCase(value) || "1".equals(value);
+    }
+
+    private static String getStringParam(Map<String, String> params, String key, String defaultValue) {
+        return params == null || !params.containsKey(key) ? defaultValue : params.get(key);
+    }
+
+    private static boolean isStandardParam(String key) {
+        return Arrays.asList("headerRow", "dataStartRow", "skipEmptyRows", "trimWhitespace",
+                "validateData", "dateFormat", "errorHandling", "duplicateHandling",
+                "processingStrategy", "batchSize", "delimiter", "quoteChar",
+                "charset", "escapeChar", "hasHeader", "sheetName", "sheetIndex",
+                "evaluateFormulas", "emptyFieldHandling").contains(key);
     }
 }

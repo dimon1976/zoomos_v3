@@ -216,7 +216,6 @@ public class OperationController {
         return FileOperationDto.builder()
                 .id(operation.getId())
                 .clientId(operation.getClient() != null ? operation.getClient().getId() : null)
-                .clientName(operation.getClient() != null ? operation.getClient().getName() : null)
                 .operationType(operation.getOperationType())
                 .fileName(operation.getFileName())
                 .fileType(operation.getFileType())
@@ -225,7 +224,6 @@ public class OperationController {
                 .errorMessage(operation.getErrorMessage())
                 .startedAt(operation.getStartedAt())
                 .completedAt(operation.getCompletedAt())
-                .createdBy(operation.getCreatedBy())
                 .build();
     }
 }

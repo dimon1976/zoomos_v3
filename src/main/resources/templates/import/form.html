@@ -1,70 +1,79 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
-        'Импорт данных - Обработка файлов',
+        'Экспорт данных - Обработка файлов',
         ~{::section},
         ~{::script},
         ~{::style},
-        ${client.name + ' - Импорт данных'},
+        ${client.name + ' - Экспорт данных'},
         ~{::.page-actions}
       )}">
 <head>
-    <title>Импорт данных - Обработка файлов</title>
+    <title>Экспорт данных - Обработка файлов</title>
     <style>
-        .upload-area {
-            border: 2px dashed #ccc;
-            border-radius: 8px;
-            padding: 40px 20px;
-            text-align: center;
-            transition: all 0.3s;
-            background-color: #f8f9fa;
-            cursor: pointer;
-        }
-
-        .upload-area:hover {
-            border-color: #0d6efd;
-            background-color: #f1f8ff;
-        }
-
-        .upload-area.dragging {
-            border-color: #0d6efd;
-            background-color: #e8f0fe;
-        }
-
-        .upload-icon {
-            font-size: 48px;
-            color: #0d6efd;
-            margin-bottom: 20px;
-        }
-
-        .entity-type-card {
+        .format-card {
             cursor: pointer;
             transition: all 0.2s;
             height: 100%;
         }
-
-        .entity-type-card:hover {
+        .format-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
-
-        .entity-type-card.selected {
-            border-color: #0d6efd;
-            background-color: #f0f7ff;
+        .format-card.selected {
+            border-color: #198754;
+            background-color: #e8f5e9;
         }
-
+        .export-icon {
+            font-size: 48px;
+            color: #198754;
+            margin-bottom: 20px;
+        }
+        .field-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .field-item {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .field-item:last-child {
+            border-bottom: none;
+        }
         .progress-container {
             margin-top: 20px;
         }
-
-        #filePreview {
-            display: none;
-            margin-top: 20px;
+        .template-card {
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
         }
-
-        .preview-table {
-            max-height: 300px;
-            overflow-y: auto;
+        .template-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .template-card.selected {
+            border-color: #198754;
+            background-color: #f8f9fa;
+        }
+        .template-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .template-card:hover .template-actions {
+            opacity: 1;
+        }
+        .filter-section {
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -77,8 +86,8 @@
     <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-primary me-2">
         <i class="fas fa-history me-1"></i>Операции
     </a>
-    <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-success">
-        <i class="fas fa-file-export me-1"></i>Экспорт
+    <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-primary">
+        <i class="fas fa-file-import me-1"></i>Импорт
     </a>
 </div>
 
@@ -86,775 +95,670 @@
     <!-- Информация о клиенте -->
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0">Импорт данных для клиента</h5>
+            <h5 class="mb-0">Экспорт данных клиента</h5>
         </div>
         <div class="card-body">
-            <p>Загрузите файл CSV или Excel для импорта данных в систему.</p>
+            <p>Экспортируйте данные клиента в нужном формате.</p>
 
-            <form id="importForm" th:action="@{/clients/{id}/import(id=${client.id})}" method="post"
-                  enctype="multipart/form-data">
-                <!-- Загрузка файла -->
-                <div class="mb-4">
-                    <h5>1. Загрузите файл</h5>
-                    <div class="upload-area mt-2" id="dropArea">
-                        <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none" required>
-                        <div class="upload-icon">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                        </div>
-                        <h5>Перетащите файл сюда или кликните для выбора</h5>
-                        <p class="text-muted">Поддерживаемые форматы: CSV, Excel (.xlsx, .xls)</p>
-                    </div>
+            <!-- Секция с шаблонами экспорта -->
+            <div class="mb-4">
+                <h5 class="mb-3">1. Выберите шаблон экспорта или создайте новый</h5>
 
-                    <!-- Предпросмотр файла -->
-                    <div id="filePreview" class="card mt-3">
-                        <div class="card-header">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">Предпросмотр файла</h5>
-                                <button type="button" id="removeFile" class="btn btn-sm btn-outline-danger">
-                                    <i class="fas fa-times me-1"></i>Удалить
-                                </button>
-                            </div>
+                <div class="row row-cols-1 row-cols-md-3 g-4 mb-3" id="templatesContainer">
+                    <!-- Здесь будут карточки шаблонов -->
+                    <div class="text-center py-3 col-12" id="templatesLoading">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
                         </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <strong>Имя файла:</strong> <span id="fileName"></span>
-                            </div>
-                            <div class="mb-3">
-                                <strong>Размер:</strong> <span id="fileSize"></span>
-                            </div>
-                            <div class="mb-3">
-                                <strong>Тип:</strong> <span id="fileType"></span>
-                            </div>
-                            <div class="mb-3">
-                                <h6>Обнаруженные столбцы:</h6>
-                                <div class="preview-table">
-                                    <table class="table table-sm table-bordered" id="previewTable">
-                                        <thead>
-                                        <tr id="headerRow"></tr>
-                                        </thead>
-                                        <tbody id="previewBody"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+                        <p class="mt-2">Загрузка шаблонов...</p>
                     </div>
                 </div>
 
-                <!-- Включение компонента выбора полей -->
-                <div th:replace="~{components/field-selection :: fieldSelection(${client.id}, 'import')}"></div>
-
-                <!-- Параметры импорта -->
-                <div id="importOptions" class="mb-4">
-                    <h5>2. Настройте параметры импорта</h5>
-                    <div class="card mt-2">
-                        <div class="card-body">
-                            <ul class="nav nav-tabs" id="importParamsTabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab"
-                                            data-bs-target="#basic" type="button" role="tab"
-                                            aria-controls="basic" aria-selected="true">Основные</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="structure-tab" data-bs-toggle="tab"
-                                            data-bs-target="#structure" type="button" role="tab"
-                                            aria-controls="structure" aria-selected="false">Структура</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="format-tab" data-bs-toggle="tab"
-                                            data-bs-target="#format" type="button" role="tab"
-                                            aria-controls="format" aria-selected="false">Формат</button>
-                                </li>
-                            </ul>
-
-                            <div class="tab-content pt-3" id="importParamsContent">
-                                <!-- Основные параметры (существующие) -->
-                                <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <!-- Поле скрыто, так как значение выбирается в компоненте field-selection -->
-                                            <input type="hidden" id="mappingId" name="mappingId" value="">
-                                            <label for="strategyId" class="form-label">Стратегия импорта</label>
-                                            <select class="form-select" id="strategyId" name="strategyId">
-                                                <option value="">По умолчанию</option>
-                                                <!-- Опции будут добавлены динамически -->
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="errorHandling" class="form-label">Обработка ошибок</label>
-                                            <select class="form-select" id="errorHandling" name="params[errorHandling]">
-                                                <option value="continue">Продолжать при ошибках</option>
-                                                <option value="stop">Остановить при первой ошибке</option>
-                                                <option value="report">Собирать отчет об ошибках</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="duplicateHandling" class="form-label">Обработка дубликатов</label>
-                                            <select class="form-select" id="duplicateHandling" name="params[duplicateHandling]">
-                                                <option value="skip">Пропускать дубликаты</option>
-                                                <option value="update">Обновлять существующие записи</option>
-                                                <option value="error">Выдавать ошибку при дубликатах</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="validateData"
-                                                       name="params[validateData]" value="true" checked>
-                                                <label class="form-check-label" for="validateData">
-                                                    Валидировать данные перед импортом
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="trimWhitespace"
-                                                       name="params[trimWhitespace]" value="true" checked>
-                                                <label class="form-check-label" for="trimWhitespace">
-                                                    Удалять лишние пробелы
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Параметры структуры данных -->
-                                <div class="tab-pane fade" id="structure" role="tabpanel" aria-labelledby="structure-tab">
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="headerRowInput" class="form-label">Строка заголовков</label>
-                                            <input type="number" class="form-control" id="headerRowInput" name="params[headerRow]" value="0" min="0">
-                                            <small class="form-text text-muted">Номер строки с заголовками (начиная с 0)</small>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="dataStartRow" class="form-label">Начальная строка данных</label>
-                                            <input type="number" class="form-control" id="dataStartRow" name="params[dataStartRow]" value="1" min="1">
-                                            <small class="form-text text-muted">Номер строки, с которой начинаются данные</small>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="skipEmptyRows" name="params[skipEmptyRows]" value="true" checked>
-                                                <label class="form-check-label" for="skipEmptyRows">Пропускать пустые строки</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="autoDetectTypes" name="params[autoDetectTypes]" value="true" checked>
-                                                <label class="form-check-label" for="autoDetectTypes">Автоопределение типов данных</label>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="dateFormat" class="form-label">Формат дат</label>
-                                            <select class="form-select" id="dateFormat" name="params[dateFormat]">
-                                                <option value="auto">Автоопределение</option>
-                                                <option value="dd.MM.yyyy">DD.MM.YYYY (31.12.2023)</option>
-                                                <option value="yyyy-MM-dd">YYYY-MM-DD (2023-12-31)</option>
-                                                <option value="MM/dd/yyyy">MM/DD/YYYY (12/31/2023)</option>
-                                                <option value="dd/MM/yyyy">DD/MM/YYYY (31/12/2023)</option>
-                                                <option value="custom">Свой формат...</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3" id="customDateFormatContainer" style="display: none;">
-                                            <label for="customDateFormat" class="form-label">Свой формат даты</label>
-                                            <input type="text" class="form-control" id="customDateFormat" name="params[customDateFormat]" placeholder="Например: yyyy.MM.dd HH:mm:ss">
-                                            <small class="form-text text-muted">
-                                                Используйте: y (год), M (месяц), d (день), H (часы), m (минуты), s (секунды)
-                                            </small>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="emptyFieldHandling" class="form-label">Обработка пустых ячеек</label>
-                                            <select class="form-select" id="emptyFieldHandling" name="params[emptyFieldHandling]">
-                                                <option value="empty">Оставлять пустыми</option>
-                                                <option value="null">Установить NULL</option>
-                                                <option value="default">Использовать значения по умолчанию</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3 xlsx-only">
-                                            <label for="sheetIndex" class="form-label">Лист Excel</label>
-                                            <input type="number" class="form-control" id="sheetIndex" name="params[sheetIndex]" value="0" min="0" placeholder="Индекс начиная с 0">
-                                            <small class="form-text text-muted">Индекс листа (начиная с 0)</small>
-                                        </div>
-                                    </div>
-
-                                    <div class="row xlsx-only">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="evaluateFormulas" name="params[evaluateFormulas]" value="true" checked>
-                                                <label class="form-check-label" for="evaluateFormulas">Вычислять формулы</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Параметры формата файла -->
-                                <div class="tab-pane fade" id="format" role="tabpanel" aria-labelledby="format-tab">
-                                    <!-- Параметры только для CSV файлов -->
-                                    <div class="csv-only">
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="delimiter" class="form-label">Разделитель полей</label>
-                                                <select class="form-select" id="delimiter" name="params[delimiter]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value=";">Точка с запятой (;)</option>
-                                                    <option value=",">Запятая (,)</option>
-                                                    <option value="\t">Табуляция</option>
-                                                    <option value="|">Вертикальная черта (|)</option>
-                                                    <option value=" ">Пробел</option>
-                                                    <option value="custom">Другой...</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6 mb-3" id="customDelimiterContainer" style="display: none;">
-                                                <label for="customDelimiter" class="form-label">Укажите разделитель</label>
-                                                <input type="text" class="form-control" id="customDelimiter" name="params[customDelimiter]" maxlength="1">
-                                            </div>
-                                        </div>
-
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="quoteChar" class="form-label">Символ обрамления текста</label>
-                                                <select class="form-select" id="quoteChar" name="params[quoteChar]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value="&quot;">Двойные кавычки (&quot;)</option>
-                                                    <option value="'">Одинарные кавычки (')</option>
-                                                    <option value="">Без обрамления</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6 mb-3">
-                                                <label for="encoding" class="form-label">Кодировка файла</label>
-                                                <select class="form-select" id="encoding" name="params[encoding]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value="UTF-8">UTF-8</option>
-                                                    <option value="windows-1251">Windows-1251 (кириллица)</option>
-                                                    <option value="CP1252">CP1252 (западноевропейская)</option>
-                                                    <option value="ISO-8859-1">ISO-8859-1 (латиница)</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="escapeChar" class="form-label">Символ экранирования</label>
-                                                <select class="form-select" id="escapeChar" name="params[escapeChar]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value="\">Обратная косая черта (\)</option>
-                                                    <option value="">Без экранирования</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div id="noTemplatesMessage" class="alert alert-info d-none">
+                    <i class="fas fa-info-circle me-2"></i>У вас пока нет сохраненных шаблонов экспорта
                 </div>
 
-                <!-- Кнопки действий -->
-                <div class="mt-4 text-center">
-                    <button type="submit" id="startImportBtn" class="btn btn-primary btn-lg px-4" disabled>
-                        <i class="fas fa-file-import me-1"></i>Начать импорт
+                <div id="createNewExportSection">
+                    <button type="button" id="createNewExportBtn" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Создать новый экспорт
                     </button>
-                    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-secondary btn-lg px-4 ms-2">
-                        <i class="fas fa-times me-1"></i>Отмена
-                    </a>
                 </div>
+            </div>
 
-                <!-- Прогресс импорта -->
-                <div id="importProgress" class="progress-container d-none">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3">Прогресс импорта</h5>
-                            <div class="progress mb-3" style="height: 25px;">
-                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                                     role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
-                                     aria-valuemax="100">0%
+            <form id="exportForm" th:action="@{/clients/{id}/export(id=${client.id})}" method="post">
+                <!-- Скрытое поле для ID шаблона -->
+                <input type="hidden" id="templateId" name="templateId" value="">
+
+                <div id="exportConfigSection" class="d-none">
+                    <!-- Выбор формата экспорта -->
+                    <div class="mb-4">
+                        <h5>2. Выберите формат экспорта</h5>
+                        <div class="row row-cols-1 row-cols-md-4 g-4 mt-2">
+                            <div class="col">
+                                <div class="card format-card" data-format="csv">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-file-csv fa-3x mb-3 text-success"></i>
+                                        <h5 class="card-title">CSV</h5>
+                                        <p class="card-text small">Универсальный текстовый формат</p>
+                                        <input type="radio" name="format" value="csv" id="formatCsv" class="d-none" checked>
+                                    </div>
                                 </div>
                             </div>
-                            <div id="importStatus">Подготовка к импорту...</div>
+                            <div class="col">
+                                <div class="card format-card" data-format="xlsx">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-file-excel fa-3x mb-3 text-success"></i>
+                                        <h5 class="card-title">Excel</h5>
+                                        <p class="card-text small">Файл Microsoft Excel (.xlsx)</p>
+                                        <input type="radio" name="format" value="xlsx" id="formatXlsx" class="d-none">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card format-card" data-format="json">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-file-code fa-3x mb-3 text-success"></i>
+                                        <h5 class="card-title">JSON</h5>
+                                        <p class="card-text small">Структурированные данные</p>
+                                        <input type="radio" name="format" value="json" id="formatJson" class="d-none">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="card format-card" data-format="xml">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-file-alt fa-3x mb-3 text-success"></i>
+                                        <h5 class="card-title">XML</h5>
+                                        <p class="card-text small">Расширяемый язык разметки</p>
+                                        <input type="radio" name="format" value="xml" id="formatXml" class="d-none">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                    </div>
+
+                    <!-- Включение компонента выбора полей -->
+                    <div th:replace="components/field-selection :: fieldSelection(${client.id}, 'export')"></div>
+
+                    <!-- Дополнительные настройки экспорта -->
+                    <div class="mb-4">
+                        <h5>4. Настройте параметры экспорта</h5>
+                        <div class="card mt-2">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>Общие параметры</h6>
+                                        <div class="mb-3">
+                                            <label for="dateFrom" class="form-label">Дата с</label>
+                                            <input type="date" class="form-control" id="dateFrom" name="params[dateFrom]">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="dateTo" class="form-label">Дата по</label>
+                                            <input type="date" class="form-control" id="dateTo" name="params[dateTo]">
+                                        </div>
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="checkbox" id="includeHeaders" name="params[includeHeaders]" value="true" checked>
+                                            <label class="form-check-label" for="includeHeaders">
+                                                Включить заголовки
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>Параметры формата</h6>
+                                        <div class="mb-3" id="csvOptions">
+                                            <label for="delimiter" class="form-label">Разделитель (для CSV)</label>
+                                            <select class="form-select" id="delimiter" name="params[delimiter]">
+                                                <option value="," selected>Запятая (,)</option>
+                                                <option value=";">Точка с запятой (;)</option>
+                                                <option value="\t">Табуляция</option>
+                                                <option value="|">Вертикальная черта (|)</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3" id="excelOptions">
+                                            <label for="sheetName" class="form-label">Имя листа (для Excel)</label>
+                                            <input type="text" class="form-control" id="sheetName" name="params[sheetName]" value="Данные">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Фильтрация данных -->
+                                <div class="filter-section mt-3">
+                                    <h6><i class="fas fa-filter me-1"></i>Фильтрация данных</h6>
+                                    <div class="mb-3">
+                                        <label for="filterCondition" class="form-label">Условие фильтрации (SQL WHERE)</label>
+                                        <input type="text" class="form-control" id="filterCondition" name="filterCondition"
+                                               placeholder="Например: price > 1000 AND stock_status = 'В наличии'">
+                                    </div>
+                                </div>
+
+                                <!-- Сохранение как шаблон -->
+                                <div class="mt-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="saveAsTemplate" value="1">
+                                        <label class="form-check-label" for="saveAsTemplate">
+                                            <i class="fas fa-save me-1"></i>Сохранить как шаблон для повторного использования
+                                        </label>
+                                    </div>
+                                    <div id="templateNameSection" class="mt-2 d-none">
+                                        <div class="row g-3 align-items-center">
+                                            <div class="col-md-4">
+                                                <input type="text" class="form-control" id="templateName" placeholder="Название шаблона">
+                                            </div>
+                                            <div class="col-md-8">
+                                                <input type="text" class="form-control" id="templateDescription" placeholder="Описание (опционально)">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Кнопки действий -->
+                    <div class="mt-4 text-center">
+                        <button type="submit" id="startExportBtn" class="btn btn-success btn-lg px-4">
+                            <i class="fas fa-file-export me-1"></i>Экспортировать данные
+                        </button>
+                        <button type="button" id="cancelExportBtn" class="btn btn-outline-secondary btn-lg px-4 ms-2">
+                            <i class="fas fa-times me-1"></i>Отмена
+                        </button>
                     </div>
                 </div>
             </form>
+
+            <!-- Форма для сохранения шаблона -->
+            <form id="saveTemplateForm" th:action="@{/clients/{id}/export/save-template(id=${client.id})}" method="post" class="d-none">
+                <input type="hidden" name="name" id="saveTemplateName">
+                <input type="hidden" name="description" id="saveTemplateDescription">
+                <input type="hidden" name="entityType" id="saveTemplateEntityType">
+                <input type="hidden" name="format" id="saveTemplateFormat">
+                <div id="saveTemplateFields"></div>
+                <div id="saveTemplateParams"></div>
+            </form>
+
+            <!-- Прогресс экспорта -->
+            <div id="exportProgress" class="progress-container d-none">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="mb-3">Прогресс экспорта</h5>
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                 role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
+                                 aria-valuemax="100">0%</div>
+                        </div>
+                        <div id="exportStatus">Подготовка к экспорту...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для удаления шаблона -->
+    <div class="modal fade" id="deleteTemplateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Удаление шаблона</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Вы уверены, что хотите удалить шаблон <span id="deleteTemplateName" class="fw-bold"></span>?</p>
+                    <p class="text-danger">Это действие нельзя отменить.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Удалить</button>
+                </div>
+            </div>
         </div>
     </div>
 </section>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        // Получаем ссылки на основные DOM-элементы
-        const importForm = document.getElementById('importForm');
-        const fileInput = document.getElementById('fileInput');
-        const startImportBtn = document.getElementById('startImportBtn');
-        const dropArea = document.getElementById('dropArea');
-        const filePreview = document.getElementById('filePreview');
-        const removeFileBtn = document.getElementById('removeFile');
-        const progressContainer = document.getElementById('importProgress');
+<script th:inline="javascript">
+    document.addEventListener('DOMContentLoaded', function() {
+        const clientId = [[${client.id}]];
 
-        // Синхронизируем значение mappingId с компонентом выбора полей
-        const selectedMappingIdField = document.getElementById('selectedMappingId');
-        const mappingIdField = document.getElementById('mappingId');
+        // Переменные для отслеживания состояния
+        let selectedTemplateId = null;
+        let selectedFormat = 'csv';
+        let selectedEntityType = 'product';
 
-        // Синхронизируем поля, если они существуют
-        if (selectedMappingIdField && mappingIdField) {
-            // Начальная синхронизация значений
-            mappingIdField.value = selectedMappingIdField.value;
+        // Инициализация форматных карточек
+        initFormatCards();
 
-            // Следим за изменениями в компоненте выбора полей
-            const observer = new MutationObserver(function (mutations) {
-                mutations.forEach(function (mutation) {
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
-                        mappingIdField.value = selectedMappingIdField.value;
+        // Загрузка шаблонов
+        loadTemplates();
+
+        // Инициализация обработчиков событий
+        initEventHandlers();
+
+        // Функция для загрузки шаблонов
+        function loadTemplates() {
+            fetch(`/api/export-templates?clientId=${clientId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('templatesContainer');
+                    const loadingElement = document.getElementById('templatesLoading');
+                    const noTemplatesMessage = document.getElementById('noTemplatesMessage');
+
+                    // Удаляем индикатор загрузки
+                    if (loadingElement) {
+                        loadingElement.remove();
                     }
+
+                    if (data.templates && data.templates.length > 0) {
+                        // Отображаем шаблоны
+                        data.templates.forEach(template => {
+                            container.appendChild(createTemplateCard(template));
+                        });
+
+                        // Скрываем сообщение об отсутствии шаблонов
+                        noTemplatesMessage.classList.add('d-none');
+                    } else {
+                        // Показываем сообщение об отсутствии шаблонов
+                        noTemplatesMessage.classList.remove('d-none');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при загрузке шаблонов:', error);
+                    const container = document.getElementById('templatesContainer');
+                    container.innerHTML = `
+                        <div class="col-12">
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-circle me-2"></i>Ошибка при загрузке шаблонов
+                            </div>
+                        </div>
+                    `;
+                });
+        }
+
+        // Функция для создания карточки шаблона
+        function createTemplateCard(template) {
+            const col = document.createElement('div');
+            col.className = 'col';
+
+            col.innerHTML = `
+                <div class="card template-card h-100" data-template-id="${template.id}">
+                    <div class="card-body">
+                        <h5 class="card-title">${template.name}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">${getEntityTypeLabel(template.entityType)} - ${template.format.toUpperCase()}</h6>
+                        <p class="card-text small">${template.description || 'Без описания'}</p>
+                        <div class="template-meta small text-muted mt-2">
+                            <div>Поля: ${Object.keys(template.fieldMapping).length}</div>
+                            <div>Последнее использование: ${formatDate(template.lastUsedAt)}</div>
+                        </div>
+                        <div class="template-actions">
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-template-btn"
+                                    data-template-id="${template.id}" data-template-name="${template.name}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Добавляем обработчик клика на карточку
+            const card = col.querySelector('.template-card');
+            card.addEventListener('click', function(e) {
+                // Игнорируем клик по кнопке удаления
+                if (e.target.closest('.delete-template-btn')) return;
+
+                // Выбираем шаблон
+                selectTemplate(template.id);
+            });
+
+            // Добавляем обработчик для кнопки удаления
+            const deleteBtn = col.querySelector('.delete-template-btn');
+            deleteBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showDeleteTemplateModal(template.id, template.name);
+            });
+
+            return col;
+        }
+
+        // Функция для выбора шаблона
+        function selectTemplate(templateId) {
+            // Сбрасываем текущее выделение
+            document.querySelectorAll('.template-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+
+            // Выделяем выбранный шаблон
+            const selectedCard = document.querySelector(`.template-card[data-template-id="${templateId}"]`);
+            if (selectedCard) {
+                selectedCard.classList.add('selected');
+            }
+
+            // Сохраняем ID шаблона
+            selectedTemplateId = templateId;
+            document.getElementById('templateId').value = templateId;
+
+            // Загружаем детали шаблона
+            loadTemplateDetails(templateId);
+
+            // Показываем секцию конфигурации экспорта
+            document.getElementById('exportConfigSection').classList.remove('d-none');
+        }
+
+        // Функция для загрузки деталей шаблона
+        function loadTemplateDetails(templateId) {
+            fetch(`/clients/${clientId}/export/templates/${templateId}`)
+                .then(response => response.json())
+                .then(template => {
+                    // Устанавливаем формат
+                    selectFormat(template.format);
+
+                    // Устанавливаем тип сущности
+                    selectedEntityType = template.entityType;
+
+                    // Выбираем поля (в зависимости от реализации компонента выбора полей)
+                    // Это потребует взаимодействия с компонентом field-selection
+
+                    // Устанавливаем параметры
+                    if (template.parameters) {
+                        for (const [key, value] of Object.entries(template.parameters)) {
+                            const paramField = document.querySelector(`[name="params[${key}]"]`);
+                            if (paramField) {
+                                if (paramField.type === 'checkbox') {
+                                    paramField.checked = value === 'true';
+                                } else {
+                                    paramField.value = value;
+                                }
+                            }
+                        }
+                    }
+
+                    // Устанавливаем условие фильтрации
+                    if (template.filterCondition) {
+                        document.getElementById('filterCondition').value = template.filterCondition;
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка при загрузке деталей шаблона:', error);
+                    alert('Не удалось загрузить детали шаблона');
+                });
+        }
+
+        // Инициализация карточек форматов
+        function initFormatCards() {
+            const formatCards = document.querySelectorAll('.format-card');
+
+            formatCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    selectFormat(this.dataset.format);
                 });
             });
 
-            observer.observe(selectedMappingIdField, {attributes: true});
+            // По умолчанию выбираем CSV
+            document.querySelector('[data-format="csv"]').classList.add('selected');
         }
 
-        // Обработка клика по области загрузки
-        dropArea.addEventListener('click', () => fileInput.click());
+        // Функция для выбора формата
+        function selectFormat(format) {
+            // Сбрасываем текущее выделение
+            document.querySelectorAll('.format-card').forEach(card => {
+                card.classList.remove('selected');
+            });
 
-        // Обработка перетаскивания файла
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, preventDefaults, false);
-        });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => dropArea.classList.add('dragging'), false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragging'), false);
-        });
-
-        // Обработка выбора файла
-        fileInput.addEventListener('change', e => {
-            if (e.target.files && e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
+            // Выделяем выбранный формат
+            const selectedCard = document.querySelector(`[data-format="${format}"]`);
+            if (selectedCard) {
+                selectedCard.classList.add('selected');
             }
-        });
 
-        dropArea.addEventListener('drop', e => {
-            const dt = e.dataTransfer;
-            if (dt.files && dt.files.length > 0) {
-                fileInput.files = dt.files;
-                handleFile(dt.files[0]);
+            // Устанавливаем радиокнопку
+            const radioBtn = document.getElementById(`format${format.toUpperCase()}`);
+            if (radioBtn) {
+                radioBtn.checked = true;
             }
-        });
 
-        // Определение типа файла и соответствующих параметров
-        function updateFileSpecificParams() {
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+            // Сохраняем выбранный формат
+            selectedFormat = format;
 
-            const fileName = fileInput.files[0].name.toLowerCase();
-            const isXlsx = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-            const isCsv = fileName.endsWith('.csv');
-
-            // Показываем/скрываем параметры в зависимости от типа файла
-            document.querySelectorAll('.csv-only').forEach(el => {
-                el.style.display = isCsv ? 'block' : 'none';
-            });
-
-            document.querySelectorAll('.xlsx-only').forEach(el => {
-                el.style.display = isXlsx ? 'block' : 'none';
-            });
+            // Показываем/скрываем специфичные параметры формата
+            toggleFormatOptions(format);
         }
 
-        // Обработка пользовательского формата даты
-        const dateFormatSelect = document.getElementById('dateFormat');
-        const customDateFormatContainer = document.getElementById('customDateFormatContainer');
-        if (dateFormatSelect && customDateFormatContainer) {
-            dateFormatSelect.addEventListener('change', function() {
-                customDateFormatContainer.style.display =
-                    this.value === 'custom' ? 'block' : 'none';
-            });
+        // Показать/скрыть опции в зависимости от формата
+        function toggleFormatOptions(format) {
+            const csvOptions = document.getElementById('csvOptions');
+            const excelOptions = document.getElementById('excelOptions');
+
+            // Скрываем все опции
+            csvOptions.classList.add('d-none');
+            excelOptions.classList.add('d-none');
+
+            // Показываем нужные опции
+            if (format === 'csv') {
+                csvOptions.classList.remove('d-none');
+            } else if (format === 'xlsx' || format === 'xls') {
+                excelOptions.classList.remove('d-none');
+            }
         }
 
-        // Обработка пользовательского разделителя
-        const delimiterSelect = document.getElementById('delimiter');
-        const customDelimiterContainer = document.getElementById('customDelimiterContainer');
-        if (delimiterSelect && customDelimiterContainer) {
-            delimiterSelect.addEventListener('change', function() {
-                customDelimiterContainer.style.display =
-                    this.value === 'custom' ? 'block' : 'none';
-            });
-        }
+        // Инициализация обработчиков событий
+        function initEventHandlers() {
+            // Кнопка "Создать новый экспорт"
+            document.getElementById('createNewExportBtn').addEventListener('click', function() {
+                // Сбрасываем выбранный шаблон
+                selectedTemplateId = null;
+                document.getElementById('templateId').value = '';
 
-        function handleFile(file) {
-            // Показываем превью файла
-            filePreview.style.display = 'block';
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('fileSize').textContent = formatFileSize(file.size);
-            document.getElementById('fileType').textContent = file.type || getFileExtension(file.name);
-
-            // Активируем кнопку импорта
-            startImportBtn.disabled = false;
-
-            // Обновляем параметры в зависимости от типа файла
-            updateFileSpecificParams();
-
-            // Анализируем файл
-            analyzeFile(file);
-        }
-
-        // Удаление файла
-        removeFileBtn.addEventListener('click', function () {
-            fileInput.value = '';
-            filePreview.style.display = 'none';
-            startImportBtn.disabled = true;
-        });
-
-        // Функция для сбора всех параметров импорта
-        function collectImportParameters(form) {
-            // Собираем значения выборочных полей
-            const paramsByType = {
-                'select': ['errorHandling', 'duplicateHandling', 'dateFormat', 'emptyFieldHandling',
-                    'delimiter', 'quoteChar', 'encoding', 'escapeChar'],
-                'checkbox': ['validateData', 'trimWhitespace', 'skipEmptyRows', 'autoDetectTypes', 'evaluateFormulas'],
-                'number': ['headerRowInput', 'dataStartRow', 'sheetIndex'] // Заменили headerRow на headerRowInput
-            };
-
-            // Собираем параметры по типам элементов
-            for (const [type, ids] of Object.entries(paramsByType)) {
-                ids.forEach(id => {
-                    const element = document.getElementById(id);
-                    if (!element) return;
-
-                    let value;
-                    if (type === 'checkbox') {
-                        value = element.checked ? element.value || 'true' : 'false';
-                    } else {
-                        value = element.value;
-                    }
-
-                    // Специальная обработка для headerRowInput, так как имя параметра отличается от id
-                    const paramName = id === 'headerRowInput'
-                        ? 'params[headerRow]'
-                        : `params[${id}]`;
-
-                    let existingField = form.querySelector(`input[name="${paramName}"]`);
-
-                    if (!existingField) {
-                        // Если поле не существует, создаем его
-                        const hiddenField = document.createElement('input');
-                        hiddenField.type = 'hidden';
-                        hiddenField.name = paramName;
-                        hiddenField.value = value;
-                        form.appendChild(hiddenField);
-                    } else {
-                        // Если поле существует, обновляем его значение
-                        existingField.value = value;
-                    }
+                // Сбрасываем выделение шаблонов
+                document.querySelectorAll('.template-card').forEach(card => {
+                    card.classList.remove('selected');
                 });
-            }
 
-            // Специальная обработка для полей с пользовательскими значениями
-            // Пользовательский формат даты
-            if (dateFormatSelect && dateFormatSelect.value === 'custom') {
-                const customDateFormat = document.getElementById('customDateFormat');
-                if (customDateFormat && customDateFormat.value) {
-                    const hiddenField = document.createElement('input');
-                    hiddenField.type = 'hidden';
-                    hiddenField.name = 'params[datePattern]';
-                    hiddenField.value = customDateFormat.value;
-                    form.appendChild(hiddenField);
+                // Показываем секцию конфигурации экспорта
+                document.getElementById('exportConfigSection').classList.remove('d-none');
+            });
+
+            // Кнопка "Отмена"
+            document.getElementById('cancelExportBtn').addEventListener('click', function() {
+                // Скрываем секцию конфигурации экспорта
+                document.getElementById('exportConfigSection').classList.add('d-none');
+
+                // Сбрасываем выбранный шаблон
+                selectedTemplateId = null;
+                document.getElementById('templateId').value = '';
+
+                // Сбрасываем выделение шаблонов
+                document.querySelectorAll('.template-card').forEach(card => {
+                    card.classList.remove('selected');
+                });
+            });
+
+            // Чекбокс "Сохранить как шаблон"
+            document.getElementById('saveAsTemplate').addEventListener('change', function() {
+                const templateNameSection = document.getElementById('templateNameSection');
+                if (this.checked) {
+                    templateNameSection.classList.remove('d-none');
+                } else {
+                    templateNameSection.classList.add('d-none');
                 }
-            }
+            });
 
-            // Пользовательский разделитель
-            if (delimiterSelect && delimiterSelect.value === 'custom') {
-                const customDelimiter = document.getElementById('customDelimiter');
-                if (customDelimiter && customDelimiter.value) {
-                    const hiddenField = document.createElement('input');
-                    hiddenField.type = 'hidden';
-                    hiddenField.name = 'params[delimiter]';
-                    hiddenField.value = customDelimiter.value;
-                    form.appendChild(hiddenField);
+            // Обработка отправки формы
+            document.getElementById('exportForm').addEventListener('submit', function(e) {
+                // Если выбрано "Сохранить как шаблон", перехватываем отправку
+                if (document.getElementById('saveAsTemplate').checked) {
+                    e.preventDefault();
+                    saveAsTemplate();
                 }
-            }
 
-            return true;
+                // Показываем прогресс экспорта
+                document.getElementById('exportProgress').classList.remove('d-none');
+                document.getElementById('startExportBtn').disabled = true;
+            });
+
+            // Кнопка подтверждения удаления шаблона
+            document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+                const templateId = this.dataset.templateId;
+                deleteTemplate(templateId);
+            });
         }
 
-        // Добавляем прямой обработчик клика на кнопку импорта
-        startImportBtn.addEventListener('click', function (event) {
-            // Проверка формы
-            const form = document.getElementById('importForm');
-            if (!form) return;
+        // Функция для сохранения текущих настроек как шаблон
+        function saveAsTemplate() {
+            const templateName = document.getElementById('templateName').value;
+            const templateDescription = document.getElementById('templateDescription').value;
 
-            // Проверка файла
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Пожалуйста, выберите файл для импорта');
-                event.preventDefault();
+            if (!templateName) {
+                alert('Пожалуйста, введите название шаблона');
                 return;
             }
 
-            // Собираем все параметры импорта
-            collectImportParameters(form);
+            // Заполняем форму сохранения шаблона
+            document.getElementById('saveTemplateName').value = templateName;
+            document.getElementById('saveTemplateDescription').value = templateDescription;
+            document.getElementById('saveTemplateEntityType').value = selectedEntityType;
+            document.getElementById('saveTemplateFormat').value = selectedFormat;
 
-            // Показываем прогресс импорта
-            progressContainer.classList.remove('d-none');
+            // Добавляем выбранные поля
+            const fieldsContainer = document.getElementById('saveTemplateFields');
+            fieldsContainer.innerHTML = '';
 
-            // Обновляем прогресс-бар
-            const progressBar = document.getElementById('progressBar');
-            const statusText = document.getElementById('importStatus');
-            progressBar.style.width = '30%';
-            progressBar.setAttribute('aria-valuenow', 30);
-            progressBar.textContent = '30%';
-            statusText.textContent = 'Отправка файла...';
+            const selectedFields = document.querySelectorAll('input[name="fields[]"]:checked');
+            selectedFields.forEach(field => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'fields[]';
+                input.value = field.value;
+                fieldsContainer.appendChild(input);
+            });
 
-            // Отправляем форму программно
-            form.submit();
+            // Добавляем параметры
+            const paramsContainer = document.getElementById('saveTemplateParams');
+            paramsContainer.innerHTML = '';
 
-            // Предотвращаем стандартное действие кнопки
-            event.preventDefault();
-        });
+            // Копируем все параметры из основной формы
+            const paramInputs = document.querySelectorAll('[name^="params["]');
+            paramInputs.forEach(input => {
+                const paramName = input.name.match(/params\[(.*?)\]/)[1];
+                let paramValue = input.type === 'checkbox' ? input.checked : input.value;
 
-        // Функции для работы с файлами и анализа
-        function updateMappingOptions(mappings) {
-            const mappingSelect = document.getElementById('mappingSelect');
+                const paramInput = document.createElement('input');
+                paramInput.type = 'hidden';
+                paramInput.name = input.name;
+                paramInput.value = paramValue;
+                paramsContainer.appendChild(paramInput);
+            });
 
-            // Если элемент не найден, пробуем найти по альтернативному ID
-            if (!mappingSelect) {
-                const altSelect = document.getElementById('mappingId');
-                if (altSelect) {
-                    updateMappingOptionsForElement(altSelect, mappings);
-                }
-                return;
+            // Добавляем условие фильтрации
+            const filterCondition = document.getElementById('filterCondition').value;
+            if (filterCondition) {
+                const filterInput = document.createElement('input');
+                filterInput.type = 'hidden';
+                filterInput.name = 'filterCondition';
+                filterInput.value = filterCondition;
+                paramsContainer.appendChild(filterInput);
             }
 
-            updateMappingOptionsForElement(mappingSelect, mappings);
+            // Отправляем форму сохранения шаблона
+            document.getElementById('saveTemplateForm').submit();
         }
 
-        function updateMappingOptionsForElement(selectElement, mappings) {
-            // Очищаем текущие опции
-            selectElement.innerHTML = '<option value="">Автоматическое</option>';
-
-            // Добавляем доступные маппинги
-            if (mappings && mappings.length > 0) {
-                mappings.forEach(mapping => {
-                    const option = document.createElement('option');
-                    option.value = mapping.id;
-                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
-                    selectElement.appendChild(option);
-                });
-            }
+        // Функция для показа модального окна удаления шаблона
+        function showDeleteTemplateModal(templateId, templateName) {
+            const modal = new bootstrap.Modal(document.getElementById('deleteTemplateModal'));
+            document.getElementById('deleteTemplateName').textContent = templateName;
+            document.getElementById('confirmDeleteBtn').dataset.templateId = templateId;
+            modal.show();
         }
 
-        function formatFileSize(size) {
-            const kb = 1024;
-            const mb = kb * 1024;
-
-            if (size < kb) {
-                return size + ' B';
-            } else if (size < mb) {
-                return (size / kb).toFixed(2) + ' KB';
-            } else {
-                return (size / mb).toFixed(2) + ' MB';
-            }
-        }
-
-        function getFileExtension(filename) {
-            return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
-        }
-
-        function analyzeFile(file) {
-            // Очищаем таблицу предпросмотра
-            const headerRow = document.getElementById('headerRow');
-            const previewBody = document.getElementById('previewBody');
-
-            if (!headerRow || !previewBody) return;
-
-            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
-            previewBody.innerHTML = '';
-
-            // Получаем параметры анализа
-            const entityType = document.getElementById('selectedEntityType')?.value || 'product';
-            const isComposite = document.getElementById('isComposite')?.value === 'true';
-            const clientId = window.location.pathname.split('/')[2]; // ID клиента из URL
-
-            // Создаем форму для отправки файла
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('analysisEntityType', entityType);
-            formData.append('composite', isComposite);
-
-            // Отправляем файл на сервер для анализа
-            fetch(`/clients/${clientId}/import/analyze`, {
-                method: 'POST',
-                body: formData
+        // Функция для удаления шаблона
+        function deleteTemplate(templateId) {
+            fetch(`/api/export-templates/${templateId}`, {
+                method: 'DELETE'
             })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error(`Ошибка HTTP: ${response.status}`);
+                        throw new Error('Ошибка при удалении шаблона');
                     }
                     return response.json();
                 })
                 .then(data => {
-                    // Очищаем строки таблицы
-                    headerRow.innerHTML = '';
-                    previewBody.innerHTML = '';
+                    // Закрываем модальное окно
+                    bootstrap.Modal.getInstance(document.getElementById('deleteTemplateModal')).hide();
 
-                    // Заполняем заголовки, если они есть
-                    if (data.headers && data.headers.length > 0) {
-                        data.headers.forEach(header => {
-                            const th = document.createElement('th');
-                            th.textContent = header;
-                            headerRow.appendChild(th);
-                        });
+                    // Удаляем карточку шаблона
+                    const card = document.querySelector(`.template-card[data-template-id="${templateId}"]`);
+                    if (card) {
+                        card.closest('.col').remove();
                     }
 
-                    // Заполняем предпросмотр данных первыми 10 строками
-                    if (data.sampleData && data.sampleData.length > 0) {
-                        data.sampleData.forEach(rowObject => {
-                            const tr = document.createElement('tr');
-
-                            // Для каждого заголовка получаем соответствующее значение
-                            if (data.headers && data.headers.length > 0) {
-                                data.headers.forEach(header => {
-                                    const td = document.createElement('td');
-                                    const cellValue = rowObject[header] !== undefined ? rowObject[header] : '';
-                                    td.textContent = cellValue;
-                                    tr.appendChild(td);
-                                });
-                            } else {
-                                // Если заголовки не определены, выводим все значения объекта
-                                Object.values(rowObject).forEach(value => {
-                                    const td = document.createElement('td');
-                                    td.textContent = value !== null ? value : '';
-                                    tr.appendChild(td);
-                                });
-                            }
-
-                            previewBody.appendChild(tr);
-                        });
-
-                        // Сообщаем, сколько всего строк в файле
-                        const totalRows = data.totalRows || data.sampleData.length;
-                        if (totalRows > data.sampleData.length) {
-                            const tr = document.createElement('tr');
-                            const td = document.createElement('td');
-                            td.colSpan = data.headers ? data.headers.length : Object.keys(data.sampleData[0]).length;
-                            td.className = 'text-center text-muted';
-                            td.textContent = `...и еще ${totalRows - data.sampleData.length} строк`;
-                            tr.appendChild(td);
-                            previewBody.appendChild(tr);
-                        }
+                    // Если удален текущий выбранный шаблон, сбрасываем выбор
+                    if (selectedTemplateId === templateId) {
+                        selectedTemplateId = null;
+                        document.getElementById('templateId').value = '';
+                        document.getElementById('exportConfigSection').classList.add('d-none');
                     }
 
-                    // Автоматическое обновление параметров импорта на основе обнаруженных данных
-                    if (data.detectedOptions) {
-                        // Обновляем разделитель, если он обнаружен и есть соответствующее поле
-                        if (data.detectedOptions.delimiter && delimiterSelect) {
-                            const detectedDelimiter = data.detectedOptions.delimiter;
-                            // Проверяем, есть ли такой разделитель в списке
-                            const options = Array.from(delimiterSelect.options);
-                            const option = options.find(opt => opt.value === detectedDelimiter);
-                            if (option) {
-                                delimiterSelect.value = detectedDelimiter;
-                            }
-                        }
-
-                        // Обновляем другие обнаруженные параметры
-                        if (data.detectedOptions.quoteChar) {
-                            const quoteCharSelect = document.getElementById('quoteChar');
-                            if (quoteCharSelect) {
-                                const options = Array.from(quoteCharSelect.options);
-                                const option = options.find(opt => opt.value === data.detectedOptions.quoteChar);
-                                if (option) {
-                                    quoteCharSelect.value = data.detectedOptions.quoteChar;
-                                }
-                            }
-                        }
-
-                        if (data.detectedOptions.charset) {
-                            const encodingSelect = document.getElementById('encoding');
-                            if (encodingSelect) {
-                                const options = Array.from(encodingSelect.options);
-                                const option = options.find(opt => opt.value.toLowerCase() === data.detectedOptions.charset.toLowerCase());
-                                if (option) {
-                                    encodingSelect.value = option.value;
-                                }
-                            }
-                        }
-
-                        if (data.detectedOptions.headerRow !== undefined) {
-                            const headerRowInput = document.getElementById('headerRowInput');
-                            if (headerRowInput) {
-                                headerRowInput.value = data.detectedOptions.headerRow;
-                            }
-                        }
+                    // Проверяем, есть ли еще шаблоны
+                    const remainingTemplates = document.querySelectorAll('.template-card');
+                    if (remainingTemplates.length === 0) {
+                        document.getElementById('noTemplatesMessage').classList.remove('d-none');
                     }
 
-                    // Обновляем доступные маппинги
-                    if (data.availableMappings) {
-                        updateMappingOptions(data.availableMappings);
-                    }
-
-                    // Сохраняем заголовки и данные для использования при создании маппинга
-                    window.fileHeaders = data.headers || [];
-                    window.fieldsMetadata = data.fieldsMetadata;
-
-                    // Диспатчим событие для компонента field-selection
-                    document.dispatchEvent(new CustomEvent('fileAnalyzed', {
-                        detail: {
-                            headers: data.headers || [],
-                            metadata: data.fieldsMetadata
-                        }
-                    }));
-
-                    // Если нет данных для предпросмотра
-                    if ((!data.headers || data.headers.length === 0) &&
-                        (!data.sampleData || data.sampleData.length === 0)) {
-                        const tr = document.createElement('tr');
-                        const td = document.createElement('td');
-                        td.colSpan = 5;
-                        td.className = 'text-center text-muted py-3';
-                        td.textContent = 'Не удалось прочитать данные из файла или файл пуст';
-                        tr.appendChild(td);
-                        previewBody.appendChild(tr);
-                    }
+                    // Показываем сообщение об успешном удалении
+                    showMessage('success', 'Шаблон успешно удален');
                 })
                 .catch(error => {
-                    headerRow.innerHTML = '';
-                    previewBody.innerHTML = '';
-
-                    const tr = document.createElement('tr');
-                    const td = document.createElement('td');
-                    td.colSpan = 5;
-                    td.className = 'text-center text-danger py-3';
-                    td.textContent = 'Ошибка при анализе файла: ' + error.message;
-                    tr.appendChild(td);
-                    previewBody.appendChild(tr);
+                    console.error('Ошибка при удалении шаблона:', error);
+                    showMessage('error', 'Не удалось удалить шаблон');
                 });
         }
 
-        // Активируем кнопку "Начать импорт" если файл уже был выбран при загрузке страницы
-        if (fileInput.files && fileInput.files.length > 0) {
-            startImportBtn.disabled = false;
-            updateFileSpecificParams(); // Обновляем параметры в зависимости от типа файла
+        // Вспомогательные функции
+
+        // Функция для отображения сообщения
+        function showMessage(type, text) {
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+            const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+
+            const alertElement = document.createElement('div');
+            alertElement.className = `alert ${alertClass} alert-dismissible fade show`;
+            alertElement.role = 'alert';
+            alertElement.innerHTML = `
+                <i class="fas ${icon} me-2"></i>${text}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+
+            // Вставляем сообщение перед первым дочерним элементом в .card-body
+            const cardBody = document.querySelector('.card-body');
+            cardBody.insertBefore(alertElement, cardBody.firstChild);
+
+            // Автоматически скрываем сообщение через 5 секунд
+            setTimeout(() => {
+                alertElement.classList.remove('show');
+                setTimeout(() => alertElement.remove(), 150);
+            }, 5000);
         }
 
-        // Инициализация при загрузке страницы
-        updateFileSpecificParams();
+        // Функция для форматирования даты
+        function formatDate(dateString) {
+            if (!dateString) return 'Никогда';
+
+            const date = new Date(dateString);
+            return new Intl.DateTimeFormat('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
+        }
+
+        // Функция для получения человекочитаемого названия типа сущности
+        function getEntityTypeLabel(entityType) {
+            switch (entityType) {
+                case 'product': return 'Товары';
+                case 'region': return 'Регионы';
+                case 'competitor': return 'Конкуренты';
+                default: return entityType;
+            }
+        }
     });
 </script>
 </body>

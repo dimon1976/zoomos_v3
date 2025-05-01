@@ -1,3 +1,4 @@
+<!-- src/main/resources/templates/import/form.html -->
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{layout/main :: html(
@@ -14,848 +15,851 @@
         .upload-area {
             border: 2px dashed #ccc;
             border-radius: 8px;
-            padding: 40px 20px;
+            padding: 20px;
             text-align: center;
             transition: all 0.3s;
             background-color: #f8f9fa;
             cursor: pointer;
         }
-
-        .upload-area:hover {
+        .upload-area:hover, .upload-area.dragging {
             border-color: #0d6efd;
             background-color: #f1f8ff;
         }
-
-        .upload-area.dragging {
-            border-color: #0d6efd;
-            background-color: #e8f0fe;
-        }
-
-        .upload-icon {
-            font-size: 48px;
-            color: #0d6efd;
-            margin-bottom: 20px;
-        }
-
-        .entity-type-card {
-            cursor: pointer;
-            transition: all 0.2s;
-            height: 100%;
-        }
-
-        .entity-type-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .entity-type-card.selected {
-            border-color: #0d6efd;
-            background-color: #f0f7ff;
-        }
-
-        .progress-container {
-            margin-top: 20px;
-        }
-
         #filePreview {
             display: none;
-            margin-top: 20px;
+            margin-top: 15px;
         }
-
         .preview-table {
-            max-height: 300px;
+            max-height: 200px;
             overflow-y: auto;
+        }
+        .compact-form .card-body {
+            padding: 1rem;
+        }
+        .compact-form .mb-4 {
+            margin-bottom: 1rem !important;
         }
     </style>
 </head>
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary me-2">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary btn-sm me-2">
         <i class="fas fa-arrow-left me-1"></i>К клиенту
     </a>
-    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-primary me-2">
+    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-primary btn-sm">
         <i class="fas fa-history me-1"></i>Операции
-    </a>
-    <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-success">
-        <i class="fas fa-file-export me-1"></i>Экспорт
     </a>
 </div>
 
 <section>
-    <!-- Информация о клиенте -->
-    <div class="card mb-4">
-        <div class="card-header">
+    <div class="card mb-4 compact-form">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Импорт данных для клиента</h5>
         </div>
         <div class="card-body">
-            <p>Загрузите файл CSV или Excel для импорта данных в систему.</p>
+            <form id="importForm" th:action="@{/clients/{id}/import(id=${client.id})}" method="post" enctype="multipart/form-data" onsubmit="return validateBeforeImport()">
+                <!-- Скрытые поля для сущностей -->
+                <input type="hidden" id="selectedEntityType" name="entityType" value="product">
+                <input type="hidden" id="isComposite" name="composite" value="true">
 
-            <form id="importForm" th:action="@{/clients/{id}/import(id=${client.id})}" method="post"
-                  enctype="multipart/form-data">
                 <!-- Загрузка файла -->
-                <div class="mb-4">
-                    <h5>1. Загрузите файл</h5>
-                    <div class="upload-area mt-2" id="dropArea">
+                <div class="mb-3">
+                    <div class="upload-area" id="dropArea" onclick="document.getElementById('fileInput').click()">
                         <input type="file" name="file" id="fileInput" accept=".csv,.xlsx,.xls" class="d-none" required>
-                        <div class="upload-icon">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                        </div>
-                        <h5>Перетащите файл сюда или кликните для выбора</h5>
-                        <p class="text-muted">Поддерживаемые форматы: CSV, Excel (.xlsx, .xls)</p>
+                        <i class="fas fa-cloud-upload-alt fa-2x text-primary mb-2"></i>
+                        <p class="mb-0">Перетащите файл или кликните для выбора</p>
+                        <small class="text-muted">CSV, Excel (.xlsx, .xls)</small>
                     </div>
 
                     <!-- Предпросмотр файла -->
-                    <div id="filePreview" class="card mt-3">
-                        <div class="card-header">
+                    <div id="filePreview" class="card">
+                        <div class="card-header py-2">
                             <div class="d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">Предпросмотр файла</h5>
-                                <button type="button" id="removeFile" class="btn btn-sm btn-outline-danger">
-                                    <i class="fas fa-times me-1"></i>Удалить
+                                <h6 class="mb-0">Предпросмотр файла</h6>
+                                <button type="button" id="removeFile" class="btn btn-sm btn-outline-danger" onclick="removeFile()">
+                                    <i class="fas fa-times"></i>
                                 </button>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <strong>Имя файла:</strong> <span id="fileName"></span>
+                        <div class="card-body p-2">
+                            <div class="d-flex mb-2">
+                                <strong class="me-2">Файл:</strong> <span id="fileName"></span>
+                                (<span id="fileSize"></span>, <span id="fileType"></span>)
                             </div>
-                            <div class="mb-3">
-                                <strong>Размер:</strong> <span id="fileSize"></span>
-                            </div>
-                            <div class="mb-3">
-                                <strong>Тип:</strong> <span id="fileType"></span>
-                            </div>
-                            <div class="mb-3">
-                                <h6>Обнаруженные столбцы:</h6>
-                                <div class="preview-table">
-                                    <table class="table table-sm table-bordered" id="previewTable">
-                                        <thead>
-                                        <tr id="headerRow"></tr>
-                                        </thead>
-                                        <tbody id="previewBody"></tbody>
-                                    </table>
-                                </div>
+                            <div class="preview-table">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead><tr id="headerRow"></tr></thead>
+                                    <tbody id="previewBody"></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Включение компонента выбора полей -->
-                <div th:replace="~{components/field-selection :: fieldSelection(${client.id}, 'import')}"></div>
+                <!-- Сопоставление полей - добавляем required для обязательного выбора -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">Сопоставление полей</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label mb-1">Тип данных</label>
+                                <select class="form-select form-select-sm" id="entityTypeSelect" onchange="updateEntityType(this.value)">
+                                    <option value="product" selected>Товары (составные)</option>
+                                    <option value="region">Только регионы</option>
+                                    <option value="competitor">Только конкуренты</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label mb-1">Сохраненные шаблоны сопоставления <span class="text-danger">*</span></label>
+                                <select class="form-select form-select-sm" id="mappingSelect" name="mappingId" required>
+                                    <option value="">-- Выберите шаблон сопоставления --</option>
+                                    <!-- Опции будут добавлены динамически -->
+                                </select>
+                                <div class="invalid-feedback">Необходимо выбрать шаблон сопоставления</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between mb-2">
+                            <button type="button" id="createMappingBtn" class="btn btn-sm btn-outline-primary" onclick="prepareCreateMappingModal()">
+                                <i class="fas fa-plus me-1"></i>Создать сопоставление
+                            </button>
+                            <button type="button" id="viewMappingBtn" class="btn btn-sm btn-outline-secondary" onclick="showCurrentMapping()" disabled>
+                                <i class="fas fa-eye me-1"></i>Просмотреть сопоставление
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Параметры импорта -->
-                <div id="importOptions" class="mb-4">
-                    <h5>2. Настройте параметры импорта</h5>
-                    <div class="card mt-2">
-                        <div class="card-body">
-                            <ul class="nav nav-tabs" id="importParamsTabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab"
-                                            data-bs-target="#basic" type="button" role="tab"
-                                            aria-controls="basic" aria-selected="true">Основные</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="structure-tab" data-bs-toggle="tab"
-                                            data-bs-target="#structure" type="button" role="tab"
-                                            aria-controls="structure" aria-selected="false">Структура</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="format-tab" data-bs-toggle="tab"
-                                            data-bs-target="#format" type="button" role="tab"
-                                            aria-controls="format" aria-selected="false">Формат</button>
-                                </li>
-                            </ul>
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">Параметры импорта</h6>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Обработка ошибок</label>
+                                <select class="form-select form-select-sm" name="params[errorHandling]">
+                                    <option value="continue">Продолжать при ошибках</option>
+                                    <option value="stop">Остановить при первой ошибке</option>
+                                    <option value="report">Собирать отчет об ошибках</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Обработка дубликатов</label>
+                                <select class="form-select form-select-sm" name="params[duplicateHandling]">
+                                    <option value="skip">Пропускать дубликаты</option>
+                                    <option value="update">Обновлять существующие записи</option>
+                                    <option value="error">Выдавать ошибку при дубликатах</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                            <div class="tab-content pt-3" id="importParamsContent">
-                                <!-- Основные параметры (существующие) -->
-                                <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <!-- Поле скрыто, так как значение выбирается в компоненте field-selection -->
-                                            <input type="hidden" id="mappingId" name="mappingId" value="">
-                                            <label for="strategyId" class="form-label">Стратегия импорта</label>
-                                            <select class="form-select" id="strategyId" name="strategyId">
-                                                <option value="">По умолчанию</option>
-                                                <!-- Опции будут добавлены динамически -->
-                                            </select>
-                                        </div>
-                                    </div>
+                <!-- Расширенные параметры (скрытые по умолчанию) -->
+                <div class="card mb-3 d-none" id="advancedSettings">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">Расширенные параметры</h6>
+                    </div>
+                    <div class="card-body p-2">
+                        <!-- Параметры структуры файла -->
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Строка заголовков</label>
+                                <input type="number" class="form-control form-control-sm" name="params[headerRow]" value="0" min="0">
+                                <small class="form-text text-muted">Номер строки с заголовками (с 0)</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Начальная строка данных</label>
+                                <input type="number" class="form-control form-control-sm" name="params[dataStartRow]" value="1" min="1">
+                                <small class="form-text text-muted">Номер строки начала данных</small>
+                            </div>
+                        </div>
 
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="errorHandling" class="form-label">Обработка ошибок</label>
-                                            <select class="form-select" id="errorHandling" name="params[errorHandling]">
-                                                <option value="continue">Продолжать при ошибках</option>
-                                                <option value="stop">Остановить при первой ошибке</option>
-                                                <option value="report">Собирать отчет об ошибках</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="duplicateHandling" class="form-label">Обработка дубликатов</label>
-                                            <select class="form-select" id="duplicateHandling" name="params[duplicateHandling]">
-                                                <option value="skip">Пропускать дубликаты</option>
-                                                <option value="update">Обновлять существующие записи</option>
-                                                <option value="error">Выдавать ошибку при дубликатах</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="validateData"
-                                                       name="params[validateData]" value="true" checked>
-                                                <label class="form-check-label" for="validateData">
-                                                    Валидировать данные перед импортом
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="trimWhitespace"
-                                                       name="params[trimWhitespace]" value="true" checked>
-                                                <label class="form-check-label" for="trimWhitespace">
-                                                    Удалять лишние пробелы
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <!-- Параметры Excel - без стиля display:none! -->
+                        <div class="excel-section">
+                            <h6 class="small fw-bold mt-3 mb-2">Параметры Excel</h6>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Индекс листа</label>
+                                    <input type="number" class="form-control form-control-sm" name="params[sheetIndex]" value="0" min="0">
+                                    <small class="form-text text-muted">Начиная с 0</small>
                                 </div>
-
-                                <!-- Параметры структуры данных -->
-                                <div class="tab-pane fade" id="structure" role="tabpanel" aria-labelledby="structure-tab">
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="headerRowInput" class="form-label">Строка заголовков</label>
-                                            <input type="number" class="form-control" id="headerRowInput" name="params[headerRow]" value="0" min="0">
-                                            <small class="form-text text-muted">Номер строки с заголовками (начиная с 0)</small>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="dataStartRow" class="form-label">Начальная строка данных</label>
-                                            <input type="number" class="form-control" id="dataStartRow" name="params[dataStartRow]" value="1" min="1">
-                                            <small class="form-text text-muted">Номер строки, с которой начинаются данные</small>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="skipEmptyRows" name="params[skipEmptyRows]" value="true" checked>
-                                                <label class="form-check-label" for="skipEmptyRows">Пропускать пустые строки</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="autoDetectTypes" name="params[autoDetectTypes]" value="true" checked>
-                                                <label class="form-check-label" for="autoDetectTypes">Автоопределение типов данных</label>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="dateFormat" class="form-label">Формат дат</label>
-                                            <select class="form-select" id="dateFormat" name="params[dateFormat]">
-                                                <option value="auto">Автоопределение</option>
-                                                <option value="dd.MM.yyyy">DD.MM.YYYY (31.12.2023)</option>
-                                                <option value="yyyy-MM-dd">YYYY-MM-DD (2023-12-31)</option>
-                                                <option value="MM/dd/yyyy">MM/DD/YYYY (12/31/2023)</option>
-                                                <option value="dd/MM/yyyy">DD/MM/YYYY (31/12/2023)</option>
-                                                <option value="custom">Свой формат...</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3" id="customDateFormatContainer" style="display: none;">
-                                            <label for="customDateFormat" class="form-label">Свой формат даты</label>
-                                            <input type="text" class="form-control" id="customDateFormat" name="params[customDateFormat]" placeholder="Например: yyyy.MM.dd HH:mm:ss">
-                                            <small class="form-text text-muted">
-                                                Используйте: y (год), M (месяц), d (день), H (часы), m (минуты), s (секунды)
-                                            </small>
-                                        </div>
-                                    </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="emptyFieldHandling" class="form-label">Обработка пустых ячеек</label>
-                                            <select class="form-select" id="emptyFieldHandling" name="params[emptyFieldHandling]">
-                                                <option value="empty">Оставлять пустыми</option>
-                                                <option value="null">Установить NULL</option>
-                                                <option value="default">Использовать значения по умолчанию</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3 xlsx-only">
-                                            <label for="sheetIndex" class="form-label">Лист Excel</label>
-                                            <input type="number" class="form-control" id="sheetIndex" name="params[sheetIndex]" value="0" min="0" placeholder="Индекс начиная с 0">
-                                            <small class="form-text text-muted">Индекс листа (начиная с 0)</small>
-                                        </div>
-                                    </div>
-
-                                    <div class="row xlsx-only">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="evaluateFormulas" name="params[evaluateFormulas]" value="true" checked>
-                                                <label class="form-check-label" for="evaluateFormulas">Вычислять формулы</label>
-                                            </div>
-                                        </div>
-                                    </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small mb-1">Имя листа</label>
+                                    <input type="text" class="form-control form-control-sm" name="params[sheetName]" placeholder="Лист1">
                                 </div>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="evaluateFormulas" name="params[evaluateFormulas]" value="true" checked>
+                                <label class="form-check-label small" for="evaluateFormulas">Вычислять формулы</label>
+                            </div>
+                        </div>
 
-                                <!-- Параметры формата файла -->
-                                <div class="tab-pane fade" id="format" role="tabpanel" aria-labelledby="format-tab">
-                                    <!-- Параметры только для CSV файлов -->
-                                    <div class="csv-only">
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="delimiter" class="form-label">Разделитель полей</label>
-                                                <select class="form-select" id="delimiter" name="params[delimiter]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value=";">Точка с запятой (;)</option>
-                                                    <option value=",">Запятая (,)</option>
-                                                    <option value="\t">Табуляция</option>
-                                                    <option value="|">Вертикальная черта (|)</option>
-                                                    <option value=" ">Пробел</option>
-                                                    <option value="custom">Другой...</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6 mb-3" id="customDelimiterContainer" style="display: none;">
-                                                <label for="customDelimiter" class="form-label">Укажите разделитель</label>
-                                                <input type="text" class="form-control" id="customDelimiter" name="params[customDelimiter]" maxlength="1">
-                                            </div>
-                                        </div>
-
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="quoteChar" class="form-label">Символ обрамления текста</label>
-                                                <select class="form-select" id="quoteChar" name="params[quoteChar]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value="&quot;">Двойные кавычки (&quot;)</option>
-                                                    <option value="'">Одинарные кавычки (')</option>
-                                                    <option value="">Без обрамления</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6 mb-3">
-                                                <label for="encoding" class="form-label">Кодировка файла</label>
-                                                <select class="form-select" id="encoding" name="params[encoding]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value="UTF-8">UTF-8</option>
-                                                    <option value="windows-1251">Windows-1251 (кириллица)</option>
-                                                    <option value="CP1252">CP1252 (западноевропейская)</option>
-                                                    <option value="ISO-8859-1">ISO-8859-1 (латиница)</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div class="row">
-                                            <div class="col-md-6 mb-3">
-                                                <label for="escapeChar" class="form-label">Символ экранирования</label>
-                                                <select class="form-select" id="escapeChar" name="params[escapeChar]">
-                                                    <option value="auto">Автоопределение</option>
-                                                    <option value="\">Обратная косая черта (\)</option>
-                                                    <option value="">Без экранирования</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <!-- Параметры CSV - без стиля display:none! -->
+                        <div class="csv-section">
+                            <h6 class="small fw-bold mt-3 mb-2">Параметры CSV</h6>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Разделитель</label>
+                                    <select class="form-select form-select-sm" name="params[delimiter]">
+                                        <option value="auto">Автоопределение</option>
+                                        <option value=";">Точка с запятой (;)</option>
+                                        <option value=",">Запятая (,)</option>
+                                        <option value="\t">Табуляция</option>
+                                        <option value="|">Вертикальная черта (|)</option>
+                                    </select>
                                 </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Обрамление</label>
+                                    <select class="form-select form-select-sm" name="params[quoteChar]">
+                                        <option value="auto">Автоопределение</option>
+                                        <option value="&quot;">Двойные кавычки (")</option>
+                                        <option value="'">Одинарные кавычки (')</option>
+                                        <option value="">Без обрамления</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Кодировка</label>
+                                    <select class="form-select form-select-sm" name="params[encoding]">
+                                        <option value="auto">Автоопределение</option>
+                                        <option value="UTF-8">UTF-8</option>
+                                        <option value="windows-1251">Windows-1251</option>
+                                        <option value="ISO-8859-1">ISO-8859-1</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Общие параметры -->
+                        <h6 class="small fw-bold mt-3 mb-2">Общие параметры</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Формат дат</label>
+                                <select class="form-select form-select-sm" id="dateFormatSelect" name="params[dateFormat]" onchange="toggleCustomDateFormat()">
+                                    <option value="auto">Автоопределение</option>
+                                    <option value="dd.MM.yyyy">DD.MM.YYYY (31.12.2023)</option>
+                                    <option value="yyyy-MM-dd">YYYY-MM-DD (2023-12-31)</option>
+                                    <option value="dd/MM/yyyy">DD/MM/YYYY (31/12/2023)</option>
+                                    <option value="dd.MM.yyyy HH:mm:ss">DD.MM.YYYY HH:MM:SS</option>
+                                    <option value="custom">Свой формат...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6" id="customDateFormatContainer" style="display:none;">
+                                <label class="form-label small mb-1">Свой формат даты</label>
+                                <input type="text" class="form-control form-control-sm" id="customDateFormat" placeholder="yyyy.MM.dd HH:mm:ss">
+                                <small class="form-text text-muted">Пример: yyyy.MM.dd HH:mm:ss</small>
+                            </div>
+                            <!-- Скрытое поле для хранения пользовательского формата -->
+                            <input type="hidden" id="actualDateFormat" name="params[dateFormat]" value="auto">
+                        </div>
+
+                        <div class="row g-2 mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">Пустые ячейки</label>
+                                <select class="form-select form-select-sm" name="params[emptyFieldHandling]">
+                                    <option value="empty">Оставлять пустыми</option>
+                                    <option value="null">Установить NULL</option>
+                                    <option value="default">Значения по умолчанию</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Дополнительные флаги -->
+                        <div class="mt-3">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="validateData" name="params[validateData]" value="true" checked>
+                                <label class="form-check-label small" for="validateData">Валидировать данные</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="trimWhitespace" name="params[trimWhitespace]" value="true" checked>
+                                <label class="form-check-label small" for="trimWhitespace">Удалять пробелы</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="skipEmptyRows" name="params[skipEmptyRows]" value="true" checked>
+                                <label class="form-check-label small" for="skipEmptyRows">Пропускать пустые строки</label>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Кнопки действий -->
-                <div class="mt-4 text-center">
-                    <button type="submit" id="startImportBtn" class="btn btn-primary btn-lg px-4" disabled>
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-sm btn-link text-muted" onclick="document.getElementById('advancedSettings').classList.toggle('d-none')">
+                        <i class="fas fa-cog me-1"></i>Расширенные настройки
+                    </button>
+                    <button type="submit" id="startImportBtn" class="btn btn-primary" disabled>
                         <i class="fas fa-file-import me-1"></i>Начать импорт
                     </button>
-                    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-secondary btn-lg px-4 ms-2">
-                        <i class="fas fa-times me-1"></i>Отмена
-                    </a>
                 </div>
 
                 <!-- Прогресс импорта -->
-                <div id="importProgress" class="progress-container d-none">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3">Прогресс импорта</h5>
-                            <div class="progress mb-3" style="height: 25px;">
-                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                                     role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
-                                     aria-valuemax="100">0%
-                                </div>
-                            </div>
-                            <div id="importStatus">Подготовка к импорту...</div>
-                        </div>
+                <div id="importProgress" class="d-none mt-3">
+                    <div class="progress mb-2" style="height: 20px;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar" style="width: 0%;">0%</div>
                     </div>
+                    <div id="importStatus" class="small text-center">Подготовка к импорту...</div>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания нового маппинга -->
+    <div class="modal fade" id="createMappingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Создание сопоставления полей</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createMappingForm">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label for="mappingName" class="form-label">Название сопоставления</label>
+                                <input type="text" class="form-control" id="mappingName" name="name" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="mappingDescription" class="form-label">Описание</label>
+                                <input type="text" class="form-control" id="mappingDescription" name="description">
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="clientId" th:value="${client.id}">
+                        <input type="hidden" name="entityType" id="mappingEntityType" value="product">
+                        <input type="hidden" name="composite" id="mappingComposite" value="true">
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                <tr>
+                                    <th>Заголовок в файле</th>
+                                    <th>Поле сущности</th>
+                                </tr>
+                                </thead>
+                                <tbody id="mappingTableBody">
+                                <!-- Строки будут добавлены динамически -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" onclick="saveNewMapping()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для просмотра текущего маппинга -->
+    <div class="modal fade" id="viewMappingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Текущее сопоставление полей</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3" id="currentMappingInfo">
+                        <p>Название: <span id="currentMappingName">-</span></p>
+                        <p>Описание: <span id="currentMappingDescription">-</span></p>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                            <tr>
+                                <th>Заголовок в файле</th>
+                                <th>Поле сущности</th>
+                            </tr>
+                            </thead>
+                            <tbody id="viewMappingTableBody">
+                            <!-- Строки будут добавлены динамически -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                </div>
+            </div>
         </div>
     </div>
 </section>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        // Получаем ссылки на основные DOM-элементы
-        const importForm = document.getElementById('importForm');
+    // Глобальные переменные
+    let currentEntityType = 'product';
+    let isComposite = true;
+    let availableMappings = [];
+    let currentMapping = null;
+    let fieldsMetadata = null;
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', function() {
+        initDragDrop();
+        loadAvailableMappings();
+        hideAllFileSections();
+        // Инициализация скрытых секций
+        document.querySelectorAll('.excel-section, .csv-section').forEach(el => {
+            el.style.display = 'none';
+        });
+    });
+
+    // Функция для скрытия всех секций типов файлов
+    function hideAllFileSections() {
+        document.querySelectorAll('.excel-section, .csv-section').forEach(el => {
+            el.style.display = 'none';
+        });
+    }
+
+    // Валидация формы перед отправкой
+    function validateBeforeImport() {
+        // Проверка файла
         const fileInput = document.getElementById('fileInput');
-        const startImportBtn = document.getElementById('startImportBtn');
-        const dropArea = document.getElementById('dropArea');
-        const filePreview = document.getElementById('filePreview');
-        const removeFileBtn = document.getElementById('removeFile');
-        const progressContainer = document.getElementById('importProgress');
-
-        // Синхронизируем значение mappingId с компонентом выбора полей
-        const selectedMappingIdField = document.getElementById('selectedMappingId');
-        const mappingIdField = document.getElementById('mappingId');
-
-        // Синхронизируем поля, если они существуют
-        if (selectedMappingIdField && mappingIdField) {
-            // Начальная синхронизация значений
-            mappingIdField.value = selectedMappingIdField.value;
-
-            // Следим за изменениями в компоненте выбора полей
-            const observer = new MutationObserver(function (mutations) {
-                mutations.forEach(function (mutation) {
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
-                        mappingIdField.value = selectedMappingIdField.value;
-                    }
-                });
-            });
-
-            observer.observe(selectedMappingIdField, {attributes: true});
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert('Пожалуйста, выберите файл для импорта');
+            return false;
         }
 
-        // Обработка клика по области загрузки
-        dropArea.addEventListener('click', () => fileInput.click());
+        // Проверка маппинга
+        const mappingSelect = document.getElementById('mappingSelect');
+        if (!mappingSelect.value) {
+            alert('Необходимо выбрать шаблон сопоставления полей!');
+            mappingSelect.classList.add('is-invalid');
+            return false;
+        }
 
-        // Обработка перетаскивания файла
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, preventDefaults, false);
+        // Обрабатываем пользовательский формат даты, если выбран
+        handleCustomDateFormat();
+
+        // Добавляем скрытые поля для чекбоксов, которые не отмечены
+        document.querySelectorAll('input[type="checkbox"][name^="params"]').forEach(checkbox => {
+            if (!checkbox.checked) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = checkbox.name;
+                hiddenInput.value = 'false';
+                checkbox.parentNode.appendChild(hiddenInput);
+            }
         });
 
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
+        // Показываем прогресс импорта
+        document.getElementById('importProgress').classList.remove('d-none');
+
+        // Обновляем прогресс-бар
+        const progressBar = document.getElementById('progressBar');
+        progressBar.style.width = '30%';
+        progressBar.setAttribute('aria-valuenow', 30);
+        progressBar.textContent = '30%';
+        document.getElementById('importStatus').textContent = 'Отправка файла...';
+
+        return true;
+    }
+
+    // Обработка пользовательского формата даты
+    function handleCustomDateFormat() {
+        const select = document.getElementById('dateFormatSelect');
+        const customFormat = document.getElementById('customDateFormat');
+        const actualFormat = document.getElementById('actualDateFormat');
+
+        if (select.value === 'custom' && customFormat.value) {
+            actualFormat.value = customFormat.value;
+        } else {
+            actualFormat.value = select.value;
         }
+    }
+
+    // Переключение отображения поля пользовательского формата даты
+    function toggleCustomDateFormat() {
+        const select = document.getElementById('dateFormatSelect');
+        const container = document.getElementById('customDateFormatContainer');
+        container.style.display = select.value === 'custom' ? 'block' : 'none';
+    }
+
+    // Инициализация drag-and-drop
+    function initDragDrop() {
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
 
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => dropArea.classList.add('dragging'), false);
+            dropArea.addEventListener(eventName, () => dropArea.classList.add('dragging'));
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragging'), false);
-        });
-
-        // Обработка выбора файла
-        fileInput.addEventListener('change', e => {
-            if (e.target.files && e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
+            dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragging'));
         });
 
         dropArea.addEventListener('drop', e => {
-            const dt = e.dataTransfer;
-            if (dt.files && dt.files.length > 0) {
-                fileInput.files = dt.files;
-                handleFile(dt.files[0]);
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
             }
         });
 
-        // Определение типа файла и соответствующих параметров
-        function updateFileSpecificParams() {
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
-
-            const fileName = fileInput.files[0].name.toLowerCase();
-            const isXlsx = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-            const isCsv = fileName.endsWith('.csv');
-
-            // Показываем/скрываем параметры в зависимости от типа файла
-            document.querySelectorAll('.csv-only').forEach(el => {
-                el.style.display = isCsv ? 'block' : 'none';
-            });
-
-            document.querySelectorAll('.xlsx-only').forEach(el => {
-                el.style.display = isXlsx ? 'block' : 'none';
-            });
-        }
-
-        // Обработка пользовательского формата даты
-        const dateFormatSelect = document.getElementById('dateFormat');
-        const customDateFormatContainer = document.getElementById('customDateFormatContainer');
-        if (dateFormatSelect && customDateFormatContainer) {
-            dateFormatSelect.addEventListener('change', function() {
-                customDateFormatContainer.style.display =
-                    this.value === 'custom' ? 'block' : 'none';
-            });
-        }
-
-        // Обработка пользовательского разделителя
-        const delimiterSelect = document.getElementById('delimiter');
-        const customDelimiterContainer = document.getElementById('customDelimiterContainer');
-        if (delimiterSelect && customDelimiterContainer) {
-            delimiterSelect.addEventListener('change', function() {
-                customDelimiterContainer.style.display =
-                    this.value === 'custom' ? 'block' : 'none';
-            });
-        }
-
-        function handleFile(file) {
-            // Показываем превью файла
-            filePreview.style.display = 'block';
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('fileSize').textContent = formatFileSize(file.size);
-            document.getElementById('fileType').textContent = file.type || getFileExtension(file.name);
-
-            // Активируем кнопку импорта
-            startImportBtn.disabled = false;
-
-            // Обновляем параметры в зависимости от типа файла
-            updateFileSpecificParams();
-
-            // Анализируем файл
-            analyzeFile(file);
-        }
-
-        // Удаление файла
-        removeFileBtn.addEventListener('click', function () {
-            fileInput.value = '';
-            filePreview.style.display = 'none';
-            startImportBtn.disabled = true;
+        fileInput.addEventListener('change', e => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
         });
+    }
 
-        // Функция для сбора всех параметров импорта
-        function collectImportParameters(form) {
-            // Собираем значения выборочных полей
-            const paramsByType = {
-                'select': ['errorHandling', 'duplicateHandling', 'dateFormat', 'emptyFieldHandling',
-                    'delimiter', 'quoteChar', 'encoding', 'escapeChar'],
-                'checkbox': ['validateData', 'trimWhitespace', 'skipEmptyRows', 'autoDetectTypes', 'evaluateFormulas'],
-                'number': ['headerRowInput', 'dataStartRow', 'sheetIndex'] // Заменили headerRow на headerRowInput
-            };
+    // Обработка выбранного файла
+    function handleFile(file) {
+        // Показываем превью и получаем тип файла
+        document.getElementById('filePreview').style.display = 'block';
 
-            // Собираем параметры по типам элементов
-            for (const [type, ids] of Object.entries(paramsByType)) {
-                ids.forEach(id => {
-                    const element = document.getElementById(id);
-                    if (!element) return;
+        const fileName = file.name;
+        const fileType = file.type || getFileExtension(fileName);
+        const fileSize = formatFileSize(file.size);
 
-                    let value;
-                    if (type === 'checkbox') {
-                        value = element.checked ? element.value || 'true' : 'false';
-                    } else {
-                        value = element.value;
-                    }
+        // Обновляем информацию
+        document.getElementById('fileName').textContent = fileName;
+        document.getElementById('fileSize').textContent = fileSize;
+        document.getElementById('fileType').textContent = fileType;
 
-                    // Специальная обработка для headerRowInput, так как имя параметра отличается от id
-                    const paramName = id === 'headerRowInput'
-                        ? 'params[headerRow]'
-                        : `params[${id}]`;
+        // Определяем тип файла для отображения параметров
+        const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileType.includes('excel');
+        const isCsv = fileName.endsWith('.csv') || fileName.endsWith('.txt') || fileType.includes('csv');
 
-                    let existingField = form.querySelector(`input[name="${paramName}"]`);
+        // Сначала скрываем все секции
+        document.querySelectorAll('.excel-section, .csv-section').forEach(el => el.style.display = 'none');
 
-                    if (!existingField) {
-                        // Если поле не существует, создаем его
-                        const hiddenField = document.createElement('input');
-                        hiddenField.type = 'hidden';
-                        hiddenField.name = paramName;
-                        hiddenField.value = value;
-                        form.appendChild(hiddenField);
-                    } else {
-                        // Если поле существует, обновляем его значение
-                        existingField.value = value;
-                    }
-                });
-            }
+        // Показываем соответствующую секцию
+        if (isExcel) document.querySelectorAll('.excel-section').forEach(el => el.style.display = 'block');
+        if (isCsv) document.querySelectorAll('.csv-section').forEach(el => el.style.display = 'block');
 
-            // Специальная обработка для полей с пользовательскими значениями
-            // Пользовательский формат даты
-            if (dateFormatSelect && dateFormatSelect.value === 'custom') {
-                const customDateFormat = document.getElementById('customDateFormat');
-                if (customDateFormat && customDateFormat.value) {
-                    const hiddenField = document.createElement('input');
-                    hiddenField.type = 'hidden';
-                    hiddenField.name = 'params[datePattern]';
-                    hiddenField.value = customDateFormat.value;
-                    form.appendChild(hiddenField);
+        // Активируем кнопку импорта если выбран маппинг
+        document.getElementById('startImportBtn').disabled = !document.getElementById('mappingSelect').value;
+
+        // Анализируем файл
+        analyzeFile(file);
+    }
+
+    // Удаление файла
+    function removeFile() {
+        document.getElementById('fileInput').value = '';
+        document.getElementById('filePreview').style.display = 'none';
+        document.getElementById('startImportBtn').disabled = true;
+    }
+
+    // Обновление типа сущности
+    function updateEntityType(type) {
+        currentEntityType = type;
+        document.getElementById('selectedEntityType').value = type;
+        document.getElementById('mappingEntityType').value = type;
+        loadAvailableMappings();
+    }
+
+    // Загрузка доступных маппингов
+    function loadAvailableMappings() {
+        const clientId = window.location.pathname.split('/')[2];
+        fetch(`/api/fields/mappings?clientId=${clientId}&entityType=${currentEntityType}&composite=${isComposite}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.mappings) {
+                    availableMappings = data.mappings;
+                    updateMappingSelect();
                 }
-            }
-
-            // Пользовательский разделитель
-            if (delimiterSelect && delimiterSelect.value === 'custom') {
-                const customDelimiter = document.getElementById('customDelimiter');
-                if (customDelimiter && customDelimiter.value) {
-                    const hiddenField = document.createElement('input');
-                    hiddenField.type = 'hidden';
-                    hiddenField.name = 'params[delimiter]';
-                    hiddenField.value = customDelimiter.value;
-                    form.appendChild(hiddenField);
-                }
-            }
-
-            return true;
-        }
-
-        // Добавляем прямой обработчик клика на кнопку импорта
-        startImportBtn.addEventListener('click', function (event) {
-            // Проверка формы
-            const form = document.getElementById('importForm');
-            if (!form) return;
-
-            // Проверка файла
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Пожалуйста, выберите файл для импорта');
-                event.preventDefault();
-                return;
-            }
-
-            // Собираем все параметры импорта
-            collectImportParameters(form);
-
-            // Показываем прогресс импорта
-            progressContainer.classList.remove('d-none');
-
-            // Обновляем прогресс-бар
-            const progressBar = document.getElementById('progressBar');
-            const statusText = document.getElementById('importStatus');
-            progressBar.style.width = '30%';
-            progressBar.setAttribute('aria-valuenow', 30);
-            progressBar.textContent = '30%';
-            statusText.textContent = 'Отправка файла...';
-
-            // Отправляем форму программно
-            form.submit();
-
-            // Предотвращаем стандартное действие кнопки
-            event.preventDefault();
-        });
-
-        // Функции для работы с файлами и анализа
-        function updateMappingOptions(mappings) {
-            const mappingSelect = document.getElementById('mappingSelect');
-
-            // Если элемент не найден, пробуем найти по альтернативному ID
-            if (!mappingSelect) {
-                const altSelect = document.getElementById('mappingId');
-                if (altSelect) {
-                    updateMappingOptionsForElement(altSelect, mappings);
-                }
-                return;
-            }
-
-            updateMappingOptionsForElement(mappingSelect, mappings);
-        }
-
-        function updateMappingOptionsForElement(selectElement, mappings) {
-            // Очищаем текущие опции
-            selectElement.innerHTML = '<option value="">Автоматическое</option>';
-
-            // Добавляем доступные маппинги
-            if (mappings && mappings.length > 0) {
-                mappings.forEach(mapping => {
-                    const option = document.createElement('option');
-                    option.value = mapping.id;
-                    option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
-                    selectElement.appendChild(option);
-                });
-            }
-        }
-
-        function formatFileSize(size) {
-            const kb = 1024;
-            const mb = kb * 1024;
-
-            if (size < kb) {
-                return size + ' B';
-            } else if (size < mb) {
-                return (size / kb).toFixed(2) + ' KB';
-            } else {
-                return (size / mb).toFixed(2) + ' MB';
-            }
-        }
-
-        function getFileExtension(filename) {
-            return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
-        }
-
-        function analyzeFile(file) {
-            // Очищаем таблицу предпросмотра
-            const headerRow = document.getElementById('headerRow');
-            const previewBody = document.getElementById('previewBody');
-
-            if (!headerRow || !previewBody) return;
-
-            headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Загрузка...</span></div> Анализ файла...</th>';
-            previewBody.innerHTML = '';
-
-            // Получаем параметры анализа
-            const entityType = document.getElementById('selectedEntityType')?.value || 'product';
-            const isComposite = document.getElementById('isComposite')?.value === 'true';
-            const clientId = window.location.pathname.split('/')[2]; // ID клиента из URL
-
-            // Создаем форму для отправки файла
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('analysisEntityType', entityType);
-            formData.append('composite', isComposite);
-
-            // Отправляем файл на сервер для анализа
-            fetch(`/clients/${clientId}/import/analyze`, {
-                method: 'POST',
-                body: formData
             })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`Ошибка HTTP: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Очищаем строки таблицы
-                    headerRow.innerHTML = '';
-                    previewBody.innerHTML = '';
+            .catch(error => console.error('Ошибка загрузки маппингов:', error));
+    }
 
-                    // Заполняем заголовки, если они есть
-                    if (data.headers && data.headers.length > 0) {
-                        data.headers.forEach(header => {
-                            const th = document.createElement('th');
-                            th.textContent = header;
-                            headerRow.appendChild(th);
-                        });
-                    }
+    // Обновление списка маппингов
+    function updateMappingSelect() {
+        const select = document.getElementById('mappingSelect');
+        select.innerHTML = '<option value="">-- Выберите шаблон сопоставления --</option>';
 
-                    // Заполняем предпросмотр данных первыми 10 строками
-                    if (data.sampleData && data.sampleData.length > 0) {
-                        data.sampleData.forEach(rowObject => {
-                            const tr = document.createElement('tr');
+        availableMappings.forEach(mapping => {
+            const option = document.createElement('option');
+            option.value = mapping.id;
+            option.textContent = mapping.name + (mapping.composite ? ' (составной)' : '');
+            select.appendChild(option);
+        });
 
-                            // Для каждого заголовка получаем соответствующее значение
-                            if (data.headers && data.headers.length > 0) {
-                                data.headers.forEach(header => {
-                                    const td = document.createElement('td');
-                                    const cellValue = rowObject[header] !== undefined ? rowObject[header] : '';
-                                    td.textContent = cellValue;
-                                    tr.appendChild(td);
-                                });
-                            } else {
-                                // Если заголовки не определены, выводим все значения объекта
-                                Object.values(rowObject).forEach(value => {
-                                    const td = document.createElement('td');
-                                    td.textContent = value !== null ? value : '';
-                                    tr.appendChild(td);
-                                });
-                            }
+        // Обработчик выбора маппинга
+        select.onchange = function() {
+            // Сбрасываем состояние ошибки
+            this.classList.remove('is-invalid');
 
-                            previewBody.appendChild(tr);
-                        });
+            // Получаем выбранный маппинг
+            const mappingId = this.value;
+            currentMapping = mappingId ? availableMappings.find(m => m.id == mappingId) : null;
+            document.getElementById('viewMappingBtn').disabled = !currentMapping;
 
-                        // Сообщаем, сколько всего строк в файле
-                        const totalRows = data.totalRows || data.sampleData.length;
-                        if (totalRows > data.sampleData.length) {
-                            const tr = document.createElement('tr');
-                            const td = document.createElement('td');
-                            td.colSpan = data.headers ? data.headers.length : Object.keys(data.sampleData[0]).length;
-                            td.className = 'text-center text-muted';
-                            td.textContent = `...и еще ${totalRows - data.sampleData.length} строк`;
-                            tr.appendChild(td);
-                            previewBody.appendChild(tr);
-                        }
-                    }
+            // Активируем кнопку импорта только если есть файл
+            const fileInput = document.getElementById('fileInput');
+            const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+            document.getElementById('startImportBtn').disabled = !(hasFile && mappingId);
+        };
+    }
 
-                    // Автоматическое обновление параметров импорта на основе обнаруженных данных
-                    if (data.detectedOptions) {
-                        // Обновляем разделитель, если он обнаружен и есть соответствующее поле
-                        if (data.detectedOptions.delimiter && delimiterSelect) {
-                            const detectedDelimiter = data.detectedOptions.delimiter;
-                            // Проверяем, есть ли такой разделитель в списке
-                            const options = Array.from(delimiterSelect.options);
-                            const option = options.find(opt => opt.value === detectedDelimiter);
-                            if (option) {
-                                delimiterSelect.value = detectedDelimiter;
-                            }
-                        }
+    // Анализ файла
+    function analyzeFile(file) {
+        // Очистка таблицы предпросмотра
+        const headerRow = document.getElementById('headerRow');
+        const previewBody = document.getElementById('previewBody');
+        headerRow.innerHTML = '<th class="text-center" colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Анализ файла...</th>';
+        previewBody.innerHTML = '';
 
-                        // Обновляем другие обнаруженные параметры
-                        if (data.detectedOptions.quoteChar) {
-                            const quoteCharSelect = document.getElementById('quoteChar');
-                            if (quoteCharSelect) {
-                                const options = Array.from(quoteCharSelect.options);
-                                const option = options.find(opt => opt.value === data.detectedOptions.quoteChar);
-                                if (option) {
-                                    quoteCharSelect.value = data.detectedOptions.quoteChar;
-                                }
-                            }
-                        }
+        // Отправка файла для анализа
+        const clientId = window.location.pathname.split('/')[2];
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('analysisEntityType', currentEntityType);
+        formData.append('composite', isComposite);
 
-                        if (data.detectedOptions.charset) {
-                            const encodingSelect = document.getElementById('encoding');
-                            if (encodingSelect) {
-                                const options = Array.from(encodingSelect.options);
-                                const option = options.find(opt => opt.value.toLowerCase() === data.detectedOptions.charset.toLowerCase());
-                                if (option) {
-                                    encodingSelect.value = option.value;
-                                }
-                            }
-                        }
+        fetch(`/clients/${clientId}/import/analyze`, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Очистка строк таблицы
+                headerRow.innerHTML = '';
+                previewBody.innerHTML = '';
 
-                        if (data.detectedOptions.headerRow !== undefined) {
-                            const headerRowInput = document.getElementById('headerRowInput');
-                            if (headerRowInput) {
-                                headerRowInput.value = data.detectedOptions.headerRow;
-                            }
-                        }
-                    }
+                // Заполнение заголовков
+                if (data.headers && data.headers.length) {
+                    data.headers.forEach(header => {
+                        const th = document.createElement('th');
+                        th.textContent = header;
+                        headerRow.appendChild(th);
+                    });
+                }
 
-                    // Обновляем доступные маппинги
-                    if (data.availableMappings) {
-                        updateMappingOptions(data.availableMappings);
-                    }
-
-                    // Сохраняем заголовки и данные для использования при создании маппинга
-                    window.fileHeaders = data.headers || [];
-                    window.fieldsMetadata = data.fieldsMetadata;
-
-                    // Диспатчим событие для компонента field-selection
-                    document.dispatchEvent(new CustomEvent('fileAnalyzed', {
-                        detail: {
-                            headers: data.headers || [],
-                            metadata: data.fieldsMetadata
-                        }
-                    }));
-
-                    // Если нет данных для предпросмотра
-                    if ((!data.headers || data.headers.length === 0) &&
-                        (!data.sampleData || data.sampleData.length === 0)) {
+                // Заполнение превью данных
+                if (data.sampleData && data.sampleData.length) {
+                    data.sampleData.forEach(row => {
                         const tr = document.createElement('tr');
-                        const td = document.createElement('td');
-                        td.colSpan = 5;
-                        td.className = 'text-center text-muted py-3';
-                        td.textContent = 'Не удалось прочитать данные из файла или файл пуст';
-                        tr.appendChild(td);
+                        if (data.headers && data.headers.length) {
+                            data.headers.forEach(header => {
+                                const td = document.createElement('td');
+                                td.textContent = row[header] || '';
+                                tr.appendChild(td);
+                            });
+                        }
                         previewBody.appendChild(tr);
+                    });
+                }
+
+                // Сохраняем метаданные
+                window.fileHeaders = data.headers || [];
+                window.fieldsMetadata = data.fieldsMetadata;
+            })
+            .catch(error => {
+                headerRow.innerHTML = '';
+                previewBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Ошибка при анализе файла</td></tr>';
+                console.error('Ошибка анализа:', error);
+            });
+    }
+
+    // Подготовка модального окна для создания маппинга
+    function prepareCreateMappingModal() {
+        document.getElementById('mappingName').value = '';
+        document.getElementById('mappingDescription').value = '';
+        document.getElementById('mappingTableBody').innerHTML = '';
+
+        // Проверка наличия заголовков
+        const headers = window.fileHeaders || [];
+        if (headers.length === 0) {
+            document.getElementById('mappingTableBody').innerHTML =
+                '<tr><td colspan="2" class="text-center text-warning">Загрузите и проанализируйте файл для автоматического заполнения заголовков</td></tr>';
+            new bootstrap.Modal(document.getElementById('createMappingModal')).show();
+            return;
+        }
+
+        // Отображение строк маппинга для каждого заголовка
+        headers.forEach((header, index) => {
+            addMappingRow(header);
+        });
+
+        new bootstrap.Modal(document.getElementById('createMappingModal')).show();
+    }
+
+    // Добавление строки маппинга
+    function addMappingRow(headerValue = '') {
+        const tableBody = document.getElementById('mappingTableBody');
+        const row = document.createElement('tr');
+
+        // Ячейка с заголовком
+        const headerCell = document.createElement('td');
+        const headerInput = document.createElement('input');
+        headerInput.type = 'text';
+        headerInput.className = 'form-control form-control-sm';
+        headerInput.value = headerValue;
+        headerInput.onchange = function() {
+            // Обновление name у select при изменении заголовка
+            const fieldSelect = row.querySelector('select');
+            if (fieldSelect) {
+                fieldSelect.name = 'mapping.' + this.value;
+            }
+        };
+        headerCell.appendChild(headerInput);
+
+        // Ячейка с выбором поля
+        const fieldCell = document.createElement('td');
+        const fieldSelect = document.createElement('select');
+        fieldSelect.className = 'form-control form-control-sm';
+        fieldSelect.name = 'mapping.' + headerValue;
+
+        // Добавление пустой опции
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = '-- Не выбрано --';
+        fieldSelect.appendChild(emptyOption);
+
+        // Добавление опций из metadata
+        populateFieldOptions(fieldSelect);
+
+        fieldCell.appendChild(fieldSelect);
+
+        row.appendChild(headerCell);
+        row.appendChild(fieldCell);
+        tableBody.appendChild(row);
+    }
+
+    // Заполнение селектора полей
+    function populateFieldOptions(fieldSelect) {
+        if (!window.fieldsMetadata) return;
+
+        try {
+            if (window.fieldsMetadata.entities) {
+                window.fieldsMetadata.entities.forEach(entity => {
+                    if (entity.fields && entity.fields.length) {
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = entity.displayName || entity.type;
+
+                        entity.fields.forEach(field => {
+                            const option = document.createElement('option');
+                            option.value = field.name;
+                            option.textContent = field.displayName || field.name;
+                            optgroup.appendChild(option);
+                        });
+
+                        fieldSelect.appendChild(optgroup);
                     }
-                })
-                .catch(error => {
-                    headerRow.innerHTML = '';
-                    previewBody.innerHTML = '';
-
-                    const tr = document.createElement('tr');
-                    const td = document.createElement('td');
-                    td.colSpan = 5;
-                    td.className = 'text-center text-danger py-3';
-                    td.textContent = 'Ошибка при анализе файла: ' + error.message;
-                    tr.appendChild(td);
-                    previewBody.appendChild(tr);
                 });
+            }
+        } catch (error) {
+            console.error('Ошибка при заполнении полей:', error);
+        }
+    }
+
+    // Сохранение нового маппинга
+    function saveNewMapping() {
+        const mappingName = document.getElementById('mappingName').value;
+        if (!mappingName) {
+            alert('Пожалуйста, введите название сопоставления');
+            return;
         }
 
-        // Активируем кнопку "Начать импорт" если файл уже был выбран при загрузке страницы
-        if (fileInput.files && fileInput.files.length > 0) {
-            startImportBtn.disabled = false;
-            updateFileSpecificParams(); // Обновляем параметры в зависимости от типа файла
+        const clientId = document.querySelector('input[name="clientId"]').value;
+        const entityType = document.getElementById('mappingEntityType').value;
+        const isComposite = document.getElementById('mappingComposite').value;
+        const description = document.getElementById('mappingDescription').value || '';
+
+        // Создаем FormData
+        const formData = new FormData();
+        formData.append('name', mappingName);
+        formData.append('description', description);
+        formData.append('clientId', clientId);
+        formData.append('entityType', entityType);
+        formData.append('composite', isComposite);
+
+        // Добавляем маппинги полей
+        const rows = document.getElementById('mappingTableBody').querySelectorAll('tr');
+        let mappingCounter = 0;
+
+        rows.forEach(row => {
+            const headerInput = row.querySelector('input[type="text"]');
+            const fieldSelect = row.querySelector('select');
+
+            if (headerInput && fieldSelect && headerInput.value && fieldSelect.value) {
+                formData.append('mapping.' + headerInput.value, fieldSelect.value);
+                mappingCounter++;
+            }
+        });
+
+        if (mappingCounter === 0) {
+            alert('Необходимо выбрать хотя бы одно сопоставление полей');
+            return;
         }
 
-        // Инициализация при загрузке страницы
-        updateFileSpecificParams();
-    });
+        // Добавляем связанные сущности
+        if (isComposite === 'true' && entityType === 'product') {
+            formData.append('relatedEntities', 'region');
+            formData.append('relatedEntities', 'competitor');
+        }
+
+        // Отправляем запрос
+        fetch('/api/fields/mappings', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                alert('Маппинг успешно создан!');
+                bootstrap.Modal.getInstance(document.getElementById('createMappingModal')).hide();
+                loadAvailableMappings();
+            })
+            .catch(error => {
+                alert('Ошибка при создании маппинга: ' + error.message);
+            });
+    }
+
+    // Показ текущего маппинга
+    function showCurrentMapping() {
+        if (!currentMapping) return;
+
+        document.getElementById('currentMappingName').textContent = currentMapping.name || '-';
+        document.getElementById('currentMappingDescription').textContent = currentMapping.description || '-';
+
+        document.getElementById('viewMappingTableBody').innerHTML = `
+            <tr>
+                <td colspan="2" class="text-center text-info">
+                    <i class="fas fa-info-circle me-2"></i>Подробный просмотр деталей маппинга будет доступен в следующих версиях
+                </td>
+            </tr>
+            <tr>
+                <td class="fw-bold">ID</td>
+                <td>${currentMapping.id}</td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Тип сущности</td>
+                <td>${currentMapping.entityType}</td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Составной</td>
+                <td>${currentMapping.composite ? 'Да' : 'Нет'}</td>
+            </tr>
+        `;
+
+        new bootstrap.Modal(document.getElementById('viewMappingModal')).show();
+    }
+
+    // Вспомогательные функции
+    function formatFileSize(size) {
+        if (size < 1024) return size + ' B';
+        if (size < 1048576) return (size / 1024).toFixed(1) + ' KB';
+        return (size / 1048576).toFixed(1) + ' MB';
+    }
+
+    function getFileExtension(filename) {
+        return filename.split('.').pop().toLowerCase();
+    }
 </script>
 </body>
 </html>

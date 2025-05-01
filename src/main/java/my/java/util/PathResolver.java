@@ -46,6 +46,22 @@ public class PathResolver {
         return tempFile;
     }
 
+    // В классе PathResolver модифицируем или добавим метод для создания пустого временного файла
+    public Path createTempFile(String prefix, String suffix) throws IOException {
+        // Создаем временную директорию, если не существует
+        Path tempDirPath = Paths.get(tempDir);
+        Files.createDirectories(tempDirPath);
+
+        // Генерируем уникальное имя файла
+        String filename = prefix + "_" + UUID.randomUUID() + suffix;
+        Path tempFile = tempDirPath.resolve(filename);
+
+        // Создаем пустой файл
+        Files.createFile(tempFile);
+
+        return tempFile;
+    }
+
     /**
      * Перемещает файл из временной директории в постоянную
      */

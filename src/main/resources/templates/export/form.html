@@ -1,155 +1,171 @@
+<!-- src/main/resources/templates/export/form.html -->
 <!DOCTYPE html>
-<html lang="ru" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/main :: html(
-        'Экспорт данных - Обработка файлов',
-        ~{::section},
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout/main :: html(
+        ~{::title},
+        ~{::div.content},
         ~{::script},
-        ~{::style},
-        ${client.name + ' - Экспорт данных'},
-        ~{::.page-actions}
-      )}">
+        ~{},
+        'Экспорт данных',
+        ~{::div.page-actions}
+      )">
 <head>
-    <title>Экспорт данных - Обработка файлов</title>
-    <style>
-        .format-card {
-            cursor: pointer;
-            transition: all 0.2s;
-            height: 100%;
-        }
-        .format-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .format-card.selected {
-            border-color: #198754;
-            background-color: #e8f5e9;
-        }
-        .export-icon {
-            font-size: 48px;
-            color: #198754;
-            margin-bottom: 20px;
-        }
-        .field-list {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 10px;
-        }
-        .field-item {
-            padding: 8px;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        .field-item:last-child {
-            border-bottom: none;
-        }
-        .progress-container {
-            margin-top: 20px;
-        }
-    </style>
+    <title>Экспорт данных</title>
 </head>
 <body>
 <!-- Действия страницы -->
 <div class="page-actions">
-    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary me-2">
-        <i class="fas fa-arrow-left me-1"></i>К клиенту
-    </a>
-    <a th:href="@{/clients/{id}/operations(id=${client.id})}" class="btn btn-primary me-2">
-        <i class="fas fa-history me-1"></i>Операции
-    </a>
-    <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-primary">
-        <i class="fas fa-file-import me-1"></i>Импорт
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Назад к клиенту
     </a>
 </div>
 
-<section>
-    <!-- Информация о клиенте -->
-    <div class="card mb-4">
+<!-- Основное содержимое -->
+<div class="content">
+    <div class="card">
         <div class="card-header">
-            <h5 class="mb-0">Экспорт данных клиента</h5>
+            <h4>Экспорт данных для клиента: <span th:text="${client != null ? client.name : ''}"></span></h4>
         </div>
         <div class="card-body">
-            <p>Экспортируйте данные клиента в нужном формате.</p>
+            <!-- Форма выбора типа сущности -->
+            <form th:if="${entityTypes != null && (selectedEntityType == null || selectedEntityType.isEmpty())}"
+                  th:action="@{${currentUri}}" method="get" class="mb-4">
+                <div class="form-group mb-3">
+                    <label for="entityType">Выберите тип данных для экспорта:</label>
+                    <select id="entityType" name="entityType" class="form-control" required>
+                        <option value="" selected disabled>-- Выберите тип данных --</option>
+                        <option th:each="entity : ${entityTypes}"
+                                th:value="${entity.entityType}"
+                                th:text="${entity.displayName}"></option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-arrow-right"></i> Продолжить
+                </button>
+            </form>
 
-            <form id="exportForm" th:action="@{/clients/{id}/export(id=${client.id})}" method="post">
-                <!-- Выбор формата экспорта -->
-                <div class="mb-4">
-                    <h5>Выберите формат экспорта</h5>
-                    <div class="row row-cols-1 row-cols-md-4 g-4 mt-2">
-                        <div class="col">
-                            <div class="card format-card" data-format="csv">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-file-csv fa-3x mb-3 text-success"></i>
-                                    <h5 class="card-title">CSV</h5>
-                                    <p class="card-text small">Универсальный текстовый формат</p>
-                                    <input type="radio" name="format" value="csv" id="formatCsv" class="d-none" checked>
-                                </div>
+            <!-- Форма экспорта данных -->
+            <form th:if="${selectedEntityType != null && !selectedEntityType.isEmpty()}"
+                  th:action="@{${currentUri}}" method="post">
+
+                <input type="hidden" name="entityType" th:value="${selectedEntityType}">
+
+                <!-- Выбор формата файла -->
+                <div class="form-group mb-3">
+                    <label for="format">Формат экспорта:</label>
+                    <select id="format" name="format" class="form-control" required>
+                        <option value="csv" selected>CSV</option>
+                        <option value="xlsx">Excel (XLSX)</option>
+                    </select>
+                </div>
+
+                <!-- Базовые параметры формата -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5><i class="fas fa-cog"></i> Параметры формата</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Общие параметры -->
+                        <div class="form-check mb-2">
+                            <input type="checkbox" class="form-check-input" id="includeHeader"
+                                   name="includeHeader" value="true" checked>
+                            <label class="form-check-label" for="includeHeader">
+                                Включить заголовки колонок
+                            </label>
+                        </div>
+
+                        <!-- Параметры CSV -->
+                        <div id="csvParams">
+                            <div class="form-group mb-2">
+                                <label for="delimiter">Разделитель:</label>
+                                <select id="delimiter" name="delimiter" class="form-control">
+                                    <option value="," selected>Запятая (,)</option>
+                                    <option value=";">Точка с запятой (;)</option>
+                                    <option value="|">Вертикальная черта (|)</option>
+                                    <option value="&#09">Табуляция</option>
+                                </select>
+                            </div>
+                            <div class="form-group mb-2">
+                                <label for="quoteChar">Символ кавычек:</label>
+                                <select id="quoteChar" name="quoteChar" class="form-control">
+                                    <option value="&quot;" selected>Двойные кавычки (")</option>
+                                    <option value="'">Одинарные кавычки (')</option>
+                                </select>
                             </div>
                         </div>
-                        <div class="col">
-                            <div class="card format-card" data-format="xlsx">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-file-excel fa-3x mb-3 text-success"></i>
-                                    <h5 class="card-title">Excel</h5>
-                                    <p class="card-text small">Файл Microsoft Excel (.xlsx)</p>
-                                    <input type="radio" name="format" value="xlsx" id="formatXlsx" class="d-none">
-                                </div>
+
+                        <!-- Параметры Excel -->
+                        <div id="excelParams" style="display: none;">
+                            <div class="form-group mb-2">
+                                <label for="sheetName">Имя листа:</label>
+                                <input type="text" id="sheetName" name="sheetName"
+                                       class="form-control" value="Данные">
                             </div>
-                        </div>
-                        <div class="col">
-                            <div class="card format-card" data-format="json">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-file-code fa-3x mb-3 text-success"></i>
-                                    <h5 class="card-title">JSON</h5>
-                                    <p class="card-text small">Структурированные данные</p>
-                                    <input type="radio" name="format" value="json" id="formatJson" class="d-none">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="card format-card" data-format="xml">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-file-alt fa-3x mb-3 text-success"></i>
-                                    <h5 class="card-title">XML</h5>
-                                    <p class="card-text small">Расширяемый язык разметки</p>
-                                    <input type="radio" name="format" value="xml" id="formatXml" class="d-none">
-                                </div>
+                            <div class="form-check mb-2">
+                                <input type="checkbox" class="form-check-input" id="autoSizeColumns"
+                                       name="autoSizeColumns" value="true" checked>
+                                <label class="form-check-label" for="autoSizeColumns">
+                                    Автоматически подгонять ширину колонок
+                                </label>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- Включение компонента выбора полей -->
-                <div th:replace="components/field-selection :: fieldSelection(${client.id}, 'export')"></div>
-                <!-- Настройки экспорта -->
-                <div class="mb-4">
-                    <h5>3. Настройте параметры экспорта</h5>
-                    <div class="card mt-2">
-                        <div class="card-body">
+
+                <!-- Выбор полей -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list"></i> Выберите поля для экспорта</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <button type="button" id="selectAllBtn" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-check-square"></i> Выбрать все
+                            </button>
+                            <button type="button" id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-square"></i> Снять выбор
+                            </button>
+                        </div>
+
+                        <!-- Поля основной сущности -->
+                        <div th:if="${entityFields != null}" class="mt-3">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-table"></i> Основная сущность:
+                                <span th:text="${selectedEntityType}">Product</span>
+                            </h6>
+
                             <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Дополнительные параметры</h6>
-                                    <div class="mb-3">
-                                        <label for="dateFrom" class="form-label">Дата с</label>
-                                        <input type="date" class="form-control" id="dateFrom" name="dateFrom">
+                                <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-2">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input"
+                                               th:id="${'field_main_' + stat.index}"
+                                               name="fields"
+                                               th:value="${field.key}">
+                                        <label class="form-check-label"
+                                               th:for="${'field_main_' + stat.index}"
+                                               th:text="${field.value.displayName}"></label>
                                     </div>
-                                    <div class="mb-3">
-                                        <label for="dateTo" class="form-label">Дата по</label>
-                                        <input type="date" class="form-control" id="dateTo" name="dateTo">
-                                    </div>
-                                    <div class="mb-3" id="csvOptions">
-                                        <label for="delimiter" class="form-label">Разделитель (для CSV)</label>
-                                        <select class="form-select" id="delimiter" name="params[delimiter]">
-                                            <option value="," selected>Запятая (,)</option>
-                                            <option value=";">Точка с запятой (;)</option>
-                                            <option value="\t">Табуляция</option>
-                                            <option value="|">Вертикальная черта (|)</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-check mb-3">
-                                        <input class="form-check-input" type="checkbox" id="includeHeaders" name="params[includeHeaders]" value="true" checked>
-                                        <label class="form-check-label" for="includeHeaders">
-                                            Включить заголовки
-                                        </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Поля связанных сущностей -->
+                        <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}" class="mt-4">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-link"></i> Связанная сущность:
+                                <span th:text="${entityEntry.key}">Related Entity</span>
+                            </h6>
+
+                            <div class="row">
+                                <div th:each="field, stat : ${entityEntry.value}" class="col-md-6 mb-2">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input"
+                                               th:id="${'field_' + entityEntry.key + '_' + stat.index}"
+                                               name="fields"
+                                               th:value="${field.key}">
+                                        <label class="form-check-label"
+                                               th:for="${'field_' + entityEntry.key + '_' + stat.index}"
+                                               th:text="${field.value.displayName}"></label>
                                     </div>
                                 </div>
                             </div>
@@ -157,198 +173,51 @@
                     </div>
                 </div>
 
-                <!-- Кнопки действий -->
-                <div class="mt-4 text-center">
-                    <button type="submit" id="startExportBtn" class="btn btn-success btn-lg px-4">
-                        <i class="fas fa-file-export me-1"></i>Экспортировать данные
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-file-export"></i> Экспортировать
                     </button>
-                    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-outline-secondary btn-lg px-4 ms-2">
-                        <i class="fas fa-times me-1"></i>Отмена
+                    <a th:href="@{/clients/{id}(id=${client != null ? client.id : ''})}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Отмена
                     </a>
-                </div>
-
-                <!-- Прогресс экспорта -->
-                <div id="exportProgress" class="progress-container d-none">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3">Прогресс экспорта</h5>
-                            <div class="progress mb-3" style="height: 25px;">
-                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
-                                     role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0"
-                                     aria-valuemax="100">0%</div>
-                            </div>
-                            <div id="exportStatus">Подготовка к экспорту...</div>
-                        </div>
-                    </div>
                 </div>
             </form>
         </div>
     </div>
-</section>
+</div>
 
+<!-- Скрипты страницы -->
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Выбор типа сущности
-        const entityCards = document.querySelectorAll('.entity-type-card');
-        let selectedEntityType = 'product'; // По умолчанию выбраны товары
-
-        entityCards.forEach(card => {
-            card.addEventListener('click', function() {
-                // Снимаем выделение со всех карточек
-                entityCards.forEach(c => c.classList.remove('selected'));
-
-                // Выделяем текущую карточку
-                this.classList.add('selected');
-
-                // Устанавливаем соответствующий radio
-                selectedEntityType = this.dataset.entityType;
-                document.getElementById(`entity${selectedEntityType.charAt(0).toUpperCase() + selectedEntityType.slice(1)}`).checked = true;
-
-                // Обновляем список полей
-                updateFieldList(selectedEntityType);
-            });
-        });
-
-        // Установка выбранной карточки по умолчанию
-        document.querySelector('[data-entity-type="product"]').classList.add('selected');
-
-        // Выбор формата экспорта
-        const formatCards = document.querySelectorAll('.format-card');
-        let selectedFormat = 'csv'; // По умолчанию выбран CSV
-
-        formatCards.forEach(card => {
-            card.addEventListener('click', function() {
-                // Снимаем выделение со всех карточек
-                formatCards.forEach(c => c.classList.remove('selected'));
-
-                // Выделяем текущую карточку
-                this.classList.add('selected');
-
-                // Устанавливаем соответствующий radio
-                selectedFormat = this.dataset.format;
-                document.getElementById(`format${selectedFormat.toUpperCase()}`).checked = true;
-
-                // Показываем/скрываем специфичные для формата опции
-                toggleFormatOptions(selectedFormat);
-            });
-        });
-
-        // Установка выбранной карточки формата по умолчанию
-        document.querySelector('[data-format="csv"]').classList.add('selected');
-
-        // Функция для обновления списка полей в зависимости от выбранного типа сущности
-        function updateFieldList(entityType) {
-            const fieldsContainer = document.getElementById('fieldsContainer');
-            fieldsContainer.innerHTML = '';
-
-            // Получаем список полей в зависимости от типа сущности
-            const fields = getFieldsForEntityType(entityType);
-
-            // Создаем чекбоксы для каждого поля
-            fields.forEach((field, index) => {
-                const fieldItem = document.createElement('div');
-                fieldItem.classList.add('form-check');
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = `field_${index}`;
-                checkbox.name = 'fields[]';
-                checkbox.value = field.value;
-                checkbox.checked = field.default;
-                checkbox.classList.add('form-check-input');
-
-                const label = document.createElement('label');
-                label.htmlFor = `field_${index}`;
-                label.textContent = field.label;
-                label.classList.add('form-check-label');
-
-                fieldItem.appendChild(checkbox);
-                fieldItem.appendChild(label);
-                fieldsContainer.appendChild(fieldItem);
+        // Переключение параметров формата
+        const formatSelect = document.getElementById('format');
+        if (formatSelect) {
+            formatSelect.addEventListener('change', function() {
+                document.getElementById('csvParams').style.display =
+                    this.value === 'csv' ? 'block' : 'none';
+                document.getElementById('excelParams').style.display =
+                    this.value === 'csv' ? 'none' : 'block';
             });
         }
 
-        // Функция для переключения опций в зависимости от выбранного формата
-        function toggleFormatOptions(format) {
-            const csvOptions = document.getElementById('csvOptions');
+        // Кнопки выбора/снятия выбора полей
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deselectAllBtn = document.getElementById('deselectAllBtn');
 
-            // Показываем/скрываем опции для CSV
-            csvOptions.style.display = format === 'csv' ? 'block' : 'none';
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
+                    checkbox.checked = true;
+                });
+            });
         }
 
-        // Обработчики для кнопок "Выбрать все" и "Снять все"
-        document.getElementById('selectAllFields').addEventListener('click', function() {
-            const checkboxes = document.querySelectorAll('input[name="fields[]"]');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = true;
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
+                    checkbox.checked = false;
+                });
             });
-        });
-
-        document.getElementById('deselectAllFields').addEventListener('click', function() {
-            const checkboxes = document.querySelectorAll('input[name="fields[]"]');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = false;
-            });
-        });
-
-        // Инициализация списка полей
-        updateFieldList(selectedEntityType);
-
-        // Отправка формы
-        document.getElementById('exportForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            // Проверяем, что выбрано хотя бы одно поле
-            const selectedFields = document.querySelectorAll('input[name="fields[]"]:checked');
-            if (selectedFields.length === 0) {
-                alert('Пожалуйста, выберите хотя бы одно поле для экспорта.');
-                return;
-            }
-
-            // Показываем прогресс экспорта
-            document.getElementById('exportProgress').classList.remove('d-none');
-
-            // Блокируем кнопку экспорта
-            document.getElementById('startExportBtn').disabled = true;
-
-            // Имитация процесса экспорта с обновлением прогресса
-            simulateExport();
-        });
-
-        // Имитация процесса экспорта
-        function simulateExport() {
-            const progressBar = document.getElementById('progressBar');
-            const statusText = document.getElementById('exportStatus');
-            let progress = 0;
-
-            const interval = setInterval(() => {
-                progress += 10;
-                progressBar.style.width = progress + '%';
-                progressBar.setAttribute('aria-valuenow', progress);
-                progressBar.textContent = progress + '%';
-
-                // Обновляем текст статуса
-                if (progress < 30) {
-                    statusText.textContent = 'Подготовка данных...';
-                } else if (progress < 60) {
-                    statusText.textContent = 'Формирование файла...';
-                } else if (progress < 90) {
-                    statusText.textContent = 'Финализация результатов...';
-                } else {
-                    statusText.textContent = 'Экспорт успешно завершен!';
-                }
-
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    statusText.textContent = 'Экспорт успешно завершен! Скачивание файла начнется автоматически.';
-                    progressBar.classList.remove('progress-bar-animated');
-
-                    // Имитация скачивания файла
-                    setTimeout(() => {
-                        window.location.href = `/clients/${clientId}/operations`;
-                    }, 2000);
-                }
-            }, 200);
         }
     });
 </script>

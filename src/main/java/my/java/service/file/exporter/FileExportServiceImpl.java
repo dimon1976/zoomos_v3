@@ -1,0 +1,253 @@
+// src/main/java/my/java/service/file/exporter/FileExportServiceImpl.java
+package my.java.service.file.exporter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import my.java.dto.FileOperationDto;
+import my.java.exception.FileOperationException;
+import my.java.model.Client;
+import my.java.model.FileOperation;
+import my.java.repository.FileOperationRepository;
+import my.java.service.entity.EntityDataService;
+import my.java.service.file.exporter.strategy.ExportProcessingStrategy;
+import my.java.service.file.options.FileWritingOptions;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.ZonedDateTime;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class FileExportServiceImpl implements FileExportService {
+
+    private final List<FileExporter> exporters;
+    private final List<ExportProcessingStrategy> processingStrategies;
+    private final EntityDataService entityDataService;
+    private final FileOperationRepository fileOperationRepository;
+    private final ObjectMapper objectMapper;
+
+    @Qualifier("fileProcessingExecutor")
+    private final TaskExecutor fileProcessingExecutor;
+
+    private final Map<Long, CompletableFuture<FileOperationDto>> activeExportTasks = new ConcurrentHashMap<>();
+
+    @Override
+    public CompletableFuture<FileOperationDto> exportDataAsync(
+            Client client,
+            String entityType,
+            List<String> fields,
+            Map<String, Object> filterParams,
+            FileWritingOptions options) {
+
+        // Создаем запись об операции в БД
+        FileOperation operation = createFileOperation(client, options.getFileType());
+
+        // Запускаем асинхронную обработку
+        CompletableFuture<FileOperationDto> future = CompletableFuture.supplyAsync(() -> {
+            try {
+                return exportData(client, entityType, fields, filterParams, options, operation);
+            } catch (Exception e) {
+                operation.markAsFailed(e.getMessage());
+                fileOperationRepository.save(operation);
+                throw new RuntimeException("Ошибка при экспорте данных: " + e.getMessage(), e);
+            }
+        }, fileProcessingExecutor);
+
+        // Сохраняем и настраиваем обработку завершения
+        activeExportTasks.put(operation.getId(), future);
+        future.whenComplete((result, ex) -> activeExportTasks.remove(operation.getId()));
+
+        return future;
+    }
+
+    @Transactional
+    protected FileOperationDto exportData(
+            Client client,
+            String entityType,
+            List<String> fields,
+            Map<String, Object> filterParams,
+            FileWritingOptions options,
+            FileOperation operation) {
+
+        Map<String, Object> statistics = new HashMap<>();
+        long startTime = System.currentTimeMillis();
+
+        try {
+            // Обновляем статус операции
+            operation.markAsProcessing();
+            operation = fileOperationRepository.save(operation);
+
+            // Этап 1: Получение данных
+            operation.addStage("data_fetch", "Получение данных");
+            operation.updateStageProgress("data_fetch", 0);
+
+            log.info("Начало экспорта для клиента {}, тип сущности: {}", client.getId(), entityType);
+            List<Map<String, String>> data = entityDataService.getEntityDataForExport(
+                    entityType, fields, filterParams, client.getId());
+
+            operation.updateStageProgress("data_fetch", 100);
+            operation.completeStage("data_fetch");
+
+            log.info("Получено {} записей для экспорта", data.size());
+            statistics.put("totalRecords", data.size());
+
+            // Проверяем наличие данных
+            if (data.isEmpty()) {
+                throw new FileOperationException("Нет данных для экспорта");
+            }
+
+            // Этап 2: Применение стратегии
+            operation.addStage("processing", "Обработка данных");
+
+            // Получаем стратегию
+            String strategyId = options.getAdditionalParams().getOrDefault("strategyId", "simple");
+            ExportProcessingStrategy strategy = findStrategy(strategyId);
+
+            // Обрабатываем данные
+            List<Map<String, String>> processedData = strategy.processData(data, fields, options.getAdditionalParams());
+
+            operation.updateStageProgress("processing", 100);
+            operation.completeStage("processing");
+
+            statistics.put("processedRecords", processedData.size());
+
+            // Этап 3: Экспорт данных
+            // Получаем экспортер
+            FileExporter exporter = findExporter(options.getFileType());
+
+            // Экспортируем данные
+            Path resultFilePath = exporter.exportData(processedData, fields, options, operation);
+
+            // Обновляем информацию о файле
+            statistics.put("fileName", operation.getFileName());
+            statistics.put("fileType", operation.getFileType());
+            statistics.put("fileSize", Files.size(resultFilePath));
+
+            // Обновляем статус операции
+            operation.markAsCompleted(processedData.size());
+            operation.setResultFilePath(resultFilePath.toString());
+
+            // Сохраняем статистику
+            long endTime = System.currentTimeMillis();
+            statistics.put("totalTimeMs", endTime - startTime);
+
+            try {
+                operation.setAdditionalInfo(objectMapper.writeValueAsString(statistics));
+            } catch (Exception e) {
+                log.warn("Не удалось сохранить статистику: {}", e.getMessage());
+            }
+
+            operation = fileOperationRepository.save(operation);
+            log.info("Экспорт завершен успешно, ID операции: {}", operation.getId());
+
+            return FileOperationDto.fromEntity(operation);
+        } catch (Exception e) {
+            log.error("Ошибка при экспорте данных: {}", e.getMessage(), e);
+            operation.markAsFailed(e.getMessage());
+
+            // Определяем текущий этап и помечаем его как проваленный
+            if (!operation.getStages().isEmpty()) {
+                FileOperation.OperationStage currentStage = operation.getStages().stream()
+                        .filter(s -> s.getStatus() == FileOperation.OperationStatus.PROCESSING)
+                        .findFirst()
+                        .orElse(operation.getStages().get(operation.getStages().size() - 1));
+
+                operation.failStage(currentStage.getName(), e.getMessage());
+            }
+
+            fileOperationRepository.save(operation);
+            throw new FileOperationException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public FileOperationDto getExportStatus(Long operationId) {
+        Optional<FileOperation> operationOpt = fileOperationRepository.findById(operationId);
+        if (operationOpt.isEmpty()) {
+            throw new FileOperationException("Операция с ID " + operationId + " не найдена");
+        }
+
+        FileOperation operation = operationOpt.get();
+
+        // Проверяем активные задачи
+        CompletableFuture<FileOperationDto> future = activeExportTasks.get(operationId);
+        if (future != null && future.isDone() && !future.isCompletedExceptionally()) {
+            try {
+                return future.get();
+            } catch (Exception e) {
+                log.error("Ошибка при получении результата задачи: {}", e.getMessage());
+            }
+        }
+
+        return FileOperationDto.fromEntity(operation);
+    }
+
+    @Override
+    public boolean cancelExport(Long operationId) {
+        CompletableFuture<FileOperationDto> future = activeExportTasks.get(operationId);
+        if (future != null && !future.isDone()) {
+            boolean cancelled = future.cancel(true);
+
+            if (cancelled) {
+                // Обновляем статус операции
+                fileOperationRepository.findById(operationId).ifPresent(operation -> {
+                    operation.markAsFailed("Операция отменена пользователем");
+                    fileOperationRepository.save(operation);
+                });
+
+                activeExportTasks.remove(operationId);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public List<Map<String, Object>> getAvailableStrategies() {
+        return processingStrategies.stream()
+                .map(strategy -> {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("id", strategy.getStrategyId());
+                    result.put("name", strategy.getDisplayName());
+                    result.put("description", strategy.getDescription());
+                    return result;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private FileOperation createFileOperation(Client client, String fileType) {
+        FileOperation operation = new FileOperation();
+        operation.setClient(client);
+        operation.setOperationType(FileOperation.OperationType.EXPORT);
+        operation.setFileName("export_" + System.currentTimeMillis() + "." + fileType.toLowerCase());
+        operation.setFileType(fileType.toUpperCase());
+        operation.setStatus(FileOperation.OperationStatus.PENDING);
+        operation.setStartedAt(ZonedDateTime.now());
+        return fileOperationRepository.save(operation);
+    }
+
+    private FileExporter findExporter(String fileType) {
+        return exporters.stream()
+                .filter(e -> e.canExport(fileType))
+                .findFirst()
+                .orElseThrow(() -> new FileOperationException("Не найден экспортер для формата " + fileType));
+    }
+
+    private ExportProcessingStrategy findStrategy(String strategyId) {
+        return processingStrategies.stream()
+                .filter(s -> s.getStrategyId().equals(strategyId))
+                .findFirst()
+                .orElseThrow(() -> new FileOperationException("Не найдена стратегия обработки " + strategyId));
+    }
+}

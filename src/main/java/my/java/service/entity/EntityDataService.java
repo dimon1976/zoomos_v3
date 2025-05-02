@@ -145,7 +145,7 @@ public class EntityDataService {
             return convertedResults;
 
         } catch (Exception e) {
-            log.error("Ошибка при выполнении SQL запроса для составных сущностей: {}", e.getMessage());
+            log.error("Ошибка при выполнении SQL запроса для составных сущностей: {}", e.getMessage(), e);
             // Возвращаем пустой список если произошла ошибка, чтобы не прерывать весь процесс
             return new ArrayList<>();
         }
@@ -300,7 +300,7 @@ public class EntityDataService {
             case "competitor":
                 return "competitor_data";
             case "region":
-                return "regions_data";
+                return "region_data";
             default:
                 return entityType.toLowerCase() + "s";
         }

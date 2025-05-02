@@ -71,7 +71,7 @@ public class FileExportServiceImpl implements FileExportService {
     }
 
     @Transactional
-    protected FileOperationDto exportData(
+    public FileOperationDto exportData(
             Client client,
             String entityType,
             List<String> fields,

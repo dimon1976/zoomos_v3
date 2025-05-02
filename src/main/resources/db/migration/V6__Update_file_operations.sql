@@ -1,5 +1,4 @@
 -- Исправленная SQL миграция V6__Update_file_operations.sql
-ALTER TABLE file_operations ADD COLUMN additional_info TEXT;
 
 -- Таблица для этапов операции
 CREATE TABLE IF NOT EXISTS file_operation_stages (

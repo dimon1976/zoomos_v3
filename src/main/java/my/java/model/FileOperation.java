@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Сущность для отслеживания операций с файлами
@@ -71,6 +73,81 @@ public class FileOperation {
     public enum OperationType {
         IMPORT, EXPORT
     }
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "file_operation_stages",
+            joinColumns = @JoinColumn(name = "operation_id"))
+    @OrderColumn(name = "stage_order")
+    private List<OperationStage> stages = new ArrayList<>();
+
+    /**
+     * Добавляет новый этап в операцию
+     */
+    public void addStage(String name, String description) {
+        OperationStage stage = new OperationStage();
+        stage.setName(name);
+        stage.setDescription(description);
+        stage.setProgress(0);
+        stage.setStartedAt(ZonedDateTime.now());
+        stage.setStatus(OperationStatus.PENDING);
+        stages.add(stage);
+    }
+
+    /**
+     * Обновляет прогресс этапа
+     */
+    public void updateStageProgress(String stageName, int progress) {
+        stages.stream()
+                .filter(s -> s.getName().equals(stageName))
+                .findFirst()
+                .ifPresent(stage -> {
+                    stage.setProgress(progress);
+                    if (stage.getStatus() == OperationStatus.PENDING) {
+                        stage.setStatus(OperationStatus.PROCESSING);
+                    }
+                });
+    }
+
+    /**
+     * Отмечает этап как завершенный
+     */
+    public void completeStage(String stageName) {
+        stages.stream()
+                .filter(s -> s.getName().equals(stageName))
+                .findFirst()
+                .ifPresent(stage -> {
+                    stage.setProgress(100);
+                    stage.setCompletedAt(ZonedDateTime.now());
+                    stage.setStatus(OperationStatus.COMPLETED);
+                });
+    }
+
+    /**
+     * Отмечает этап как проваленный
+     */
+    public void failStage(String stageName, String errorMessage) {
+        stages.stream()
+                .filter(s -> s.getName().equals(stageName))
+                .findFirst()
+                .ifPresent(stage -> {
+                    stage.setCompletedAt(ZonedDateTime.now());
+                    stage.setStatus(OperationStatus.FAILED);
+                });
+    }
+    @Embeddable
+    @Data
+    @NoArgsConstructor
+    public static class OperationStage {
+        private String name;
+        private String description;
+        private int progress;
+        private ZonedDateTime startedAt;
+        private ZonedDateTime completedAt;
+        private OperationStatus status;
+    }
+
+    @Column(columnDefinition = "TEXT")
+    private String additionalInfo;
 
     public enum OperationStatus {
         PENDING, PROCESSING, COMPLETED, FAILED

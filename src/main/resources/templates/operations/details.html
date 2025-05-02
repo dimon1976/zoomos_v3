@@ -1,0 +1,170 @@
+<!-- src/main/resources/templates/operations/details.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ~{::title},
+        ~{::div.content},
+        ~{::script},
+        ~{},
+        'Детали операции',
+        ~{::div.page-actions}
+      )}">
+<head>
+    <title>Детали операции</title>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{clientId}(clientId=${operation.clientId})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Назад к клиенту
+    </a>
+
+    <!-- Кнопка скачивания файла для завершенных операций экспорта -->
+    <a th:if="${operation != null && operation.status == 'COMPLETED' && operation.operationType == 'EXPORT'}"
+       th:href="@{/clients/{clientId}/export/download/{operationId}(clientId=${operation.clientId}, operationId=${operation.id})}"
+       class="btn btn-success ms-2">
+        <i class="fas fa-download"></i> Скачать файл
+    </a>
+</div>
+
+<!-- Основное содержимое -->
+<div class="content">
+    <!-- Информация об операции -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>
+                <i class="fas fa-info-circle"></i> Информация об операции
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>ID операции:</strong> <span th:text="${operation.id}">123</span></p>
+                    <p><strong>Тип операции:</strong> <span th:text="${operation.operationTypeDisplay}">Экспорт</span></p>
+                    <p><strong>Имя файла:</strong> <span th:text="${operation.fileName}">filename.csv</span></p>
+                    <p><strong>Формат файла:</strong> <span th:text="${operation.fileType}">CSV</span></p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Статус:</strong>
+                        <span th:class="${'badge ' + (operation.status == 'COMPLETED' ? 'bg-success' :
+                                             (operation.status == 'FAILED' ? 'bg-danger' :
+                                             (operation.status == 'PROCESSING' ? 'bg-primary' : 'bg-warning')))}"
+                              th:text="${operation.statusDisplay}">Завершено</span>
+                    </p>
+                    <p><strong>Дата начала:</strong> <span th:text="${operation.formattedStartedAt}">01.01.2025 12:00</span></p>
+                    <p><strong>Дата завершения:</strong> <span th:text="${operation.formattedCompletedAt}">01.01.2025 12:05</span></p>
+                    <p><strong>Количество записей:</strong> <span th:text="${operation.recordCount}">100</span></p>
+                </div>
+            </div>
+
+            <!-- Сообщение об ошибке, если есть -->
+            <div th:if="${operation.errorMessage}" class="alert alert-danger mt-3">
+                <i class="fas fa-exclamation-triangle"></i> <strong>Ошибка:</strong>
+                <span th:text="${operation.errorMessage}">Текст ошибки</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Прогресс операции -->
+    <div class="card mb-4" th:if="${operation.status == 'PROCESSING'}">
+        <div class="card-header">
+            <h5>
+                <i class="fas fa-spinner fa-spin"></i> Прогресс операции
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="progress mb-3">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar"
+                     th:style="'width: ' + ${operation.processingProgress} + '%'"
+                     th:aria-valuenow="${operation.processingProgress}"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     th:text="${operation.processingProgress + '%'}">
+                    0%
+                </div>
+            </div>
+            <p class="text-center text-muted">
+                Обработано записей: <span th:text="${operation.processedRecords}">0</span>
+                из <span th:text="${operation.totalRecords}">0</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Этапы операции -->
+    <div class="card mb-4" th:if="${stages != null && !stages.empty}">
+        <div class="card-header">
+            <h5>
+                <i class="fas fa-tasks"></i> Этапы выполнения
+            </h5>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                <li th:each="stage : ${stages}"
+                    th:class="'list-group-item ' + (${stage.status == 'PROCESSING'} ? 'list-group-item-primary' :
+                                                     (${stage.status == 'COMPLETED'} ? 'list-group-item-success' :
+                                                     (${stage.status == 'FAILED'} ? 'list-group-item-danger' : 'list-group-item-warning')))">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i th:class="'fas ' + (${stage.status == 'PROCESSING'} ? 'fa-spinner fa-spin' :
+                                                     (${stage.status == 'COMPLETED'} ? 'fa-check-circle' :
+                                                     (${stage.status == 'FAILED'} ? 'fa-times-circle' : 'fa-clock')))"></i>
+                            <strong th:text="${stage.description}">Название этапа</strong>
+                        </div>
+                        <span th:text="${stage.progress + '%'}">0%</span>
+                    </div>
+                    <div th:if="${stage.status == 'PROCESSING'}" class="progress mt-2">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar"
+                             th:style="'width: ' + ${stage.progress} + '%'"
+                             th:aria-valuenow="${stage.progress}"
+                             aria-valuemin="0"
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Статистика экспорта -->
+    <div class="card" th:if="${statistics != null}">
+        <div class="card-header">
+            <h5>
+                <i class="fas fa-chart-pie"></i> Статистика экспорта
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Всего записей:</strong> <span th:text="${statistics.totalRecords}">100</span></p>
+                    <p><strong>Обработано записей:</strong> <span th:text="${statistics.processedRecords}">100</span></p>
+                    <p><strong>Отфильтровано записей:</strong> <span th:text="${statistics.filteredRecords}">0</span></p>
+                    <p><strong>Экспортировано записей:</strong> <span th:text="${statistics.exportedRecords}">100</span></p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Общее время выполнения:</strong> <span th:text="${statistics.formattedTotalTime}">5 сек</span></p>
+                    <p><strong>Размер файла:</strong> <span th:text="${statistics.formattedFileSize}">10 КБ</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Скрипты для автоматического обновления статуса -->
+<script th:if="${operation.status == 'PROCESSING'}">
+    // Минимальный JavaScript для обновления статуса операции
+    document.addEventListener('DOMContentLoaded', function() {
+        // Обновлять статус каждые 3 секунды
+        const refreshInterval = setInterval(function() {
+            window.location.reload();
+        }, 3000);
+
+        // Остановить обновление, если пользователь покидает страницу
+        window.addEventListener('beforeunload', function() {
+            clearInterval(refreshInterval);
+        });
+    });
+</script>
+</body>
+</html>

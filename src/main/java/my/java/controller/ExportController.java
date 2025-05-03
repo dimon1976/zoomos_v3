@@ -91,6 +91,28 @@ public class ExportController {
                             }
                             model.addAttribute("selectedTemplate", selectedTemplate);
 
+                            // Упрощаем доступ к данным шаблона для использования в Thymeleaf
+                            if (selectedTemplate != null) {
+                                // Множество выбранных полей
+                                Set<String> selectedFields = selectedTemplate.getFields().stream()
+                                        .map(ExportTemplate.ExportField::getOriginalField)
+                                        .collect(Collectors.toSet());
+                                model.addAttribute("selectedFields", selectedFields);
+
+                                // Карта соответствия полей и их заголовков
+                                Map<String, String> fieldHeaders = selectedTemplate.getFields().stream()
+                                        .collect(Collectors.toMap(
+                                                ExportTemplate.ExportField::getOriginalField,
+                                                ExportTemplate.ExportField::getDisplayName,
+                                                (v1, v2) -> v1 // В случае дублей берем первое значение
+                                        ));
+                                model.addAttribute("fieldHeaders", fieldHeaders);
+
+                                // Параметры формата файла
+                                model.addAttribute("fileFormat", selectedTemplate.getFileType());
+                                model.addAttribute("strategyId", selectedTemplate.getStrategyId());
+                            }
+
                             // Загружаем поля основной сущности
                             model.addAttribute("entityFields", entityMetadata.getPrefixedFields());
 

@@ -1,4 +1,4 @@
-// src/main/java/my/java/controller/ExportController.java - базовое обновление
+// src/main/java/my/java/controller/ExportController.java (обновление)
 package my.java.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,9 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileOperationDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
+import my.java.model.ExportTemplate;
 import my.java.model.FileOperation;
 import my.java.repository.FileOperationRepository;
 import my.java.service.client.ClientService;
+import my.java.service.file.exporter.ExportTemplateService;
 import my.java.service.file.exporter.FileExportService;
 import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
@@ -31,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/clients/{clientId}/export")
@@ -42,6 +45,7 @@ public class ExportController {
     private final FileOperationRepository fileOperationRepository;
     private final FileExportService fileExportService;
     private final EntityRegistry entityRegistry;
+    private final ExportTemplateService templateService;
 
     /**
      * Отображение страницы экспорта
@@ -50,6 +54,7 @@ public class ExportController {
     public String showExportForm(
             @PathVariable Long clientId,
             @RequestParam(required = false) String entityType,
+            @RequestParam(required = false) Long templateId,
             Model model,
             HttpServletRequest request,
             RedirectAttributes redirectAttributes) {
@@ -62,11 +67,51 @@ public class ExportController {
                     // Загружаем список сущностей для экспорта
                     model.addAttribute("entityTypes", entityRegistry.getMainEntities());
 
+                    // Загружаем доступные шаблоны для клиента
+                    List<ExportTemplate> allTemplates = templateService.getAllTemplatesForClient(clientId);
+                    model.addAttribute("allTemplates", allTemplates);
+
                     // Если указан тип сущности, загружаем поля
                     if (entityType != null && !entityType.isEmpty()) {
                         var entityMetadata = entityRegistry.getEntityMetadata(entityType);
                         if (entityMetadata != null) {
                             model.addAttribute("selectedEntityType", entityType);
+
+                            // Загружаем шаблоны для данного типа сущности
+                            List<ExportTemplate> entityTemplates = templateService.getTemplatesForEntityType(clientId, entityType);
+                            model.addAttribute("templates", entityTemplates);
+
+                            // Если указан ID шаблона, загружаем его
+                            ExportTemplate selectedTemplate = null;
+                            if (templateId != null) {
+                                selectedTemplate = templateService.getTemplateById(templateId).orElse(null);
+                            } else {
+                                // Получаем шаблон по умолчанию, если есть
+                                selectedTemplate = templateService.getDefaultTemplate(clientId, entityType).orElse(null);
+                            }
+                            model.addAttribute("selectedTemplate", selectedTemplate);
+
+                            // Упрощаем доступ к данным шаблона для использования в Thymeleaf
+                            if (selectedTemplate != null) {
+                                // Множество выбранных полей
+                                Set<String> selectedFields = selectedTemplate.getFields().stream()
+                                        .map(ExportTemplate.ExportField::getOriginalField)
+                                        .collect(Collectors.toSet());
+                                model.addAttribute("selectedFields", selectedFields);
+
+                                // Карта соответствия полей и их заголовков
+                                Map<String, String> fieldHeaders = selectedTemplate.getFields().stream()
+                                        .collect(Collectors.toMap(
+                                                ExportTemplate.ExportField::getOriginalField,
+                                                ExportTemplate.ExportField::getDisplayName,
+                                                (v1, v2) -> v1 // В случае дублей берем первое значение
+                                        ));
+                                model.addAttribute("fieldHeaders", fieldHeaders);
+
+                                // Параметры формата файла
+                                model.addAttribute("fileFormat", selectedTemplate.getFileType());
+                                model.addAttribute("strategyId", selectedTemplate.getStrategyId());
+                            }
 
                             // Загружаем поля основной сущности
                             model.addAttribute("entityFields", entityMetadata.getPrefixedFields());
@@ -105,6 +150,9 @@ public class ExportController {
             @RequestParam("entityType") String entityType,
             @RequestParam("format") String format,
             @RequestParam(value = "fields", required = false) List<String> fields,
+            @RequestParam(value = "saveAsTemplate", required = false) Boolean saveAsTemplate,
+            @RequestParam(value = "templateName", required = false) String templateName,
+            @RequestParam(value = "strategyId", required = false) String strategyId,
             @RequestParam Map<String, String> allParams,
             RedirectAttributes redirectAttributes) {
 
@@ -125,6 +173,20 @@ public class ExportController {
             FileWritingOptions options = FileWritingOptions.fromMap(allParams);
             options.setFileType(format);
 
+            // Устанавливаем стратегию экспорта
+            Map<String, String> strategyParams = new HashMap<>();
+            if (strategyId != null && !strategyId.isEmpty()) {
+                options.getAdditionalParams().put("strategyId", strategyId);
+
+                // Собираем параметры для стратегии из запроса
+                for (Map.Entry<String, String> entry : allParams.entrySet()) {
+                    if (entry.getKey().startsWith("strategy_")) {
+                        String paramName = entry.getKey().substring("strategy_".length());
+                        strategyParams.put(paramName, entry.getValue());
+                    }
+                }
+            }
+
             // Извлекаем параметры фильтрации
             Map<String, Object> filterParams = extractFilterParams(allParams);
 
@@ -134,6 +196,11 @@ public class ExportController {
 
             // Получаем результат операции
             FileOperationDto operation = future.join();
+
+            // Если требуется сохранить как шаблон
+            if (Boolean.TRUE.equals(saveAsTemplate) && templateName != null && !templateName.isEmpty()) {
+                saveAsTemplate(client, entityType, fields, format, strategyId, allParams, templateName);
+            }
 
             // Добавляем сообщение об успешном начале экспорта
             redirectAttributes.addFlashAttribute("successMessage",
@@ -151,6 +218,81 @@ public class ExportController {
             redirectAttributes.addFlashAttribute("errorMessage", "Произошла ошибка: " + e.getMessage());
             return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
         }
+    }
+
+    /**
+     * Создание шаблона экспорта из текущих настроек
+     */
+    private void saveAsTemplate(Client client, String entityType, List<String> fields,
+                                String format, String strategyId, Map<String, String> params,
+                                String templateName) {
+        try {
+            ExportTemplate template = new ExportTemplate();
+            template.setClient(client);
+            template.setEntityType(entityType);
+            template.setName(templateName);
+            template.setFileType(format);
+            template.setStrategyId(strategyId);
+
+            // Маппинг полей с настройками заголовков
+            for (String field : fields) {
+                ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
+                exportField.setOriginalField(field);
+
+                // Проверяем, задан ли пользовательский заголовок
+                String headerKey = "header_" + field.replace(".", "_");
+                if (params.containsKey(headerKey)) {
+                    exportField.setDisplayName(params.get(headerKey));
+                } else {
+                    exportField.setDisplayName(getDefaultDisplayName(field));
+                }
+
+                template.getFields().add(exportField);
+            }
+
+            // Сохраняем параметры файла в JSON
+            Map<String, String> fileOptions = new HashMap<>();
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                if (entry.getKey().startsWith("file_")) {
+                    fileOptions.put(entry.getKey().substring(5), entry.getValue());
+                }
+            }
+
+            // TODO: сериализовать fileOptions в JSON и сохранить
+
+            // Сохраняем шаблон
+            templateService.saveTemplate(template);
+
+        } catch (Exception e) {
+            log.error("Ошибка при сохранении шаблона: {}", e.getMessage(), e);
+            // Не прерываем основной процесс экспорта в случае ошибки сохранения шаблона
+        }
+    }
+
+    /**
+     * Преобразует имя поля в отображаемое название
+     */
+    private String getDefaultDisplayName(String field) {
+        // Отделяем префикс сущности, если есть
+        int dotIndex = field.lastIndexOf('.');
+        if (dotIndex > 0) {
+            field = field.substring(dotIndex + 1);
+        }
+
+        // Преобразуем camelCase в нормальный текст
+        StringBuilder formatted = new StringBuilder();
+        for (int i = 0; i < field.length(); i++) {
+            char c = field.charAt(i);
+            if (i == 0) {
+                formatted.append(Character.toUpperCase(c));
+            } else if (Character.isUpperCase(c)) {
+                formatted.append(' ').append(c);
+            } else {
+                formatted.append(c);
+            }
+        }
+
+        return formatted.toString();
     }
 
     /**

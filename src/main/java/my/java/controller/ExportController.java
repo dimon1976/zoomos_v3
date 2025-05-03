@@ -1,4 +1,4 @@
-// src/main/java/my/java/controller/ExportController.java (обновление)
+// src/main/java/my/java/controller/ExportController.java
 package my.java.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -91,41 +91,14 @@ public class ExportController {
                             }
                             model.addAttribute("selectedTemplate", selectedTemplate);
 
-                            // Упрощаем доступ к данным шаблона для использования в Thymeleaf
-                            if (selectedTemplate != null) {
-                                // Множество выбранных полей
-                                Set<String> selectedFields = selectedTemplate.getFields().stream()
-                                        .map(ExportTemplate.ExportField::getOriginalField)
-                                        .collect(Collectors.toSet());
-                                model.addAttribute("selectedFields", selectedFields);
-
-                                // Карта соответствия полей и их заголовков
-                                Map<String, String> fieldHeaders = selectedTemplate.getFields().stream()
-                                        .collect(Collectors.toMap(
-                                                ExportTemplate.ExportField::getOriginalField,
-                                                ExportTemplate.ExportField::getDisplayName,
-                                                (v1, v2) -> v1 // В случае дублей берем первое значение
-                                        ));
-                                model.addAttribute("fieldHeaders", fieldHeaders);
-
-                                // Параметры формата файла
-                                model.addAttribute("fileFormat", selectedTemplate.getFileType());
-                                model.addAttribute("strategyId", selectedTemplate.getStrategyId());
-                            }
+                            // Подготавливаем данные для шаблона
+                            prepareTemplateData(model, selectedTemplate);
 
                             // Загружаем поля основной сущности
                             model.addAttribute("entityFields", entityMetadata.getPrefixedFields());
 
-                            // Загружаем поля связанных сущностей
-                            List<EntityMetadata> relatedEntities = entityRegistry.getRelatedEntities(entityType);
-                            if (!relatedEntities.isEmpty()) {
-                                Map<String, Map<String, EntityMetadata.FieldMetadata>> relatedFields = new HashMap<>();
-                                for (EntityMetadata relatedEntity : relatedEntities) {
-                                    relatedFields.put(relatedEntity.getEntityType(),
-                                            relatedEntity.getPrefixedFields());
-                                }
-                                model.addAttribute("relatedFields", relatedFields);
-                            }
+                            // Загружаем поля связанных сущностей и подготавливаем данные
+                            prepareRelatedEntitiesData(model, entityType, selectedTemplate);
 
                             // Загружаем доступные стратегии экспорта
                             model.addAttribute("strategies", fileExportService.getAvailableStrategies());
@@ -139,6 +112,64 @@ public class ExportController {
                             "Клиент с ID " + clientId + " не найден");
                     return "redirect:/clients";
                 });
+    }
+
+    /**
+     * Подготавливает данные шаблона для использования в представлении
+     */
+    private void prepareTemplateData(Model model, ExportTemplate template) {
+        if (template != null) {
+            // Множество выбранных полей
+            Set<String> selectedFields = template.getFields().stream()
+                    .map(ExportTemplate.ExportField::getOriginalField)
+                    .collect(Collectors.toSet());
+            model.addAttribute("selectedFields", selectedFields);
+
+            // Карта соответствия полей и их заголовков
+            Map<String, String> fieldHeaders = template.getFields().stream()
+                    .collect(Collectors.toMap(
+                            ExportTemplate.ExportField::getOriginalField,
+                            ExportTemplate.ExportField::getDisplayName,
+                            (v1, v2) -> v1 // В случае дублей берем первое значение
+                    ));
+            model.addAttribute("fieldHeaders", fieldHeaders);
+
+            // Параметры формата файла
+            model.addAttribute("fileFormat", template.getFileType());
+            model.addAttribute("strategyId", template.getStrategyId());
+        }
+    }
+
+    /**
+     * Подготавливает данные связанных сущностей для использования в представлении
+     */
+    private void prepareRelatedEntitiesData(Model model, String entityType, ExportTemplate template) {
+        List<EntityMetadata> relatedEntities = entityRegistry.getRelatedEntities(entityType);
+        if (!relatedEntities.isEmpty()) {
+            Map<String, Map<String, EntityMetadata.FieldMetadata>> relatedFields = new HashMap<>();
+
+            // Карта выбранных полей для каждой связанной сущности
+            Map<String, Set<String>> relatedSelectedFields = new HashMap<>();
+
+            for (EntityMetadata relatedEntity : relatedEntities) {
+                String entityKey = relatedEntity.getEntityType();
+                relatedFields.put(entityKey, relatedEntity.getPrefixedFields());
+
+                // Если есть выбранный шаблон, подготавливаем выбранные поля
+                if (template != null) {
+                    Set<String> fields = template.getFields().stream()
+                            .map(ExportTemplate.ExportField::getOriginalField)
+                            .filter(field -> field.startsWith(entityKey + "."))
+                            .collect(Collectors.toSet());
+                    relatedSelectedFields.put(entityKey, fields);
+                } else {
+                    relatedSelectedFields.put(entityKey, Collections.emptySet());
+                }
+            }
+
+            model.addAttribute("relatedFields", relatedFields);
+            model.addAttribute("relatedSelectedFields", relatedSelectedFields);
+        }
     }
 
     /**

@@ -96,8 +96,8 @@
                             <label for="format">Формат экспорта:</label>
                             <select id="format" name="format" class="form-control" required
                                     onchange="updateFormatSettings()">
-                                <option value="csv" selected>CSV</option>
-                                <option value="xlsx">Excel (XLSX)</option>
+                                <option value="csv" th:selected="${fileFormat == null || fileFormat == 'csv'}">CSV</option>
+                                <option value="xlsx" th:selected="${fileFormat == 'xlsx'}">Excel (XLSX)</option>
                             </select>
                         </div>
 
@@ -106,10 +106,11 @@
                             <label for="strategyId">Стратегия обработки данных:</label>
                             <select id="strategyId" name="strategyId" class="form-control"
                                     onchange="updateStrategySettings()">
-                                <option value="">Стандартная (без обработки)</option>
+                                <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">Стандартная (без обработки)</option>
                                 <option th:each="strategy : ${strategies}"
                                         th:value="${strategy.id}"
-                                        th:text="${strategy.name}">
+                                        th:text="${strategy.name}"
+                                        th:selected="${strategyId != null && strategyId == strategy.id}">
                                     Стратегия
                                 </option>
                             </select>
@@ -127,7 +128,7 @@
                         </div>
 
                         <!-- Параметры CSV -->
-                        <div id="csvParams">
+                        <div id="csvParams" th:style="${fileFormat != 'xlsx' ? '' : 'display: none;'}">
                             <h6 class="mt-3">Параметры CSV</h6>
                             <div class="row">
                                 <div class="col-md-6">
@@ -154,7 +155,7 @@
                         </div>
 
                         <!-- Параметры Excel -->
-                        <div id="excelParams" style="display: none;">
+                        <div id="excelParams" th:style="${fileFormat == 'xlsx' ? '' : 'display: none;'}">
                             <h6 class="mt-3">Параметры Excel</h6>
                             <div class="row">
                                 <div class="col-md-6">
@@ -179,7 +180,7 @@
                 </div>
 
                 <!-- Параметры стратегии -->
-                <div id="strategyParams" class="card mb-3" style="display: none;">
+                <div id="strategyParams" class="card mb-3" th:style="${strategyId != null && !strategyId.isEmpty() ? '' : 'display: none;'}">
                     <div class="card-header bg-light">
                         <h5><i class="fas fa-sliders-h"></i> Параметры стратегии</h5>
                     </div>
@@ -354,20 +355,16 @@
                                                th:id="${'field_' + entityEntry.key + '_' + stat.index}"
                                                name="fields"
                                                th:value="${field.key}"
-                                               th:checked="${selectedTemplate != null &&
-                  selectedTemplate.fields.stream().anyMatch(f -> f.originalField.equals(field.key))}">
+                                               th:checked="${relatedSelectedFields != null &&
+                                                          relatedSelectedFields.get(entityEntry.key) != null &&
+                                                          relatedSelectedFields.get(entityEntry.key).contains(field.key)}">
                                         <label class="form-check-label ms-2"
                                                th:for="${'field_' + entityEntry.key + '_' + stat.index}"
                                                th:text="${field.value.displayName}"></label>
                                         <input type="hidden" th:name="${'header_' + field.key.replace('.', '_')}"
                                                th:id="${'header_' + field.key.replace('.', '_')}"
-                                               th:value="${selectedTemplate != null ?
-                selectedTemplate.fields.stream()
-                .filter(f -> f.originalField.equals(field.key))
-                .findFirst()
-                .map(f -> f.displayName)
-                .orElse(field.value.displayName) :
-                field.value.displayName}">
+                                               th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
+                                                          fieldHeaders.get(field.key) : field.value.displayName}">
                                     </div>
                                 </div>
                             </div>
@@ -445,16 +442,22 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         // Переключение параметров формата
+        updateFormatSettings();
+
+        // Обработчики событий для элементов формы
+        initFormHandlers();
+    });
+
+    // Инициализация обработчиков событий формы
+    function initFormHandlers() {
+        // Формат файла
         const formatSelect = document.getElementById('format');
         if (formatSelect) {
-            updateFormatSettings();
             formatSelect.addEventListener('change', updateFormatSettings);
         }
 
         // Кнопки выбора/снятия выбора полей
         const selectAllBtn = document.getElementById('selectAllBtn');
-        const deselectAllBtn = document.getElementById('deselectAllBtn');
-
         if (selectAllBtn) {
             selectAllBtn.addEventListener('click', function () {
                 document.querySelectorAll('input[name="fields"]').forEach(function (checkbox) {
@@ -463,6 +466,7 @@
             });
         }
 
+        const deselectAllBtn = document.getElementById('deselectAllBtn');
         if (deselectAllBtn) {
             deselectAllBtn.addEventListener('click', function () {
                 document.querySelectorAll('input[name="fields"]').forEach(function (checkbox) {
@@ -474,8 +478,7 @@
         // Показ/скрытие поля для названия шаблона
         const saveAsTemplateCheckbox = document.getElementById('saveAsTemplate');
         const templateNameGroup = document.getElementById('templateNameGroup');
-
-        if (saveAsTemplateCheckbox) {
+        if (saveAsTemplateCheckbox && templateNameGroup) {
             saveAsTemplateCheckbox.addEventListener('change', function () {
                 templateNameGroup.style.display = this.checked ? 'block' : 'none';
             });
@@ -484,7 +487,6 @@
         // Обработка изменения стратегии
         const strategySelect = document.getElementById('strategyId');
         if (strategySelect) {
-            updateStrategySettings();
             strategySelect.addEventListener('change', updateStrategySettings);
         }
 
@@ -511,15 +513,18 @@
         if (saveOrderBtn) {
             saveOrderBtn.addEventListener('click', saveFieldOrder);
         }
-    });
+    }
 
     // Функция переключения настроек формата
     function updateFormatSettings() {
         const format = document.getElementById('format').value;
-        document.getElementById('csvParams').style.display =
-            format === 'csv' ? 'block' : 'none';
-        document.getElementById('excelParams').style.display =
-            format === 'csv' ? 'none' : 'block';
+        const csvParams = document.getElementById('csvParams');
+        const excelParams = document.getElementById('excelParams');
+
+        if (csvParams && excelParams) {
+            csvParams.style.display = format === 'csv' ? 'block' : 'none';
+            excelParams.style.display = format === 'xlsx' ? 'block' : 'none';
+        }
     }
 
     // Функция переключения настроек стратегии
@@ -527,79 +532,30 @@
         const strategyId = document.getElementById('strategyId').value;
         const strategyParams = document.getElementById('strategyParams');
 
-        if (strategyId && strategyId !== '') {
-            strategyParams.style.display = 'block';
+        if (strategyParams) {
+            strategyParams.style.display = strategyId && strategyId !== '' ? 'block' : 'none';
 
             // Отображаем нужные параметры для выбранной стратегии
-            // Здесь можно добавить логику для разных стратегий
-            if (strategyId === 'filtered') {
-                document.getElementById('filteredStrategyParams').style.display = 'block';
-            } else {
-                document.getElementById('filteredStrategyParams').style.display = 'none';
+            const filteredParams = document.getElementById('filteredStrategyParams');
+            if (filteredParams) {
+                filteredParams.style.display = strategyId === 'filtered' ? 'block' : 'none';
             }
-        } else {
-            strategyParams.style.display = 'none';
         }
     }
 
     // Функция для загрузки шаблона
     function loadTemplate() {
         const templateId = document.getElementById('templateId').value;
-        if (!templateId) return;
+        if (!templateId) {
+            // Если шаблон не выбран, обновляем страницу без шаблона
+            window.location.href = window.location.pathname + '?entityType=' +
+                document.querySelector('input[name="entityType"]').value;
+            return;
+        }
 
-        const clientId = window.location.pathname.split('/')[2];
-
-        // Запрос данных шаблона
-        fetch(`/clients/${clientId}/export/templates/api/${templateId}`)
-            .then(response => response.json())
-            .then(template => {
-                // Заполняем форму данными из шаблона
-                document.getElementById('format').value = template.fileType || 'csv';
-                updateFormatSettings();
-
-                if (template.strategyId) {
-                    document.getElementById('strategyId').value = template.strategyId;
-                    updateStrategySettings();
-                }
-
-                // Снимаем выделение со всех полей
-                document.querySelectorAll('input[name="fields"]').forEach(checkbox => {
-                    checkbox.checked = false;
-                });
-
-                // Выделяем поля из шаблона
-                template.fields.forEach(field => {
-                    const checkbox = Array.from(document.querySelectorAll('input[name="fields"]'))
-                        .find(input => input.value === field.originalField);
-
-                    if (checkbox) {
-                        checkbox.checked = true;
-
-                        // Устанавливаем заголовок
-                        const headerInput = document.getElementById('header_' + field.originalField.replace('.', '_'));
-                        if (headerInput) {
-                            headerInput.value = field.displayName;
-                        }
-                    }
-                });
-
-                // Если у шаблона есть параметры файла, устанавливаем их
-                if (template.fileOptionsAsMap) {
-                    const options = template.fileOptionsAsMap;
-
-                    if (template.fileType === 'csv') {
-                        if (options.delimiter) document.getElementById('delimiter').value = options.delimiter;
-                        if (options.quoteChar) document.getElementById('quoteChar').value = options.quoteChar;
-                    } else {
-                        if (options.sheetName) document.getElementById('sheetName').value = options.sheetName;
-                        document.getElementById('autoSizeColumns').checked = options.autoSizeColumns !== 'false';
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Ошибка при загрузке шаблона:', error);
-                alert('Не удалось загрузить шаблон. Пожалуйста, попробуйте еще раз.');
-            });
+        // Перезагружаем страницу с выбранным шаблоном
+        window.location.href = window.location.pathname + '?entityType=' +
+            document.querySelector('input[name="entityType"]').value + '&templateId=' + templateId;
     }
 
     // Открытие модального окна для настройки заголовков
@@ -673,7 +629,7 @@
                 label: document.querySelector(`label[for="${checkbox.id}"]`).textContent,
                 order: checkbox.closest('.field-item').dataset.order
             }))
-            .sort((a, b) => a.order - b.order);
+            .sort((a, b) => parseInt(a.order) - parseInt(b.order));
 
         // Для каждого выбранного поля добавляем элемент в список
         selectedFields.forEach(field => {
@@ -695,29 +651,12 @@
         // Открываем модальное окно
         const modal = new bootstrap.Modal(document.getElementById('sortFieldsModal'));
         modal.show();
-
-        // Инициализируем сортировку (требуется библиотека Sortable.js или jQuery UI)
-        // Эта часть зависит от используемой библиотеки для сортировки
-        // Пример для vanilla JS (требует подключения библиотеки)
-        /*
-        new Sortable(sortableList, {
-            animation: 150,
-            handle: '.me-2', // Хватать только за ручку
-            ghostClass: 'bg-light'
-        });
-        */
     }
 
     // Сохранение порядка полей
     function saveFieldOrder() {
-        // Получаем новый порядок полей
-        const newOrder = Array.from(document.querySelectorAll('#sortableFields li'))
-            .map(item => item.dataset.field);
-
-        // Изменяем порядок полей в форме
-        // Это может потребовать изменения структуры HTML или дополнительных скрытых полей
-
-        // Закрываем модальное окно
+        // В упрощенной версии просто закрываем модальное окно
+        // Реальная сортировка требует дополнительных действий на стороне сервера
         const modal = bootstrap.Modal.getInstance(document.getElementById('sortFieldsModal'));
         modal.hide();
     }

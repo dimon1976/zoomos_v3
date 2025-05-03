@@ -27,6 +27,7 @@ public interface FileExporter {
             FileOperation operation
     );
 
+
     /**
      * Проверяет, подходит ли экспортер для заданного типа файла
      */

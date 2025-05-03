@@ -12,6 +12,7 @@ import my.java.repository.FileOperationRepository;
 import my.java.service.entity.EntityDataService;
 import my.java.service.file.exporter.strategy.ExportProcessingStrategy;
 import my.java.service.file.options.FileWritingOptions;
+import my.java.util.PathResolver;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class FileExportServiceImpl implements FileExportService {
     private final EntityDataService entityDataService;
     private final FileOperationRepository fileOperationRepository;
     private final ObjectMapper objectMapper;
+    private final PathResolver pathResolver;
 
     @Qualifier("fileProcessingExecutor")
     private final TaskExecutor fileProcessingExecutor;
@@ -70,6 +72,49 @@ public class FileExportServiceImpl implements FileExportService {
         return future;
     }
 
+    /**
+     * Экспортирует данные напрямую (синхронно) без сохранения операции в БД
+     * Используется для немедленного скачивания файла
+     */
+    @Override
+    public Path exportDirectly(
+            Client client,
+            String entityType,
+            List<String> fields,
+            Map<String, Object> filterParams,
+            FileWritingOptions options,
+            FileOperation tempOperation) {
+
+        try {
+            // Получаем данные для экспорта
+            List<Map<String, String>> data = entityDataService.getEntityDataForExport(
+                    entityType, fields, filterParams, client.getId());
+
+            if (data.isEmpty()) {
+                throw new FileOperationException("Нет данных для экспорта");
+            }
+
+            log.info("Получено {} записей для прямого экспорта", data.size());
+
+            // Получаем стратегию
+            String strategyId = options.getAdditionalParams().getOrDefault("strategyId", "simple");
+            ExportProcessingStrategy strategy = findStrategy(strategyId);
+
+            // Обрабатываем данные
+            List<Map<String, String>> processedData = strategy.processData(data, fields, options.getAdditionalParams());
+
+            // Получаем экспортер для выбранного формата
+            FileExporter exporter = findExporter(options.getFileType());
+
+            // Экспортируем данные во временный файл
+            return exporter.exportData(processedData, fields, options, tempOperation);
+
+        } catch (Exception e) {
+            log.error("Ошибка при прямом экспорте данных: {}", e.getMessage(), e);
+            throw new FileOperationException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
     @Transactional
     public FileOperationDto exportData(
             Client client,
@@ -81,6 +126,8 @@ public class FileExportServiceImpl implements FileExportService {
 
         Map<String, Object> statistics = new HashMap<>();
         long startTime = System.currentTimeMillis();
+        Path tempFilePath = null;
+        Path permanentFilePath = null;
 
         try {
             // Обновляем статус операции
@@ -125,17 +172,33 @@ public class FileExportServiceImpl implements FileExportService {
             // Получаем экспортер
             FileExporter exporter = findExporter(options.getFileType());
 
-            // Экспортируем данные
-            Path resultFilePath = exporter.exportData(processedData, fields, options, operation);
+            // Экспортируем данные во временный файл
+            tempFilePath = exporter.exportData(processedData, fields, options, operation);
+
+            log.info("Файл успешно создан во временной директории: {}", tempFilePath.toAbsolutePath());
+
+            // Этап 4: Перемещение файла из временной директории в постоянную
+            operation.addStage("file_move", "Перемещение файла");
+
+            // Формируем префикс имени файла с датой и ID клиента
+            String filePrefix = client.getId() + "_" + entityType + "_export";
+
+            // Перемещаем файл в директорию экспорта
+            permanentFilePath = pathResolver.moveFromTempToExport(tempFilePath, filePrefix);
+
+            log.info("Файл перемещен в директорию экспорта: {}", permanentFilePath.toAbsolutePath());
+
+            operation.completeStage("file_move");
 
             // Обновляем информацию о файле
             statistics.put("fileName", operation.getFileName());
             statistics.put("fileType", operation.getFileType());
-            statistics.put("fileSize", Files.size(resultFilePath));
+            statistics.put("fileSize", Files.size(permanentFilePath));
+            statistics.put("filePath", permanentFilePath.toAbsolutePath().toString());
 
             // Обновляем статус операции
             operation.markAsCompleted(processedData.size());
-            operation.setResultFilePath(resultFilePath.toString());
+            operation.setResultFilePath(permanentFilePath.toAbsolutePath().toString());
 
             // Сохраняем статистику
             long endTime = System.currentTimeMillis();
@@ -153,6 +216,17 @@ public class FileExportServiceImpl implements FileExportService {
             return FileOperationDto.fromEntity(operation);
         } catch (Exception e) {
             log.error("Ошибка при экспорте данных: {}", e.getMessage(), e);
+
+            // Удаляем временный файл при ошибке, если он был создан
+            if (tempFilePath != null && Files.exists(tempFilePath)) {
+                try {
+                    pathResolver.deleteFile(tempFilePath);
+                    log.info("Временный файл удален: {}", tempFilePath);
+                } catch (Exception ex) {
+                    log.error("Не удалось удалить временный файл: {}", ex.getMessage());
+                }
+            }
+
             operation.markAsFailed(e.getMessage());
 
             // Определяем текущий этап и помечаем его как проваленный

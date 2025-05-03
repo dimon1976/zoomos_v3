@@ -376,6 +376,14 @@
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-file-export"></i> Экспортировать
                     </button>
+
+                    <!-- Кнопка прямого скачивания с диалогом сохранения -->
+                    <button type="submit" class="btn btn-success ms-2"
+                            th:formaction="@{${currentUri} + '/direct-download'}"
+                            formmethod="post">
+                        <i class="fas fa-download"></i> Скачать файл
+                    </button>
+
                     <a th:href="@{/clients/{id}(id=${client != null ? client.id : ''})}" class="btn btn-secondary">
                         <i class="fas fa-times"></i> Отмена
                     </a>

@@ -20,6 +20,7 @@ import my.java.service.file.options.FileWritingOptions;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -31,6 +32,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -252,6 +255,99 @@ public class ExportController {
     }
 
     /**
+     * Обработка запроса на прямой экспорт данных (с диалогом сохранения)
+     */
+    @PostMapping("/direct-download")
+    public ResponseEntity<byte[]> downloadDirectly(
+            @PathVariable Long clientId,
+            @RequestParam("entityType") String entityType,
+            @RequestParam("format") String format,
+            @RequestParam(value = "fields", required = false) List<String> fields,
+            @RequestParam(value = "strategyId", required = false) String strategyId,
+            @RequestParam Map<String, String> allParams) {
+
+        log.info("POST запрос на прямое скачивание данных для клиента: {}, тип сущности: {}, формат: {}",
+                clientId, entityType, format);
+
+        if (fields == null || fields.isEmpty()) {
+            throw new IllegalArgumentException("Пожалуйста, выберите поля для экспорта");
+        }
+
+        try {
+            // Получаем клиента
+            Client client = clientService.findClientEntityById(clientId)
+                    .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
+
+            // Создаем настройки экспорта из параметров формы
+            FileWritingOptions options = FileWritingOptions.fromMap(allParams);
+            options.setFileType(format);
+
+            // Устанавливаем стратегию экспорта, если указана
+            if (strategyId != null && !strategyId.isEmpty()) {
+                options.getAdditionalParams().put("strategyId", strategyId);
+            }
+
+            // Извлекаем параметры фильтрации
+            Map<String, Object> filterParams = extractFilterParams(allParams);
+
+            // Создаем временную операцию для отслеживания
+            FileOperation tempOperation = new FileOperation();
+            tempOperation.setClient(client);
+            tempOperation.setOperationType(FileOperation.OperationType.EXPORT);
+            tempOperation.setFileType(format);
+            tempOperation.setStatus(FileOperation.OperationStatus.PROCESSING);
+
+            // Выполняем экспорт во временный файл
+            Path tempFile = fileExportService.exportDirectly(
+                    client, entityType, fields, filterParams, options, tempOperation);
+
+            // Проверяем, что файл создан
+            if (tempFile == null || !Files.exists(tempFile)) {
+                throw new FileOperationException("Не удалось создать файл экспорта");
+            }
+
+            // Читаем содержимое файла
+            byte[] fileContent = Files.readAllBytes(tempFile);
+
+            // Генерируем имя файла с именем клиента и датой/временем
+            String fileName = generateFileName(client, entityType, format);
+
+            // Определяем MIME-тип
+            MediaType mediaType = getMediaType(format);
+
+            // Устанавливаем заголовки для скачивания файла
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
+            headers.setContentType(mediaType);
+
+            // Удаляем временный файл
+            try {
+                Files.deleteIfExists(tempFile);
+            } catch (Exception e) {
+                log.warn("Не удалось удалить временный файл: {}", e.getMessage());
+            }
+
+            // Возвращаем напрямую массив байтов вместо ByteArrayResource
+            return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Ошибка при скачивании данных: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка при скачивании данных: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Генерирует имя файла в формате "Имя клиента_год_дата_время"
+     */
+    private String generateFileName(Client client, String entityType, String format) {
+        // Заменяем недопустимые символы в имени клиента
+        String clientName = client.getName().replaceAll("[^a-zA-Zа-яА-Я0-9_]", "_");
+        // Форматируем текущую дату и время
+        String dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss"));
+        return clientName + "_" + dateTime + "." + format.toLowerCase();
+    }
+
+    /**
      * Создание шаблона экспорта из текущих настроек
      */
     private void saveAsTemplate(Client client, String entityType, List<String> fields,
@@ -421,7 +517,8 @@ public class ExportController {
 
         switch (fileType.toLowerCase()) {
             case "csv":
-                return MediaType.parseMediaType("text/csv");
+                // Используем octet-stream вместо text/csv для совместимости с ByteArrayResource
+                return MediaType.APPLICATION_OCTET_STREAM;
             case "xlsx":
                 return MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             case "xls":

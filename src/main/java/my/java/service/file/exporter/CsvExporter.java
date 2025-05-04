@@ -23,6 +23,9 @@ import java.util.Map;
 public class CsvExporter implements FileExporter {
 
     //TODO Реализовать экспорт в нужной кодировке
+    //TODO Починить настройку заголовков
+//TODO Починить порядок заголовка
+//TODO Починить сохранение, редактирование и удаление шаблонов экспорта
 
     private final PathResolver pathResolver;
     private static final String[] SUPPORTED_TYPES = {"csv"};

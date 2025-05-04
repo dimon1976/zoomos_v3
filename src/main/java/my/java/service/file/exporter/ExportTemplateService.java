@@ -60,9 +60,12 @@ public class ExportTemplateService {
      */
     @Transactional
     public ExportTemplate saveTemplate(ExportTemplate template) {
+        log.info("Сохранение шаблона: {}", template.getName());
+
         // Если это новый шаблон, устанавливаем дату создания
         if (template.getId() == null) {
             template.setCreatedAt(ZonedDateTime.now());
+            log.debug("Создание нового шаблона с датой: {}", template.getCreatedAt());
         }
 
         // Обновляем дату изменения
@@ -70,10 +73,12 @@ public class ExportTemplateService {
 
         // Если делаем шаблон по умолчанию, сбрасываем флаг у других шаблонов
         if (template.isDefault()) {
+            log.debug("Шаблон помечен как 'по умолчанию', сбрасываем флаг у других шаблонов");
             templateRepository.findByClientIdAndEntityTypeAndIsDefaultTrue(
                             template.getClient().getId(), template.getEntityType())
                     .ifPresent(existingDefault -> {
                         if (!existingDefault.getId().equals(template.getId())) {
+                            log.debug("Сброс флага 'по умолчанию' у шаблона: {}", existingDefault.getName());
                             existingDefault.setDefault(false);
                             templateRepository.save(existingDefault);
                         }
@@ -83,9 +88,39 @@ public class ExportTemplateService {
         // Проверяем поля шаблона перед сохранением
         if (template.getFields() == null || template.getFields().isEmpty()) {
             log.warn("Шаблон {} не содержит полей", template.getName());
+        } else {
+            log.debug("Шаблон содержит {} полей", template.getFields().size());
         }
 
-        return templateRepository.save(template);
+        // Проверяем наличие дополнительных параметров шаблона
+        if (template.getFileOptions() == null || template.getFileOptions().isEmpty()) {
+            log.debug("Шаблон не содержит параметров формата файла, создаем базовые параметры");
+            try {
+                // Создаем базовые параметры, если их нет
+                Map<String, String> defaultOptions = new HashMap<>();
+                defaultOptions.put("format", template.getFileType());
+                defaultOptions.put("includeHeader", "true");
+
+                if ("csv".equalsIgnoreCase(template.getFileType())) {
+                    defaultOptions.put("delimiter", ",");
+                    defaultOptions.put("quoteChar", "\"");
+                    defaultOptions.put("encoding", "UTF-8");
+                } else if ("xlsx".equalsIgnoreCase(template.getFileType())) {
+                    defaultOptions.put("sheetName", "Data");
+                    defaultOptions.put("autoSizeColumns", "true");
+                }
+
+                template.setFileOptions(objectMapper.writeValueAsString(defaultOptions));
+            } catch (JsonProcessingException e) {
+                log.warn("Не удалось создать параметры по умолчанию для шаблона: {}", e.getMessage());
+            }
+        }
+
+        // Сохраняем шаблон
+        ExportTemplate savedTemplate = templateRepository.save(template);
+        log.info("Шаблон успешно сохранен: id={}, name={}", savedTemplate.getId(), savedTemplate.getName());
+
+        return savedTemplate;
     }
 
     /**
@@ -124,8 +159,12 @@ public class ExportTemplateService {
      */
     @Transactional
     public ExportTemplate updateTemplate(Long id, ExportTemplate updatedTemplate) {
+        log.info("Обновление шаблона с ID: {}", id);
+
         return templateRepository.findById(id)
                 .map(template -> {
+                    log.debug("Найден шаблон для обновления: {}", template.getName());
+
                     // Обновляем основные поля шаблона
                     template.setName(updatedTemplate.getName());
                     template.setDescription(updatedTemplate.getDescription());
@@ -134,18 +173,53 @@ public class ExportTemplateService {
                     template.setDefault(updatedTemplate.isDefault());
 
                     // Устанавливаем новые поля
-                    template.getFields().clear();
-                    template.getFields().addAll(updatedTemplate.getFields());
+                    if (updatedTemplate.getFields() != null && !updatedTemplate.getFields().isEmpty()) {
+                        log.debug("Обновление полей шаблона: {} -> {}",
+                                template.getFields().size(),
+                                updatedTemplate.getFields().size());
+                        template.getFields().clear();
+                        template.getFields().addAll(updatedTemplate.getFields());
+                    } else {
+                        log.warn("Не найдены поля для обновления в шаблоне");
+                    }
 
                     // Обновляем параметры файла
-                    template.setFileOptions(updatedTemplate.getFileOptions());
+                    if (updatedTemplate.getFileOptions() != null && !updatedTemplate.getFileOptions().isEmpty()) {
+                        log.debug("Обновление параметров файла");
+                        template.setFileOptions(updatedTemplate.getFileOptions());
+                    } else {
+                        log.debug("Отсутствуют параметры файла в обновляемом шаблоне");
+
+                        // Попытка создать параметры из данных формы
+                        try {
+                            Map<String, String> fileOptions = new HashMap<>();
+                            fileOptions.put("format", updatedTemplate.getFileType());
+
+                            // Добавляем параметры стратегии
+                            if (updatedTemplate.getStrategyId() != null) {
+                                fileOptions.put("strategyId", updatedTemplate.getStrategyId());
+                            }
+
+                            // Обновляем параметры файла в JSON формате
+                            template.setFileOptions(objectMapper.writeValueAsString(fileOptions));
+                            log.debug("Созданы базовые параметры файла для шаблона");
+                        } catch (Exception e) {
+                            log.warn("Не удалось создать параметры файла: {}", e.getMessage());
+                        }
+                    }
 
                     // Обновляем время изменения
                     template.setUpdatedAt(ZonedDateTime.now());
 
-                    return saveTemplate(template);
+                    // Сохраняем обновленный шаблон
+                    ExportTemplate savedTemplate = saveTemplate(template);
+                    log.info("Шаблон успешно обновлен: {}", savedTemplate.getName());
+                    return savedTemplate;
                 })
-                .orElseThrow(() -> new IllegalArgumentException("Шаблон с ID " + id + " не найден"));
+                .orElseThrow(() -> {
+                    log.error("Шаблон с ID {} не найден", id);
+                    return new IllegalArgumentException("Шаблон с ID " + id + " не найден");
+                });
     }
 
     /**

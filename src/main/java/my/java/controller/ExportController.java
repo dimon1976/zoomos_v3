@@ -466,6 +466,8 @@ public class ExportController {
                                 String format, String strategyId, Map<String, String> params,
                                 String templateName) {
         try {
+            log.info("Создание нового шаблона '{}' из текущих настроек экспорта", templateName);
+
             ExportTemplate template = new ExportTemplate();
             template.setClient(client);
             template.setEntityType(entityType);
@@ -489,8 +491,16 @@ public class ExportController {
                 template.getFields().add(exportField);
             }
 
+            log.debug("Добавлено {} полей в шаблон", template.getFields().size());
+
             // Сохраняем параметры файла
             Map<String, String> fileOptions = new HashMap<>();
+
+            // Добавляем базовые параметры
+            fileOptions.put("format", format);
+            fileOptions.put("strategyId", strategyId != null ? strategyId : "");
+
+            // Добавляем параметры из формы
             for (Map.Entry<String, String> entry : params.entrySet()) {
                 if (entry.getKey().startsWith("file_") ||
                         entry.getKey().equals("encoding") ||
@@ -500,12 +510,39 @@ public class ExportController {
                         entry.getKey().equals("autoSizeColumns") ||
                         entry.getKey().equals("includeHeader")) {
                     fileOptions.put(entry.getKey(), entry.getValue());
+                    log.debug("Добавлен параметр файла: {} = {}", entry.getKey(), entry.getValue());
                 }
+            }
+
+            // Добавляем общие параметры в стандартизированном формате
+            if (params.containsKey("delimiter")) {
+                fileOptions.put("delimiter", params.get("delimiter"));
+            }
+
+            if (params.containsKey("quoteChar")) {
+                fileOptions.put("quoteChar", params.get("quoteChar"));
+            }
+
+            if (params.containsKey("encoding")) {
+                fileOptions.put("encoding", params.get("encoding"));
+            }
+
+            if (params.containsKey("sheetName")) {
+                fileOptions.put("sheetName", params.get("sheetName"));
+            }
+
+            if (params.containsKey("autoSizeColumns")) {
+                fileOptions.put("autoSizeColumns", params.get("autoSizeColumns"));
+            }
+
+            if (params.containsKey("includeHeader")) {
+                fileOptions.put("includeHeader", params.get("includeHeader"));
             }
 
             // Сохраняем порядок полей, если он указан
             if (params.containsKey("fieldsOrder")) {
                 fileOptions.put("fieldsOrder", params.get("fieldsOrder"));
+                log.debug("Сохранен порядок полей: {}", params.get("fieldsOrder"));
             }
 
             // Преобразуем параметры в JSON и сохраняем
@@ -513,9 +550,11 @@ public class ExportController {
             String fileOptionsJson = objectMapper.writeValueAsString(fileOptions);
             template.setFileOptions(fileOptionsJson);
 
+            log.debug("Параметры файла сохранены в JSON: {}", fileOptionsJson);
+
             // Сохраняем шаблон
-            templateService.saveTemplate(template);
-            log.info("Создан новый шаблон экспорта: {}", template.getName());
+            ExportTemplate savedTemplate = templateService.saveTemplate(template);
+            log.info("Создан новый шаблон экспорта: {}, ID={}", savedTemplate.getName(), savedTemplate.getId());
 
         } catch (Exception e) {
             log.error("Ошибка при сохранении шаблона: {}", e.getMessage(), e);

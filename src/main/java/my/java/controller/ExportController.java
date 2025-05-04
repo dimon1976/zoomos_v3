@@ -1,6 +1,7 @@
 // src/main/java/my/java/controller/ExportController.java
 package my.java.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -184,14 +187,15 @@ public class ExportController {
             @RequestParam("entityType") String entityType,
             @RequestParam("format") String format,
             @RequestParam(value = "fields", required = false) List<String> fields,
+            @RequestParam(value = "fieldsOrder", required = false) String fieldsOrder,
             @RequestParam(value = "saveAsTemplate", required = false) Boolean saveAsTemplate,
             @RequestParam(value = "templateName", required = false) String templateName,
             @RequestParam(value = "strategyId", required = false) String strategyId,
+            @RequestParam(value = "encoding", required = false) String encoding,
             @RequestParam Map<String, String> allParams,
             RedirectAttributes redirectAttributes) {
 
-        log.info("POST запрос на экспорт данных для клиента: {}, тип сущности: {}, формат: {}",
-                clientId, entityType, format);
+        log.info("POST запрос на экспорт данных для клиента: {}, тип сущности: {}, формат: {}", clientId, entityType, format);
 
         if (fields == null || fields.isEmpty()) {
             redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите поля для экспорта");
@@ -207,6 +211,17 @@ public class ExportController {
             FileWritingOptions options = FileWritingOptions.fromMap(allParams);
             options.setFileType(format);
 
+            // Устанавливаем кодировку для CSV экспорта
+            if (encoding != null && !encoding.isEmpty() && format.equalsIgnoreCase("csv")) {
+                try {
+                    options.setCharset(Charset.forName(encoding));
+                    log.debug("Установлена кодировка {} для экспорта", encoding);
+                } catch (Exception e) {
+                    log.warn("Не удалось установить кодировку {}, используется UTF-8", encoding);
+                    options.setCharset(StandardCharsets.UTF_8);
+                }
+            }
+
             // Устанавливаем стратегию экспорта
             Map<String, String> strategyParams = new HashMap<>();
             if (strategyId != null && !strategyId.isEmpty()) {
@@ -218,6 +233,48 @@ public class ExportController {
                         String paramName = entry.getKey().substring("strategy_".length());
                         strategyParams.put(paramName, entry.getValue());
                     }
+                }
+            }
+
+            // Собираем все заголовки полей из формы
+            for (Map.Entry<String, String> entry : allParams.entrySet()) {
+                if (entry.getKey().startsWith("header_")) {
+                    options.getAdditionalParams().put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            // Применяем порядок полей, если он указан
+            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
+                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
+
+                // Если у нас есть порядок полей в JSON, преобразуем его в список и используем для сортировки
+                try {
+                    List<String> orderedFields = new ArrayList<>();
+                    // Удаляем квадратные скобки и кавычки из строки JSON, затем разбиваем по запятой
+                    String cleanJson = fieldsOrder.replaceAll("[\\[\\]\"]", "");
+                    String[] fieldArray = cleanJson.split(",");
+
+                    orderedFields.addAll(Arrays.asList(fieldArray));
+
+                    // Если порядок полей действительно задан, используем его вместо исходного списка
+                    if (!orderedFields.isEmpty()) {
+                        // Фильтруем, оставляя только те поля, которые есть в исходном списке
+                        List<String> filteredOrderedFields = orderedFields.stream()
+                                .filter(fields::contains)
+                                .collect(Collectors.toList());
+
+                        // Добавляем поля, которые выбраны, но не указаны в порядке
+                        for (String field : fields) {
+                            if (!filteredOrderedFields.contains(field)) {
+                                filteredOrderedFields.add(field);
+                            }
+                        }
+
+                        // Заменяем исходный список на отсортированный
+                        fields = filteredOrderedFields;
+                    }
+                } catch (Exception e) {
+                    log.warn("Ошибка при разборе порядка полей: {}", e.getMessage());
                 }
             }
 
@@ -263,7 +320,9 @@ public class ExportController {
             @RequestParam("entityType") String entityType,
             @RequestParam("format") String format,
             @RequestParam(value = "fields", required = false) List<String> fields,
+            @RequestParam(value = "fieldsOrder", required = false) String fieldsOrder,
             @RequestParam(value = "strategyId", required = false) String strategyId,
+            @RequestParam(value = "encoding", required = false) String encoding,
             @RequestParam Map<String, String> allParams) {
 
         log.info("POST запрос на прямое скачивание данных для клиента: {}, тип сущности: {}, формат: {}",
@@ -282,9 +341,62 @@ public class ExportController {
             FileWritingOptions options = FileWritingOptions.fromMap(allParams);
             options.setFileType(format);
 
+            // Устанавливаем кодировку для CSV экспорта
+            if (encoding != null && !encoding.isEmpty() && format.equalsIgnoreCase("csv")) {
+                try {
+                    options.setCharset(Charset.forName(encoding));
+                    log.debug("Установлена кодировка {} для экспорта", encoding);
+                } catch (Exception e) {
+                    log.warn("Не удалось установить кодировку {}, используется UTF-8", encoding);
+                    options.setCharset(StandardCharsets.UTF_8);
+                }
+            }
+
             // Устанавливаем стратегию экспорта, если указана
             if (strategyId != null && !strategyId.isEmpty()) {
                 options.getAdditionalParams().put("strategyId", strategyId);
+            }
+
+            // Собираем все заголовки полей из формы
+            for (Map.Entry<String, String> entry : allParams.entrySet()) {
+                if (entry.getKey().startsWith("header_")) {
+                    options.getAdditionalParams().put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            // Применяем порядок полей, если он указан
+            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
+                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
+
+                // Если у нас есть порядок полей в JSON, преобразуем его в список и используем для сортировки
+                try {
+                    List<String> orderedFields = new ArrayList<>();
+                    // Удаляем квадратные скобки и кавычки из строки JSON, затем разбиваем по запятой
+                    String cleanJson = fieldsOrder.replaceAll("[\\[\\]\"]", "");
+                    String[] fieldArray = cleanJson.split(",");
+
+                    orderedFields.addAll(Arrays.asList(fieldArray));
+
+                    // Если порядок полей действительно задан, используем его вместо исходного списка
+                    if (!orderedFields.isEmpty()) {
+                        // Фильтруем, оставляя только те поля, которые есть в исходном списке
+                        List<String> filteredOrderedFields = orderedFields.stream()
+                                .filter(fields::contains)
+                                .collect(Collectors.toList());
+
+                        // Добавляем поля, которые выбраны, но не указаны в порядке
+                        for (String field : fields) {
+                            if (!filteredOrderedFields.contains(field)) {
+                                filteredOrderedFields.add(field);
+                            }
+                        }
+
+                        // Заменяем исходный список на отсортированный
+                        fields = filteredOrderedFields;
+                    }
+                } catch (Exception e) {
+                    log.warn("Ошибка при разборе порядка полей: {}", e.getMessage());
+                }
             }
 
             // Извлекаем параметры фильтрации
@@ -377,18 +489,33 @@ public class ExportController {
                 template.getFields().add(exportField);
             }
 
-            // Сохраняем параметры файла в JSON
+            // Сохраняем параметры файла
             Map<String, String> fileOptions = new HashMap<>();
             for (Map.Entry<String, String> entry : params.entrySet()) {
-                if (entry.getKey().startsWith("file_")) {
-                    fileOptions.put(entry.getKey().substring(5), entry.getValue());
+                if (entry.getKey().startsWith("file_") ||
+                        entry.getKey().equals("encoding") ||
+                        entry.getKey().equals("delimiter") ||
+                        entry.getKey().equals("quoteChar") ||
+                        entry.getKey().equals("sheetName") ||
+                        entry.getKey().equals("autoSizeColumns") ||
+                        entry.getKey().equals("includeHeader")) {
+                    fileOptions.put(entry.getKey(), entry.getValue());
                 }
             }
 
-            // TODO: сериализовать fileOptions в JSON и сохранить
+            // Сохраняем порядок полей, если он указан
+            if (params.containsKey("fieldsOrder")) {
+                fileOptions.put("fieldsOrder", params.get("fieldsOrder"));
+            }
+
+            // Преобразуем параметры в JSON и сохраняем
+            ObjectMapper objectMapper = new ObjectMapper();
+            String fileOptionsJson = objectMapper.writeValueAsString(fileOptions);
+            template.setFileOptions(fileOptionsJson);
 
             // Сохраняем шаблон
             templateService.saveTemplate(template);
+            log.info("Создан новый шаблон экспорта: {}", template.getName());
 
         } catch (Exception e) {
             log.error("Ошибка при сохранении шаблона: {}", e.getMessage(), e);

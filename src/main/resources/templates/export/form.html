@@ -1,14 +1,14 @@
 <!-- src/main/resources/templates/export/form.html -->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org"
-      th:replace="layout/main :: html(
+      th:replace="~{layout/main :: html(
         ~{::title},
         ~{::div.content},
         ~{::script},
         ~{},
         'Экспорт данных',
         ~{::div.page-actions}
-      )">
+      )}">
 <head>
     <title>Экспорт данных</title>
 </head>
@@ -131,7 +131,7 @@
                         <div id="csvParams" th:style="${fileFormat != 'xlsx' ? '' : 'display: none;'}">
                             <h6 class="mt-3">Параметры CSV</h6>
                             <div class="row">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="form-group mb-2">
                                         <label for="delimiter">Разделитель:</label>
                                         <select id="delimiter" name="delimiter" class="form-control">
@@ -142,12 +142,23 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="form-group mb-2">
                                         <label for="quoteChar">Символ кавычек:</label>
                                         <select id="quoteChar" name="quoteChar" class="form-control">
                                             <option value="&quot;" selected>Двойные кавычки (")</option>
                                             <option value="'">Одинарные кавычки (')</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-2">
+                                        <label for="encoding">Кодировка:</label>
+                                        <select id="encoding" name="encoding" class="form-control">
+                                            <option value="UTF-8" selected>UTF-8</option>
+                                            <option value="Windows-1251">Windows-1251</option>
+                                            <option value="ISO-8859-1">ISO-8859-1</option>
+                                            <option value="UTF-16">UTF-16</option>
                                         </select>
                                     </div>
                                 </div>
@@ -434,7 +445,7 @@
             </div>
             <div class="modal-body">
                 <p>Перетащите поля для изменения порядка:</p>
-                <ul id="sortableFields" class="list-group">
+                <ul id="sortableFields" class="list-group sortable">
                     <!-- Элементы будут добавлены динамически -->
                 </ul>
             </div>
@@ -446,7 +457,10 @@
     </div>
 </div>
 
-<!-- Скрипты страницы -->
+<!-- Добавляем Sortable.js явно -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+
+<!-- Скрипты страницы (встроенные для лучшей работы) -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         // Переключение параметров формата
@@ -454,6 +468,14 @@
 
         // Обработчики событий для элементов формы
         initFormHandlers();
+
+        // Если выбран шаблон, применяем его параметры
+        if ([[${selectedTemplate != null}]]) {
+            applyTemplateParams();
+        }
+
+        // Инициализируем Sortable
+        initSortable();
     });
 
     // Инициализация обработчиков событий формы
@@ -523,6 +545,17 @@
         }
     }
 
+    // Инициализация Sortable.js для перетаскивания полей
+    function initSortable() {
+        const sortableList = document.getElementById('sortableFields');
+        if (sortableList) {
+            new Sortable(sortableList, {
+                animation: 150,
+                ghostClass: 'bg-light'
+            });
+        }
+    }
+
     // Функция переключения настроек формата
     function updateFormatSettings() {
         const format = document.getElementById('format').value;
@@ -566,6 +599,30 @@
             document.querySelector('input[name="entityType"]').value + '&templateId=' + templateId;
     }
 
+    // Применение параметров из шаблона
+    function applyTemplateParams() {
+        // Параметры шаблона доступны из модели Thymeleaf
+        const fileOptions = [[${selectedTemplate != null ? selectedTemplate.fileOptionsAsMap : null}]];
+
+        if (fileOptions) {
+            // Применяем каждый параметр к соответствующему полю формы
+            for (const [key, value] of Object.entries(fileOptions)) {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        element.checked = value === 'true';
+                    } else {
+                        element.value = value;
+                    }
+                }
+            }
+
+            // Обновляем видимость разделов в зависимости от выбранных параметров
+            updateFormatSettings();
+            updateStrategySettings();
+        }
+    }
+
     // Открытие модального окна для настройки заголовков
     function openCustomizeLabelsModal() {
         const tableBody = document.getElementById('headersTableBody');
@@ -592,7 +649,8 @@
             headerInput.dataset.field = field;
 
             // Получаем текущее значение заголовка
-            const currentHeaderInput = document.getElementById('header_' + field.replace('.', '_'));
+            const headerKey = 'header_' + field.replace('.', '_');
+            const currentHeaderInput = document.getElementById(headerKey);
             headerInput.value = currentHeaderInput ? currentHeaderInput.value : fieldLabel.textContent;
 
             headerCell.appendChild(headerInput);
@@ -613,7 +671,8 @@
 
         inputs.forEach(input => {
             const field = input.dataset.field;
-            const headerInput = document.getElementById('header_' + field.replace('.', '_'));
+            const headerKey = 'header_' + field.replace('.', '_');
+            const headerInput = document.getElementById(headerKey);
 
             if (headerInput) {
                 headerInput.value = input.value;
@@ -632,27 +691,35 @@
 
         // Получаем выбранные поля
         const selectedFields = Array.from(document.querySelectorAll('input[name="fields"]:checked'))
-            .map(checkbox => ({
-                value: checkbox.value,
-                label: document.querySelector(`label[for="${checkbox.id}"]`).textContent,
-                order: checkbox.closest('.field-item').dataset.order
-            }))
+            .map(checkbox => {
+                const fieldItem = checkbox.closest('.field-item');
+                return {
+                    value: checkbox.value,
+                    label: document.querySelector(`label[for="${checkbox.id}"]`).textContent,
+                    order: fieldItem ? fieldItem.dataset.order : 0
+                };
+            })
             .sort((a, b) => parseInt(a.order) - parseInt(b.order));
 
         // Для каждого выбранного поля добавляем элемент в список
         selectedFields.forEach(field => {
             const listItem = document.createElement('li');
-            listItem.className = 'list-group-item';
+            listItem.className = 'list-group-item d-flex align-items-center';
             listItem.dataset.field = field.value;
+            listItem.dataset.order = field.order;
 
             // Добавляем "ручку" для перетаскивания
             const handle = document.createElement('span');
-            handle.className = 'me-2';
+            handle.className = 'me-2 handle';
             handle.innerHTML = '&#9776;'; // Unicode символ "burger" меню
-            handle.style.cursor = 'move';
+            handle.style.cursor = 'grab';
+
+            // Добавляем название поля
+            const label = document.createElement('span');
+            label.textContent = field.label;
 
             listItem.appendChild(handle);
-            listItem.appendChild(document.createTextNode(field.label));
+            listItem.appendChild(label);
             sortableList.appendChild(listItem);
         });
 
@@ -663,8 +730,24 @@
 
     // Сохранение порядка полей
     function saveFieldOrder() {
-        // В упрощенной версии просто закрываем модальное окно
-        // Реальная сортировка требует дополнительных действий на стороне сервера
+        // Получаем новый порядок полей из списка
+        const sortedItems = document.querySelectorAll('#sortableFields li');
+
+        // Создаем скрытое поле для сохранения порядка полей при отправке формы
+        let orderInput = document.getElementById('fieldsOrder');
+        if (!orderInput) {
+            orderInput = document.createElement('input');
+            orderInput.type = 'hidden';
+            orderInput.id = 'fieldsOrder';
+            orderInput.name = 'fieldsOrder';
+            document.getElementById('exportForm').appendChild(orderInput);
+        }
+
+        // Сохраняем порядок полей как JSON
+        const fieldOrder = Array.from(sortedItems).map(item => item.dataset.field);
+        orderInput.value = JSON.stringify(fieldOrder);
+
+        // Закрываем модальное окно
         const modal = bootstrap.Modal.getInstance(document.getElementById('sortFieldsModal'));
         modal.hide();
     }

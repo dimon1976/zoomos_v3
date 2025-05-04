@@ -1,6 +1,9 @@
-// src/main/java/my/java/service/export/ExportTemplateService.java
+// src/main/java/my/java/service/file/exporter/ExportTemplateService.java
 package my.java.service.file.exporter;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.Client;
@@ -10,8 +13,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -19,6 +25,7 @@ import java.util.Optional;
 public class ExportTemplateService {
 
     private final ExportTemplateRepository templateRepository;
+    private final ObjectMapper objectMapper;
 
     /**
      * Получение всех шаблонов экспорта для клиента
@@ -53,16 +60,31 @@ public class ExportTemplateService {
      */
     @Transactional
     public ExportTemplate saveTemplate(ExportTemplate template) {
+        // Если это новый шаблон, устанавливаем дату создания
+        if (template.getId() == null) {
+            template.setCreatedAt(ZonedDateTime.now());
+        }
+
+        // Обновляем дату изменения
+        template.setUpdatedAt(ZonedDateTime.now());
+
+        // Если делаем шаблон по умолчанию, сбрасываем флаг у других шаблонов
         if (template.isDefault()) {
-            // Если делаем шаблон по умолчанию, сбрасываем флаг у других шаблонов
             templateRepository.findByClientIdAndEntityTypeAndIsDefaultTrue(
                             template.getClient().getId(), template.getEntityType())
                     .ifPresent(existingDefault -> {
-                        existingDefault.setDefault(false);
-                        templateRepository.save(existingDefault);
+                        if (!existingDefault.getId().equals(template.getId())) {
+                            existingDefault.setDefault(false);
+                            templateRepository.save(existingDefault);
+                        }
                     });
         }
-        template.setUpdatedAt(ZonedDateTime.now());
+
+        // Проверяем поля шаблона перед сохранением
+        if (template.getFields() == null || template.getFields().isEmpty()) {
+            log.warn("Шаблон {} не содержит полей", template.getName());
+        }
+
         return templateRepository.save(template);
     }
 
@@ -71,7 +93,59 @@ public class ExportTemplateService {
      */
     @Transactional
     public void deleteTemplate(Long id) {
-        templateRepository.deleteById(id);
+        Optional<ExportTemplate> template = templateRepository.findById(id);
+        if (template.isPresent()) {
+            // Если удаляемый шаблон был по умолчанию, нужно сделать другой шаблон по умолчанию
+            if (template.get().isDefault()) {
+                // Находим другой шаблон для того же типа сущности
+                List<ExportTemplate> otherTemplates = templateRepository.findByClientIdAndEntityTypeOrderByCreatedAtDesc(
+                                template.get().getClient().getId(), template.get().getEntityType()).stream()
+                        .filter(t -> !t.getId().equals(id))
+                        .collect(Collectors.toList());
+
+                if (!otherTemplates.isEmpty()) {
+                    // Делаем первый найденный шаблон шаблоном по умолчанию
+                    ExportTemplate newDefault = otherTemplates.get(0);
+                    newDefault.setDefault(true);
+                    templateRepository.save(newDefault);
+                    log.info("Шаблон {} установлен как новый шаблон по умолчанию после удаления", newDefault.getName());
+                }
+            }
+
+            templateRepository.deleteById(id);
+            log.info("Шаблон с ID {} успешно удален", id);
+        } else {
+            log.warn("Попытка удаления несуществующего шаблона с ID {}", id);
+        }
+    }
+
+    /**
+     * Обновление шаблона
+     */
+    @Transactional
+    public ExportTemplate updateTemplate(Long id, ExportTemplate updatedTemplate) {
+        return templateRepository.findById(id)
+                .map(template -> {
+                    // Обновляем основные поля шаблона
+                    template.setName(updatedTemplate.getName());
+                    template.setDescription(updatedTemplate.getDescription());
+                    template.setFileType(updatedTemplate.getFileType());
+                    template.setStrategyId(updatedTemplate.getStrategyId());
+                    template.setDefault(updatedTemplate.isDefault());
+
+                    // Устанавливаем новые поля
+                    template.getFields().clear();
+                    template.getFields().addAll(updatedTemplate.getFields());
+
+                    // Обновляем параметры файла
+                    template.setFileOptions(updatedTemplate.getFileOptions());
+
+                    // Обновляем время изменения
+                    template.setUpdatedAt(ZonedDateTime.now());
+
+                    return saveTemplate(template);
+                })
+                .orElseThrow(() -> new IllegalArgumentException("Шаблон с ID " + id + " не найден"));
     }
 
     /**
@@ -80,24 +154,65 @@ public class ExportTemplateService {
     @Transactional
     public ExportTemplate createFromLastExport(Client client, String entityType,
                                                List<String> fields, String fileType,
-                                               String strategyId, String fileOptions) {
+                                               String strategyId, Map<String, String> fileOptions) {
         ExportTemplate template = new ExportTemplate();
         template.setClient(client);
         template.setEntityType(entityType);
         template.setFileType(fileType);
         template.setName("Последний экспорт " + ZonedDateTime.now());
         template.setStrategyId(strategyId);
-        template.setFileOptions(fileOptions);
+
+        // Сохраняем параметры файла как JSON с использованием ObjectMapper
+        try {
+            String fileOptionsJson = objectMapper.writeValueAsString(fileOptions);
+            template.setFileOptions(fileOptionsJson);
+        } catch (JsonProcessingException e) {
+            log.warn("Не удалось сохранить параметры файла как JSON: {}", e.getMessage());
+        }
 
         // Добавляем поля
         for (String field : fields) {
             ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
             exportField.setOriginalField(field);
-            exportField.setDisplayName(getDefaultDisplayName(field));
+
+            // Используем заголовок из параметров, если есть
+            String headerKey = "header_" + field.replace(".", "_");
+            if (fileOptions.containsKey(headerKey)) {
+                exportField.setDisplayName(fileOptions.get(headerKey));
+            } else {
+                exportField.setDisplayName(getDefaultDisplayName(field));
+            }
+
             template.getFields().add(exportField);
         }
 
         return templateRepository.save(template);
+    }
+
+    /**
+     * Установка шаблона по умолчанию
+     */
+    @Transactional
+    public ExportTemplate setDefaultTemplate(Long templateId) {
+        return templateRepository.findById(templateId)
+                .map(template -> {
+                    // Сбрасываем флаг у текущего шаблона по умолчанию
+                    templateRepository.findByClientIdAndEntityTypeAndIsDefaultTrue(
+                                    template.getClient().getId(), template.getEntityType())
+                            .ifPresent(currentDefault -> {
+                                if (!currentDefault.getId().equals(templateId)) {
+                                    currentDefault.setDefault(false);
+                                    templateRepository.save(currentDefault);
+                                }
+                            });
+
+                    // Устанавливаем новый шаблон по умолчанию
+                    template.setDefault(true);
+                    template.setUpdatedAt(ZonedDateTime.now());
+
+                    return templateRepository.save(template);
+                })
+                .orElseThrow(() -> new IllegalArgumentException("Шаблон с ID " + templateId + " не найден"));
     }
 
     /**

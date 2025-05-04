@@ -70,12 +70,14 @@
                                    class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-edit"></i> Редактировать
                                 </a>
-                                <button type="button" class="btn btn-sm btn-outline-danger"
-                                        th:data-template-id="${template.id}"
-                                        th:data-template-name="${template.name}"
-                                        onclick="confirmDelete(this.getAttribute('data-template-id'), this.getAttribute('data-template-name'))">
-                                    <i class="fas fa-trash"></i> Удалить
-                                </button>
+                                <form th:action="@{/clients/{clientId}/export/templates/{id}/delete(clientId=${client.id},id=${template.id})}"
+                                      method="post" class="d-inline"
+                                      onsubmit="return confirm('Вы действительно хотите удалить шаблон ' + $(this).data('name') + '?');"
+                                      th:data-name="${template.name}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="fas fa-trash"></i> Удалить
+                                    </button>
+                                </form>
                             </div>
                         </td>
                     </tr>
@@ -92,50 +94,7 @@
             </div>
         </div>
     </div>
+    <script></script>
 </div>
-
-<!-- Модальное окно подтверждения удаления -->
-<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Подтверждение удаления</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>Вы действительно хотите удалить шаблон <span id="templateNameToDelete"></span>?</p>
-                <p class="text-danger">Это действие нельзя отменить.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                <form id="deleteForm" method="post">
-                    <button type="submit" class="btn btn-danger">Удалить</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-    function confirmDelete(templateId, templateName) {
-        // Устанавливаем имя шаблона в модальном окне
-        document.getElementById('templateNameToDelete').textContent = templateName;
-
-        // Устанавливаем action формы удаления - проверим правильность пути
-        const deleteForm = document.getElementById('deleteForm');
-        if (!deleteForm) {
-            console.error('Форма удаления не найдена');
-            return;
-        }
-
-        const clientId = [[${client.id}]]; // Thymeleaf должен заменить на реальное значение
-        deleteForm.action = `/clients/${clientId}/export/templates/${templateId}/delete`;
-        console.log('URL формы удаления:', deleteForm.action);
-
-        // Показываем модальное окно
-        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
-        modal.show();
-    }
-</script>
 </body>
 </html>

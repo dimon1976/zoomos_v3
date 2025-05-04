@@ -19,7 +19,33 @@ public class PathInitializer {
 
     @PostConstruct
     public void init() {
-        log.info("Инициализация директорий для файлов...");
+        log.info("Инициализация файловой системы...");
         pathResolver.init();
+
+        // Проверка прав доступа к директориям
+        checkDirectoryAccess();
+    }
+
+    private void checkDirectoryAccess() {
+        boolean tempDirWritable = pathResolver.isDirectoryWritable(pathResolver.getAbsoluteTempDir());
+        boolean exportDirWritable = pathResolver.isDirectoryWritable(pathResolver.getAbsoluteExportDir());
+        boolean importDirWritable = pathResolver.isDirectoryWritable(pathResolver.getAbsoluteImportDir());
+
+        if (!tempDirWritable) {
+            log.error("ВНИМАНИЕ! Временная директория недоступна для записи: {}",
+                    pathResolver.getAbsoluteTempDir());
+        }
+
+        if (!exportDirWritable) {
+            log.error("ВНИМАНИЕ! Директория экспорта недоступна для записи: {}",
+                    pathResolver.getAbsoluteExportDir());
+        }
+
+        if (!importDirWritable) {
+            log.error("ВНИМАНИЕ! Директория импорта недоступна для записи: {}",
+                    pathResolver.getAbsoluteImportDir());
+        }
+
+        log.info("Проверка прав доступа к директориям завершена.");
     }
 }

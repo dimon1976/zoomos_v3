@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +21,11 @@ import java.util.Map;
 @Slf4j
 @RequiredArgsConstructor
 public class CsvExporter implements FileExporter {
+
+    //TODO Реализовать экспорт в нужной кодировке
+    //TODO Починить настройку заголовков
+//TODO Починить порядок заголовка
+//TODO Починить сохранение, редактирование и удаление шаблонов экспорта
 
     private final PathResolver pathResolver;
     private static final String[] SUPPORTED_TYPES = {"csv"};
@@ -54,47 +60,32 @@ public class CsvExporter implements FileExporter {
             Path filePath = pathResolver.createTempFile("export", ".csv");
 
             // Получаем параметры CSV
-            char delimiter = options.getDelimiter() != null ? options.getDelimiter() : ';';
+            char delimiter = options.getDelimiter() != null ? options.getDelimiter() : ',';
             char quoteChar = options.getQuoteChar() != null ? options.getQuoteChar() : '"';
 
             // Начинаем этап экспорта
             operation.addStage("csv_export", "Экспорт данных в CSV");
+
+            // Подготавливаем данные для экспорта
+            List<String[]> allLines = prepareDataWithHeaders(data, fields, options);
 
             try (BufferedWriter writer = Files.newBufferedWriter(filePath, options.getCharset());
                  CSVWriter csvWriter = new CSVWriter(
                          writer,
                          delimiter,          // разделитель
                          quoteChar,          // символ кавычек
-                         '\\',               // символ экранирования
+                         CSVWriter.DEFAULT_ESCAPE_CHARACTER,  // символ экранирования (в OpenCSV используется для CSV по формату RFC4180)
                          System.lineSeparator()  // перевод строки
                  )) {
 
-                // Запись заголовков, если нужно
-                if (options.isIncludeHeader()) {
-                    String[] headers = createHeaders(fields);
-                    csvWriter.writeNext(headers);
-                }
+                // Записываем все данные, заключая их в кавычки
+                // Второй параметр true гарантирует, что все поля будут в кавычках
+                // и кавычки внутри значений будут корректно экранированы (удвоены)
+                csvWriter.writeAll(allLines, true);
 
-                // Запись данных
-                int totalRecords = data.size();
-                for (int i = 0; i < totalRecords; i++) {
-                    Map<String, String> row = data.get(i);
-                    String[] values = new String[fields.size()];
-
-                    // Получаем значения полей
-                    for (int j = 0; j < fields.size(); j++) {
-                        values[j] = row.getOrDefault(fields.get(j), "");
-                    }
-
-                    csvWriter.writeNext(values);
-
-                    // Обновляем прогресс
-                    int progress = (int) (((double) (i + 1) / totalRecords) * 100);
-                    operation.updateStageProgress("csv_export", progress);
-
-                    // Обновляем прогресс всей операции
-                    operation.setProcessingProgress(progress);
-                }
+                // Обновляем прогресс
+                operation.updateStageProgress("csv_export", 100);
+                operation.setProcessingProgress(100);
             }
 
             operation.completeStage("csv_export");
@@ -105,6 +96,37 @@ public class CsvExporter implements FileExporter {
         }
     }
 
+    /**
+     * Подготавливает данные для экспорта вместе с заголовками
+     */
+    private List<String[]> prepareDataWithHeaders(
+            List<Map<String, String>> data,
+            List<String> fields,
+            FileWritingOptions options) {
+
+        List<String[]> result = new ArrayList<>(data.size() + 1);
+
+        // Добавляем заголовки, если нужно
+        if (options.isIncludeHeader()) {
+            String[] headers = createHeaders(fields);
+            result.add(headers);
+        }
+
+        // Добавляем данные
+        for (Map<String, String> row : data) {
+            String[] values = new String[fields.size()];
+            for (int i = 0; i < fields.size(); i++) {
+                values[i] = row.getOrDefault(fields.get(i), "");
+            }
+            result.add(values);
+        }
+
+        return result;
+    }
+
+    /**
+     * Создает заголовки для CSV-файла
+     */
     private String[] createHeaders(List<String> fields) {
         String[] headers = new String[fields.size()];
 

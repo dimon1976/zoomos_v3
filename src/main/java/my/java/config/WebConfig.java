@@ -2,7 +2,10 @@ package my.java.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.ByteArrayHttpMessageConverter;
 import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.ResourceHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
@@ -14,6 +17,7 @@ import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 import org.thymeleaf.spring6.view.ThymeleafViewResolver;
 import org.thymeleaf.templatemode.TemplateMode;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
@@ -37,11 +41,28 @@ public class WebConfig implements WebMvcConfigurer {
     }
 
     /**
-     * Настройка конвертеров сообщений для корректной обработки JSON
+     * Настройка конвертеров сообщений для корректной обработки JSON и бинарных данных
      */
     @Override
     public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+        // Конвертер для JSON
         converters.add(new MappingJackson2HttpMessageConverter());
+
+        // Конвертер для массивов байтов (byte[])
+        ByteArrayHttpMessageConverter byteArrayConverter = new ByteArrayHttpMessageConverter();
+        List<MediaType> supportedMediaTypes = new ArrayList<>();
+        supportedMediaTypes.add(MediaType.APPLICATION_OCTET_STREAM);
+        supportedMediaTypes.add(MediaType.parseMediaType("text/csv"));
+        supportedMediaTypes.add(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        supportedMediaTypes.add(MediaType.parseMediaType("application/vnd.ms-excel"));
+        byteArrayConverter.setSupportedMediaTypes(supportedMediaTypes);
+        converters.add(byteArrayConverter);
+
+
+        // Конвертер для ресурсов (Resource)
+        ResourceHttpMessageConverter resourceConverter = new ResourceHttpMessageConverter();
+        resourceConverter.setSupportedMediaTypes(supportedMediaTypes);
+        converters.add(resourceConverter);
     }
 
     @Bean

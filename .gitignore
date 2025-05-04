@@ -34,6 +34,7 @@ build/
 
 ### Application specific ###
 /logs/
+/data/
 /uploads/
 /temp/
 /temp-files/

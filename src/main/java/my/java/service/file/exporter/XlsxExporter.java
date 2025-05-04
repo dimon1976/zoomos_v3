@@ -11,12 +11,13 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 @Slf4j
@@ -83,7 +84,12 @@ public class XlsxExporter implements FileExporter {
                     Row headerRow = sheet.createRow(0);
                     for (int i = 0; i < fields.size(); i++) {
                         Cell cell = headerRow.createCell(i);
-                        cell.setCellValue(getDisplayName(fields.get(i)));
+                        // Получаем значение заголовка из параметров, если есть
+                        String headerValue = options.getAdditionalParams()
+                                .getOrDefault("header_" + fields.get(i).replace(".", "_"),
+                                        getDisplayName(fields.get(i)));
+
+                        cell.setCellValue(headerValue);
                         cell.setCellStyle(headerStyle);
                     }
                 }
@@ -91,6 +97,7 @@ public class XlsxExporter implements FileExporter {
                 // Запись данных
                 int startRow = options.isIncludeHeader() ? 1 : 0;
                 int totalRecords = data.size();
+                AtomicInteger progressCounter = new AtomicInteger(0);
 
                 for (int i = 0; i < totalRecords; i++) {
                     Map<String, String> rowData = data.get(i);
@@ -102,19 +109,32 @@ public class XlsxExporter implements FileExporter {
                         cell.setCellValue(value);
                     }
 
-                    // Обновляем прогресс
-                    int progress = (int) (((double) (i + 1) / totalRecords) * 100);
-                    operation.updateStageProgress("xlsx_export", progress);
-                    operation.setProcessingProgress(progress);
+                    // Обновляем прогресс каждые 100 записей или для последней записи
+                    if (i % 100 == 0 || i == totalRecords - 1) {
+                        int progress = (int) (((double) (i + 1) / totalRecords) * 100);
+                        operation.updateStageProgress("xlsx_export", progress);
+                        operation.setProcessingProgress(progress);
+
+                        // Если много записей, логируем прогресс
+                        if (totalRecords > 1000 && progressCounter.incrementAndGet() % 10 == 0) {
+                            log.debug("Экспорт Excel: обработано {} из {} записей ({}%)",
+                                    i + 1, totalRecords, progress);
+                        }
+                    }
                 }
 
                 // Автоматическая подгонка ширины столбцов
                 if (options.isAutoSizeColumns()) {
                     for (int i = 0; i < fields.size(); i++) {
-                        sheet.autoSizeColumn(i);
-                        // Добавляем дополнительный отступ
-                        int width = sheet.getColumnWidth(i);
-                        sheet.setColumnWidth(i, width + 512); // 512 ~ 2 символам
+                        try {
+                            sheet.autoSizeColumn(i);
+                            // Добавляем дополнительный отступ
+                            int width = sheet.getColumnWidth(i);
+                            sheet.setColumnWidth(i, width + 512); // 512 ~ 2 символам
+                        } catch (Exception e) {
+                            log.warn("Не удалось автоматически установить ширину колонки {}: {}",
+                                    i, e.getMessage());
+                        }
                     }
                 }
 

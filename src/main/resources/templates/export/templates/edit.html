@@ -1,0 +1,781 @@
+<!-- src/main/resources/templates/export/templates/edit.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ~{::title},
+        ~{::div.content},
+        ~{::script},
+        ~{},
+        ${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'},
+        ~{::div.page-actions}
+      )}">
+<head>
+    <title th:text="${template.id != null ? 'Редактирование шаблона экспорта' : 'Новый шаблон экспорта'}">Шаблон экспорта</title>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/export/templates(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Назад к списку шаблонов
+    </a>
+</div>
+
+<!-- Основное содержимое -->
+<div class="content">
+    <div class="card">
+        <div class="card-header">
+            <h4 th:text="${template.id != null ? 'Редактирование шаблона: ' + template.name : 'Новый шаблон экспорта'}">Шаблон экспорта</h4>
+        </div>
+        <div class="card-body">
+            <form th:action="@{/clients/{id}/export/templates/save(id=${client.id})}" method="post" id="templateForm">
+                <!-- Скрытые поля для ID и клиента -->
+                <input type="hidden" th:if="${template.id != null}" name="id" th:value="${template.id}">
+                <input type="hidden" name="client.id" th:value="${client.id}">
+
+                <!-- Основная информация о шаблоне -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="name" class="form-label">Название шаблона</label>
+                        <input type="text" class="form-control" id="name" name="name" th:value="${template.name}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="entityType" class="form-label">Тип сущности</label>
+                        <input type="text" class="form-control" id="entityType" name="entityType" th:value="${template.entityType}" readonly>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">Описание</label>
+                    <textarea class="form-control" id="description" name="description" rows="2" th:text="${template.description}"></textarea>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="fileType" class="form-label">Формат файла</label>
+                            <select class="form-select" id="fileType" name="fileType" required onchange="updateFileParams()">
+                                <option value="csv" th:selected="${template.fileType == 'csv' || template.fileType == null}">CSV</option>
+                                <option value="xlsx" th:selected="${template.fileType == 'xlsx'}">Excel (XLSX)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="strategyId" class="form-label">Стратегия экспорта</label>
+                            <select class="form-select" id="strategyId" name="strategyId">
+                                <option value="" th:selected="${template.strategyId == null || template.strategyId.isEmpty()}">
+                                    Стандартная (без обработки)
+                                </option>
+                                <option value="simple" th:selected="${template.strategyId == 'simple'}">
+                                    Прямой экспорт
+                                </option>
+                                <option value="filtered" th:selected="${template.strategyId == 'filtered'}">
+                                    Фильтрованный экспорт
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="isDefault" name="isDefault" th:checked="${template.default}">
+                    <label class="form-check-label" for="isDefault">
+                        Установить как шаблон по умолчанию
+                    </label>
+                </div>
+
+                <!-- Параметры файла -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light">
+                        <h5><i class="fas fa-cog"></i> Параметры файла</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- CSV параметры -->
+                        <div id="csvParams" th:style="${template.fileType != 'xlsx' ? '' : 'display: none;'}">
+                            <h6>Параметры CSV</h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-group mb-2">
+                                        <label for="delimiter">Разделитель:</label>
+                                        <select id="delimiter" name="delimiter" class="form-control">
+                                            <option value="," selected>Запятая (,)</option>
+                                            <option value=";">Точка с запятой (;)</option>
+                                            <option value="|">Вертикальная черта (|)</option>
+                                            <option value="&#09">Табуляция</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-2">
+                                        <label for="quoteChar">Символ кавычек:</label>
+                                        <select id="quoteChar" name="quoteChar" class="form-control">
+                                            <option value="&quot;" selected>Двойные кавычки (")</option>
+                                            <option value="'">Одинарные кавычки (')</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-2">
+                                        <label for="encoding">Кодировка:</label>
+                                        <select id="encoding" name="encoding" class="form-control">
+                                            <option value="UTF-8" selected>UTF-8</option>
+                                            <option value="Windows-1251">Windows-1251</option>
+                                            <option value="ISO-8859-1">ISO-8859-1</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Excel параметры -->
+                        <div id="excelParams" th:style="${template.fileType == 'xlsx' ? '' : 'display: none;'}">
+                            <h6>Параметры Excel</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-2">
+                                        <label for="sheetName">Имя листа:</label>
+                                        <input type="text" id="sheetName" name="file_sheetName" class="form-control" value="Данные">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check mt-4">
+                                        <input type="checkbox" class="form-check-input" id="autoSizeColumns"
+                                               name="file_autoSizeColumns" value="true" checked>
+                                        <label class="form-check-label" for="autoSizeColumns">
+                                            Автоматически подгонять ширину колонок
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Общие параметры -->
+                        <div class="form-check mb-2 mt-3">
+                            <input type="checkbox" class="form-check-input" id="includeHeader"
+                                   name="file_includeHeader" value="true" checked>
+                            <label class="form-check-label" for="includeHeader">
+                                Включить заголовки колонок
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Поля шаблона -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light d-flex justify-content-between">
+                        <h5 class="mb-0"><i class="fas fa-list"></i> Поля шаблона</h5>
+                        <div>
+                            <button type="button" id="selectAllFields" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-check-square"></i> Выбрать все
+                            </button>
+                            <button type="button" id="deselectAllFields" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-square"></i> Снять все
+                            </button>
+                            <button type="button" id="customizeLabelsBtn" class="btn btn-sm btn-outline-info">
+                                <i class="fas fa-edit"></i> Настроить заголовки
+                            </button>
+                            <button type="button" id="sortFieldsBtn" class="btn btn-sm btn-outline-dark">
+                                <i class="fas fa-sort"></i> Изменить порядок
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Существующие поля шаблона -->
+                        <div th:if="${template.id != null && template.fields != null && !template.fields.isEmpty()}"
+                             class="mb-4 existing-fields">
+                            <h6 class="border-bottom pb-2 mb-3">Выбранные поля шаблона</h6>
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                    <tr>
+                                        <th style="width: 40px;">#</th>
+                                        <th>Оригинальное поле</th>
+                                        <th>Заголовок в экспорте</th>
+                                        <th style="width: 100px;">Действия</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody id="fieldsTable">
+                                    <tr th:each="field, stat : ${template.fields}">
+                                        <td>
+                                            <span th:text="${stat.count}">1</span>
+                                            <input type="hidden" th:name="'fields[' + ${stat.index} + '].originalField'"
+                                                   th:value="${field.originalField}">
+                                        </td>
+                                        <td th:text="${field.originalField}">field.name</td>
+                                        <td>
+                                            <input type="text" class="form-control"
+                                                   th:name="'fields[' + ${stat.index} + '].displayName'"
+                                                   th:value="${field.displayName}">
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    onclick="removeField(this)">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Выбор новых полей -->
+                        <div th:if="${entityFields != null}">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-table"></i> Основная сущность:
+                                <span th:text="${template.entityType}">Product</span>
+                            </h6>
+
+                            <div class="row">
+                                <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-2 field-item">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input field-checkbox"
+                                               th:id="${'field_main_' + stat.index}"
+                                               th:name="${'field_' + stat.index}"
+                                               th:value="${field.key}"
+                                               th:checked="${template.fields != null &&
+                                                           template.fields.stream().anyMatch(f -> f.originalField == field.key)}">
+                                        <label class="form-check-label"
+                                               th:for="${'field_main_' + stat.index}"
+                                               th:text="${field.value.displayName}">Поле</label>
+                                        <input type="hidden" th:name="${'header_' + field.key.replace('.', '_')}"
+                                               th:id="${'header_' + field.key.replace('.', '_')}"
+                                               th:value="${field.value.displayName}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Поля связанных сущностей -->
+                        <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}" class="mt-4">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-link"></i> Связанная сущность:
+                                <span th:text="${entityEntry.key}">Related Entity</span>
+                            </h6>
+
+                            <div class="row">
+                                <div th:each="field, stat : ${entityEntry.value}" class="col-md-6 mb-2 field-item">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input field-checkbox"
+                                               th:id="${'field_' + entityEntry.key + '_' + stat.index}"
+                                               th:name="${'field_' + (stat.index + 100)}"
+                                               th:value="${field.key}"
+                                               th:checked="${template.fields != null &&
+                                                           template.fields.stream().anyMatch(f -> f.originalField == field.key)}">
+                                        <label class="form-check-label"
+                                               th:for="${'field_' + entityEntry.key + '_' + stat.index}"
+                                               th:text="${field.value.displayName}">Поле</label>
+                                        <input type="hidden" th:name="${'header_' + field.key.replace('.', '_')}"
+                                               th:id="${'header_' + field.key.replace('.', '_')}"
+                                               th:value="${field.value.displayName}">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Сообщение, если нет полей для выбора -->
+                        <div th:if="${entityFields == null || entityFields.isEmpty()}" class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Не удалось загрузить поля для типа сущности. Пожалуйста, попробуйте создать шаблон через форму экспорта.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Сохранить шаблон
+                    </button>
+
+                    <a th:href="@{/clients/{id}/export/templates(id=${client.id})}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Отмена
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для настройки заголовков -->
+<div class="modal fade" id="customizeLabelsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Настройка заголовков полей</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Поле</th>
+                            <th>Заголовок в файле</th>
+                        </tr>
+                        </thead>
+                        <tbody id="headersTableBody">
+                        <!-- Строки будут добавлены динамически -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveHeadersBtn">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для изменения порядка полей -->
+<div class="modal fade" id="sortFieldsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Порядок полей в шаблоне</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Перетащите поля для изменения порядка:</p>
+                <ul id="sortableFields" class="list-group sortable">
+                    <!-- Элементы будут добавлены динамически -->
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveOrderBtn">Сохранить порядок</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Добавляем Sortable.js явно -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Инициализация параметров формата файла
+        updateFileParams();
+
+        // Инициализация обработчиков событий
+        initHandlers();
+
+        // Применение файловых опций из шаблона (если есть)
+        applyFileOptions();
+
+        // Инициализация Sortable для таблицы полей
+        initTableSortable();
+    });
+
+    // Инициализация обработчиков событий
+    function initHandlers() {
+        // Обработчик изменения формата файла
+        const fileTypeSelect = document.getElementById('fileType');
+        if (fileTypeSelect) {
+            fileTypeSelect.addEventListener('change', updateFileParams);
+        }
+
+        // Выбор всех полей
+        const selectAllBtn = document.getElementById('selectAllFields');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+                    checkbox.checked = true;
+                });
+            });
+        }
+
+        // Снятие выбора со всех полей
+        const deselectAllBtn = document.getElementById('deselectAllFields');
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener('click', function() {
+                document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+                    checkbox.checked = false;
+                });
+            });
+        }
+
+        // Открытие модального окна для настройки заголовков
+        const customizeLabelsBtn = document.getElementById('customizeLabelsBtn');
+        if (customizeLabelsBtn) {
+            customizeLabelsBtn.addEventListener('click', openCustomizeLabelsModal);
+        }
+
+        // Сохранение заголовков
+        const saveHeadersBtn = document.getElementById('saveHeadersBtn');
+        if (saveHeadersBtn) {
+            saveHeadersBtn.addEventListener('click', saveHeaders);
+        }
+
+        // Открытие модального окна для изменения порядка полей
+        const sortFieldsBtn = document.getElementById('sortFieldsBtn');
+        if (sortFieldsBtn) {
+            sortFieldsBtn.addEventListener('click', openSortFieldsModal);
+        }
+
+        // Сохранение порядка полей
+        const saveOrderBtn = document.getElementById('saveOrderBtn');
+        if (saveOrderBtn) {
+            saveOrderBtn.addEventListener('click', saveFieldOrder);
+        }
+    }
+
+    // Инициализация Sortable для перетаскивания строк таблицы
+    function initTableSortable() {
+        const fieldsTable = document.getElementById('fieldsTable');
+        if (fieldsTable) {
+            new Sortable(fieldsTable, {
+                animation: 150,
+                handle: 'td:first-child',
+                ghostClass: 'bg-light',
+                onEnd: function() {
+                    // После перетаскивания обновляем индексы
+                    updateFieldIndices();
+                }
+            });
+        }
+    }
+
+    // Обновление индексов полей после перетаскивания
+    function updateFieldIndices() {
+        const rows = document.querySelectorAll('#fieldsTable tr');
+        rows.forEach((row, index) => {
+            // Обновляем номер
+            row.querySelector('td:first-child span').textContent = (index + 1).toString();
+
+            // Обновляем имена полей
+            row.querySelectorAll('input').forEach(input => {
+                if (input.name.startsWith('fields[')) {
+                    input.name = input.name.replace(/fields\[\d+\]/, `fields[${index}]`);
+                }
+            });
+        });
+    }
+
+    // Обновление параметров формата файла
+    function updateFileParams() {
+        const fileType = document.getElementById('fileType').value;
+        const csvParams = document.getElementById('csvParams');
+        const excelParams = document.getElementById('excelParams');
+
+        if (csvParams && excelParams) {
+            csvParams.style.display = (fileType === 'csv') ? 'block' : 'none';
+            excelParams.style.display = (fileType === 'xlsx') ? 'block' : 'none';
+        }
+    }
+
+    // Применение файловых опций из шаблона
+    function applyFileOptions() {
+        const fileOptions = [[${template.fileOptionsAsMap}]];
+
+        if (fileOptions) {
+            // Применяем значения к полям формы
+            for (const [key, value] of Object.entries(fileOptions)) {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        element.checked = (value === 'true');
+                    } else {
+                        element.value = value;
+                    }
+                }
+            }
+        }
+    }
+
+    // Удаление поля из шаблона
+    function removeField(button) {
+        const row = button.closest('tr');
+        if (row && confirm('Удалить это поле из шаблона?')) {
+            row.remove();
+
+            // Обновляем индексы оставшихся полей
+            updateFieldIndices();
+        }
+    }
+
+    // Открытие модального окна для настройки заголовков
+    function openCustomizeLabelsModal() {
+        const tableBody = document.getElementById('headersTableBody');
+        tableBody.innerHTML = '';
+
+        // Собираем поля для настройки заголовков
+        const selectedFields = [];
+
+        // Добавляем поля из существующего шаблона
+        const existingFields = document.querySelectorAll('.existing-fields input[name$="].originalField"]');
+        existingFields.forEach(input => {
+            const fieldName = input.value;
+            const row = input.closest('tr');
+            const displayNameInput = row.querySelector('input[name$="].displayName"]');
+
+            selectedFields.push({
+                field: fieldName,
+                displayName: displayNameInput ? displayNameInput.value : getDefaultDisplayName(fieldName)
+            });
+        });
+
+        // Добавляем выбранные поля из чекбоксов
+        document.querySelectorAll('.field-checkbox:checked').forEach(checkbox => {
+            const fieldName = checkbox.value;
+            // Проверяем, не добавлено ли уже это поле
+            if (!selectedFields.some(item => item.field === fieldName)) {
+                const headerInput = document.getElementById('header_' + fieldName.replace('.', '_'));
+                selectedFields.push({
+                    field: fieldName,
+                    displayName: headerInput ? headerInput.value : getDefaultDisplayName(fieldName)
+                });
+            }
+        });
+
+        // Добавляем строки в таблицу
+        selectedFields.forEach(field => {
+            const row = document.createElement('tr');
+
+            // Ячейка с именем поля
+            const fieldCell = document.createElement('td');
+            fieldCell.textContent = field.field;
+
+            // Ячейка с полем ввода для заголовка
+            const headerCell = document.createElement('td');
+            const headerInput = document.createElement('input');
+            headerInput.type = 'text';
+            headerInput.className = 'form-control';
+            headerInput.dataset.field = field.field;
+            headerInput.value = field.displayName;
+
+            headerCell.appendChild(headerInput);
+
+            row.appendChild(fieldCell);
+            row.appendChild(headerCell);
+            tableBody.appendChild(row);
+        });
+
+        // Открываем модальное окно
+        const modal = new bootstrap.Modal(document.getElementById('customizeLabelsModal'));
+        modal.show();
+    }
+
+    // Сохранение настроенных заголовков
+    function saveHeaders() {
+        const inputs = document.querySelectorAll('#headersTableBody input');
+
+        inputs.forEach(input => {
+            const field = input.dataset.field;
+            // Обновляем заголовки в скрытых полях
+            const headerInput = document.getElementById('header_' + field.replace('.', '_'));
+            if (headerInput) {
+                headerInput.value = input.value;
+            }
+
+            // Обновляем заголовки в существующих полях шаблона
+            const existingFields = document.querySelectorAll('.existing-fields input[name$="].originalField"]');
+            existingFields.forEach(fieldInput => {
+                if (fieldInput.value === field) {
+                    const row = fieldInput.closest('tr');
+                    const displayNameInput = row.querySelector('input[name$="].displayName"]');
+                    if (displayNameInput) {
+                        displayNameInput.value = input.value;
+                    }
+                }
+            });
+        });
+
+        // Закрываем модальное окно
+        const modal = bootstrap.Modal.getInstance(document.getElementById('customizeLabelsModal'));
+        modal.hide();
+    }
+
+    // Открытие модального окна для изменения порядка полей
+    function openSortFieldsModal() {
+        const sortableList = document.getElementById('sortableFields');
+        sortableList.innerHTML = '';
+
+        // Собираем поля для сортировки
+        const fieldsToSort = [];
+
+        // Добавляем поля из существующей таблицы полей
+        const existingFields = document.querySelectorAll('.existing-fields tr');
+        existingFields.forEach((row, index) => {
+            const originalField = row.querySelector('input[name$="].originalField"]');
+            const displayNameInput = row.querySelector('input[name$="].displayName"]');
+
+            if (originalField && displayNameInput) {
+                fieldsToSort.push({
+                    field: originalField.value,
+                    displayName: displayNameInput.value,
+                    order: index
+                });
+            }
+        });
+
+        // Добавляем выбранные поля из чекбоксов
+        document.querySelectorAll('.field-checkbox:checked').forEach((checkbox, index) => {
+            const fieldName = checkbox.value;
+            if (!fieldsToSort.some(item => item.field === fieldName)) {
+                const label = document.querySelector(`label[for="${checkbox.id}"]`);
+                fieldsToSort.push({
+                    field: fieldName,
+                    displayName: label ? label.textContent : getDefaultDisplayName(fieldName),
+                    order: existingFields.length + index
+                });
+            }
+        });
+
+        // Сортируем поля по порядку
+        fieldsToSort.sort((a, b) => a.order - b.order);
+
+        // Добавляем элементы в список
+        fieldsToSort.forEach((field, index) => {
+            const listItem = document.createElement('li');
+            listItem.className = 'list-group-item d-flex align-items-center';
+            listItem.dataset.field = field.field;
+            listItem.dataset.displayName = field.displayName;
+            listItem.dataset.order = index;
+
+            // Добавляем "ручку" для перетаскивания
+            const handle = document.createElement('span');
+            handle.className = 'me-2 handle';
+            handle.innerHTML = '&#9776;'; // Unicode символ "burger" меню
+            handle.style.cursor = 'grab';
+
+            // Добавляем название поля
+            const label = document.createElement('span');
+            label.textContent = field.displayName;
+
+            listItem.appendChild(handle);
+            listItem.appendChild(label);
+            sortableList.appendChild(listItem);
+        });
+
+        // Инициализируем Sortable
+        new Sortable(sortableList, {
+            animation: 150,
+            handle: '.handle',
+            ghostClass: 'bg-light'
+        });
+
+        // Открываем модальное окно
+        const modal = new bootstrap.Modal(document.getElementById('sortFieldsModal'));
+        modal.show();
+    }
+
+    // Сохранение порядка полей
+    function saveFieldOrder() {
+        const sortedItems = Array.from(document.querySelectorAll('#sortableFields li'));
+        const fieldsTable = document.getElementById('fieldsTable');
+
+        // Если в шаблоне уже есть поля, упорядочиваем их
+        if (fieldsTable) {
+            // Получаем текущие строки
+            const currentRows = Array.from(fieldsTable.querySelectorAll('tr'));
+
+            // Создаем временный контейнер для хранения отсортированных строк
+            const tempContainer = document.createElement('tbody');
+            tempContainer.id = 'fieldsTable';
+
+            // Добавляем строки в новом порядке
+            sortedItems.forEach(item => {
+                const field = item.dataset.field;
+                // Ищем строку с этим полем
+                const matchingRow = currentRows.find(row => {
+                    const originalField = row.querySelector('input[name$="].originalField"]');
+                    return originalField && originalField.value === field;
+                });
+
+                if (matchingRow) {
+                    tempContainer.appendChild(matchingRow.cloneNode(true));
+                } else {
+                    // Создаем новую строку для поля
+                    const newRow = document.createElement('tr');
+                    const displayName = item.dataset.displayName || getDefaultDisplayName(field);
+
+                    // Порядковый номер
+                    const indexCell = document.createElement('td');
+                    const indexSpan = document.createElement('span');
+                    indexSpan.textContent = tempContainer.childNodes.length + 1;
+                    indexCell.appendChild(indexSpan);
+
+                    // Скрытое поле с оригинальным именем
+                    const originalFieldInput = document.createElement('input');
+                    originalFieldInput.type = 'hidden';
+                    originalFieldInput.name = `fields[${tempContainer.childNodes.length}].originalField`;
+                    originalFieldInput.value = field;
+                    indexCell.appendChild(originalFieldInput);
+
+                    // Оригинальное имя поля
+                    const fieldNameCell = document.createElement('td');
+                    fieldNameCell.textContent = field;
+
+                    // Отображаемое имя
+                    const displayNameCell = document.createElement('td');
+                    const displayNameInput = document.createElement('input');
+                    displayNameInput.type = 'text';
+                    displayNameInput.className = 'form-control';
+                    displayNameInput.name = `fields[${tempContainer.childNodes.length}].displayName`;
+                    displayNameInput.value = displayName;
+                    displayNameCell.appendChild(displayNameInput);
+
+                    // Кнопка удаления
+                    const actionCell = document.createElement('td');
+                    const deleteButton = document.createElement('button');
+                    deleteButton.type = 'button';
+                    deleteButton.className = 'btn btn-sm btn-outline-danger';
+                    deleteButton.innerHTML = '<i class="fas fa-times"></i>';
+                    deleteButton.onclick = function() { removeField(this); };
+                    actionCell.appendChild(deleteButton);
+
+                    // Собираем строку
+                    newRow.appendChild(indexCell);
+                    newRow.appendChild(fieldNameCell);
+                    newRow.appendChild(displayNameCell);
+                    newRow.appendChild(actionCell);
+
+                    tempContainer.appendChild(newRow);
+                }
+            });
+
+            // Заменяем текущую таблицу на отсортированную
+            fieldsTable.parentNode.replaceChild(tempContainer, fieldsTable);
+
+            // Обновляем индексы полей
+            updateFieldIndices();
+        }
+
+        // Создаем скрытое поле для сохранения порядка полей
+        let orderInput = document.getElementById('fieldsOrder');
+        if (!orderInput) {
+            orderInput = document.createElement('input');
+            orderInput.type = 'hidden';
+            orderInput.id = 'fieldsOrder';
+            orderInput.name = 'fieldsOrder';
+            document.getElementById('templateForm').appendChild(orderInput);
+        }
+
+        // Сохраняем порядок полей
+        orderInput.value = JSON.stringify(sortedItems.map(item => item.dataset.field));
+
+        // Закрываем модальное окно
+        const modal = bootstrap.Modal.getInstance(document.getElementById('sortFieldsModal'));
+        modal.hide();
+
+        // Перезагружаем Sortable для таблицы
+        initTableSortable();
+    }
+
+    // Получение отображаемого имени поля по умолчанию
+    function getDefaultDisplayName(field) {
+        // Отделяем префикс сущности, если есть
+        const dotIndex = field.lastIndexOf('.');
+        const baseName = dotIndex > 0 ? field.substring(dotIndex + 1) : field;
+
+        // Преобразуем camelCase в нормальный текст
+        return baseName.replace(/([A-Z])/g, ' $1')
+            .replace(/^./, str => str.toUpperCase())
+            .trim();
+    }
+</script>
+</body>
+</html>

@@ -22,11 +22,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CsvExporter implements FileExporter {
 
-    //TODO Реализовать экспорт в нужной кодировке
-    //TODO Починить настройку заголовков
-//TODO Починить порядок заголовка
-//TODO Починить сохранение, редактирование и удаление шаблонов экспорта
-
     private final PathResolver pathResolver;
     private static final String[] SUPPORTED_TYPES = {"csv"};
 
@@ -108,7 +103,7 @@ public class CsvExporter implements FileExporter {
 
         // Добавляем заголовки, если нужно
         if (options.isIncludeHeader()) {
-            String[] headers = createHeaders(fields);
+            String[] headers = createHeaders(fields, options);
             result.add(headers);
         }
 
@@ -125,35 +120,42 @@ public class CsvExporter implements FileExporter {
     }
 
     /**
-     * Создает заголовки для CSV-файла
+     * Создает заголовки для CSV-файла с учетом пользовательских настроек
      */
-    private String[] createHeaders(List<String> fields) {
+    private String[] createHeaders(List<String> fields, FileWritingOptions options) {
         String[] headers = new String[fields.size()];
 
         for (int i = 0; i < fields.size(); i++) {
             String field = fields.get(i);
 
-            // Извлекаем имя поля без префикса сущности
-            String header = field;
-            int dotIndex = field.lastIndexOf('.');
-            if (dotIndex > 0) {
-                header = field.substring(dotIndex + 1);
-            }
+            // Проверяем, есть ли пользовательский заголовок в параметрах
+            String customHeader = options.getAdditionalParams().get("header_" + field.replace(".", "_"));
 
-            // Преобразуем camelCase в нормальный текст
-            StringBuilder formatted = new StringBuilder();
-            for (int j = 0; j < header.length(); j++) {
-                char c = header.charAt(j);
-                if (j == 0) {
-                    formatted.append(Character.toUpperCase(c));
-                } else if (Character.isUpperCase(c)) {
-                    formatted.append(' ').append(c);
-                } else {
-                    formatted.append(c);
+            if (customHeader != null && !customHeader.isEmpty()) {
+                headers[i] = customHeader;
+            } else {
+                // Извлекаем имя поля без префикса сущности
+                String header = field;
+                int dotIndex = field.lastIndexOf('.');
+                if (dotIndex > 0) {
+                    header = field.substring(dotIndex + 1);
                 }
-            }
 
-            headers[i] = formatted.toString();
+                // Преобразуем camelCase в нормальный текст
+                StringBuilder formatted = new StringBuilder();
+                for (int j = 0; j < header.length(); j++) {
+                    char c = header.charAt(j);
+                    if (j == 0) {
+                        formatted.append(Character.toUpperCase(c));
+                    } else if (Character.isUpperCase(c)) {
+                        formatted.append(' ').append(c);
+                    } else {
+                        formatted.append(c);
+                    }
+                }
+
+                headers[i] = formatted.toString();
+            }
         }
 
         return headers;

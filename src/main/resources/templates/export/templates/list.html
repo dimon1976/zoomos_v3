@@ -1,0 +1,134 @@
+<!-- src/main/resources/templates/export/templates/list.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ~{::title},
+        ~{::div.content},
+        ~{::script},
+        ~{},
+        'Управление шаблонами экспорта',
+        ~{::div.page-actions}
+      )}">
+<head>
+    <title>Управление шаблонами экспорта</title>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/export(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Назад к экспорту
+    </a>
+    <a th:href="@{/clients/{id}/export/templates/new(id=${client.id})}" class="btn btn-primary ms-2">
+        <i class="fas fa-plus"></i> Новый шаблон
+    </a>
+</div>
+
+<!-- Основное содержимое -->
+<div class="content">
+    <div class="card">
+        <div class="card-header">
+            <h4>Шаблоны экспорта для клиента: <span th:text="${client.name}"></span></h4>
+        </div>
+        <div class="card-body">
+            <!-- Список шаблонов -->
+            <div th:if="${templates != null && !templates.isEmpty()}" class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Тип сущности</th>
+                        <th>Формат файла</th>
+                        <th>Количество полей</th>
+                        <th>По умолчанию</th>
+                        <th>Последнее обновление</th>
+                        <th>Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="template : ${templates}">
+                        <td>
+                            <a th:href="@{/clients/{clientId}/export/templates/{id}(clientId=${client.id},id=${template.id})}"
+                               th:text="${template.name}">Имя шаблона</a>
+                        </td>
+                        <td th:text="${template.entityType}">Тип сущности</td>
+                        <td th:text="${template.fileType}">Формат файла</td>
+                        <td th:text="${template.fields.size()}">0</td>
+                        <td>
+                            <span th:if="${template.default}" class="badge bg-success">
+                                <i class="fas fa-check"></i> По умолчанию
+                            </span>
+                            <form th:unless="${template.default}" th:action="@{/clients/{clientId}/export/templates/{id}/set-default(clientId=${client.id},id=${template.id})}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                    Сделать по умолчанию
+                                </button>
+                            </form>
+                        </td>
+                        <td th:text="${#temporals.format(template.updatedAt, 'dd.MM.yyyy HH:mm')}">01.01.2025</td>
+                        <td>
+                            <div class="btn-group">
+                                <a th:href="@{/clients/{clientId}/export/templates/{id}(clientId=${client.id},id=${template.id})}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i> Редактировать
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        th:data-template-id="${template.id}"
+                                        th:data-template-name="${template.name}"
+                                        onclick="confirmDelete(this.getAttribute('data-template-id'), this.getAttribute('data-template-name'))">
+                                    <i class="fas fa-trash"></i> Удалить
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Сообщение, если нет шаблонов -->
+            <div th:if="${templates == null || templates.isEmpty()}" class="alert alert-info">
+                <i class="fas fa-info-circle"></i> У данного клиента пока нет шаблонов экспорта.
+                <a th:href="@{/clients/{id}/export/templates/new(id=${client.id})}" class="alert-link">
+                    Создать новый шаблон
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения удаления -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы действительно хотите удалить шаблон <span id="templateNameToDelete"></span>?</p>
+                <p class="text-danger">Это действие нельзя отменить.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form id="deleteForm" method="post">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function confirmDelete(templateId, templateName) {
+        // Устанавливаем имя шаблона в модальном окне
+        document.getElementById('templateNameToDelete').textContent = templateName;
+
+        // Устанавливаем action формы удаления
+        const deleteForm = document.getElementById('deleteForm');
+        deleteForm.action = `/clients/${[[${client.id}]]}/export/templates/${templateId}/delete`;
+
+        // Показываем модальное окно
+        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        modal.show();
+    }
+</script>
+</body>
+</html>

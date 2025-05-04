@@ -1,0 +1,75 @@
+<!-- src/main/resources/templates/export/templates/choose_entity.html -->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        ~{::title},
+        ~{::div.content},
+        ~{},
+        ~{},
+        'Выбор типа сущности для шаблона',
+        ~{::div.page-actions}
+      )}">
+<head>
+    <title>Выбор типа сущности для шаблона</title>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/export/templates(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Назад к списку шаблонов
+    </a>
+</div>
+
+<!-- Основное содержимое -->
+<div class="content">
+    <div class="card">
+        <div class="card-header">
+            <h4>Выбор типа сущности для нового шаблона</h4>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Выберите тип сущности для создания нового шаблона экспорта
+            </div>
+
+            <form th:action="@{/clients/{id}/export/templates/new(id=${client.id})}" method="get">
+                <div class="mb-4">
+                    <div class="row row-cols-1 row-cols-md-3 g-4 mt-2">
+                        <div th:each="entity : ${entityTypes}" class="col">
+                            <div class="card entity-type-card h-100">
+                                <div class="card-body text-center">
+                                    <i th:class="${entity.entityType == 'product' ? 'fas fa-box' :
+                                                  entity.entityType == 'region' ? 'fas fa-map-marker-alt' :
+                                                  'fas fa-user-tie'} + ' fa-3x mb-3 text-primary'"></i>
+                                    <h5 class="card-title" th:text="${entity.displayName}">Сущность</h5>
+                                    <p class="card-text small" th:text="${entity.entityType == 'product' ? 'Информация о товарах' :
+                                                                         entity.entityType == 'region' ? 'Данные о регионах и адресах' :
+                                                                         'Данные о конкурентах и ценах'}">Описание</p>
+                                    <div class="form-check d-flex justify-content-center mt-3">
+                                        <input class="form-check-input me-2" type="radio" name="entityType"
+                                               th:id="${'entity_' + entity.entityType}" th:value="${entity.entityType}" required>
+                                        <label class="form-check-label" th:for="${'entity_' + entity.entityType}">
+                                            Выбрать
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-arrow-right"></i> Продолжить
+                    </button>
+                    <a th:href="@{/clients/{id}/export/templates(id=${client.id})}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Отмена
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

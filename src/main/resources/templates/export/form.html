@@ -605,6 +605,58 @@
         const fileOptions = [[${selectedTemplate != null ? selectedTemplate.fileOptionsAsMap : null}]];
 
         if (fileOptions) {
+            console.log('Применяются параметры шаблона:', fileOptions);
+
+            // Применяем параметры формата файла
+            if (fileOptions.hasOwnProperty('format') || fileOptions.hasOwnProperty('fileType')) {
+                const formatValue = fileOptions.format || fileOptions.fileType;
+                const formatSelect = document.getElementById('format');
+                if (formatSelect && formatValue) {
+                    formatSelect.value = formatValue.toLowerCase();
+                }
+            }
+
+            // Применяем стратегию
+            if (fileOptions.hasOwnProperty('strategyId')) {
+                const strategySelect = document.getElementById('strategyId');
+                if (strategySelect && fileOptions.strategyId) {
+                    strategySelect.value = fileOptions.strategyId;
+                }
+            }
+
+            // Применяем параметры CSV
+            if (fileOptions.hasOwnProperty('delimiter')) {
+                const delimiterSelect = document.getElementById('delimiter');
+                if (delimiterSelect) delimiterSelect.value = fileOptions.delimiter;
+            }
+
+            if (fileOptions.hasOwnProperty('quoteChar')) {
+                const quoteCharSelect = document.getElementById('quoteChar');
+                if (quoteCharSelect) quoteCharSelect.value = fileOptions.quoteChar;
+            }
+
+            if (fileOptions.hasOwnProperty('encoding')) {
+                const encodingSelect = document.getElementById('encoding');
+                if (encodingSelect) encodingSelect.value = fileOptions.encoding;
+            }
+
+            // Применяем параметры Excel
+            if (fileOptions.hasOwnProperty('sheetName')) {
+                const sheetNameInput = document.getElementById('sheetName');
+                if (sheetNameInput) sheetNameInput.value = fileOptions.sheetName;
+            }
+
+            if (fileOptions.hasOwnProperty('autoSizeColumns')) {
+                const autoSizeCheckbox = document.getElementById('autoSizeColumns');
+                if (autoSizeCheckbox) autoSizeCheckbox.checked = fileOptions.autoSizeColumns === 'true';
+            }
+
+            // Применяем включение заголовков
+            if (fileOptions.hasOwnProperty('includeHeader')) {
+                const includeHeaderCheckbox = document.getElementById('includeHeader');
+                if (includeHeaderCheckbox) includeHeaderCheckbox.checked = fileOptions.includeHeader === 'true';
+            }
+
             // Применяем каждый параметр к соответствующему полю формы
             for (const [key, value] of Object.entries(fileOptions)) {
                 const element = document.getElementById(key);

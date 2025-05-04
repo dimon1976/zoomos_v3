@@ -121,9 +121,16 @@
         // Устанавливаем имя шаблона в модальном окне
         document.getElementById('templateNameToDelete').textContent = templateName;
 
-        // Устанавливаем action формы удаления
+        // Устанавливаем action формы удаления - проверим правильность пути
         const deleteForm = document.getElementById('deleteForm');
-        deleteForm.action = `/clients/${[[${client.id}]]}/export/templates/${templateId}/delete`;
+        if (!deleteForm) {
+            console.error('Форма удаления не найдена');
+            return;
+        }
+
+        const clientId = [[${client.id}]]; // Thymeleaf должен заменить на реальное значение
+        deleteForm.action = `/clients/${clientId}/export/templates/${templateId}/delete`;
+        console.log('URL формы удаления:', deleteForm.action);
 
         // Показываем модальное окно
         const modal = new bootstrap.Modal(document.getElementById('deleteModal'));

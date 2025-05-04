@@ -231,13 +231,12 @@
                             <div class="row">
                                 <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-2 field-item">
                                     <div class="form-check">
-                                        <input type="checkbox" class="form-check-input field-checkbox"
+                                        <input type="checkbox" class="form-check-input field-checkbox">
                                                th:id="${'field_main_' + stat.index}"
                                                th:name="${'field_' + stat.index}"
                                                th:value="${field.key}"
-                                               th:checked="${template.fields != null &&
-                                                           template.fields.stream().anyMatch(f -> f.originalField == field.key)}">
-                                        <label class="form-check-label"
+                                               th:checked="${template.fields != null && template.fields.stream().anyMatch(f -> f.originalField.equals(field.key))}"
+                                        <label class="form-check-label">
                                                th:for="${'field_main_' + stat.index}"
                                                th:text="${field.value.displayName}">Поле</label>
                                         <input type="hidden" th:name="${'header_' + field.key.replace('.', '_')}"
@@ -285,9 +284,14 @@
 
                 <!-- Кнопки действий -->
                 <div class="d-flex justify-content-between">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Сохранить шаблон
-                    </button>
+                    <div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Сохранить шаблон
+                        </button>
+                        <button type="button" onclick="validateAndSubmitForm()" class="btn btn-success ms-2">
+                            <i class="fas fa-check-double"></i> Сохранить и применить
+                        </button>
+                    </div>
 
                     <a th:href="@{/clients/{id}/export/templates(id=${client.id})}" class="btn btn-secondary">
                         <i class="fas fa-times"></i> Отмена
@@ -355,22 +359,65 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Инициализация параметров формата файла
-        updateFileParams();
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log('DOM загружен, инициализация формы экспорта');
 
-        // Инициализация обработчиков событий
-        initHandlers();
+        // Добавляем глобальную обработку ошибок для модальных окон
+        window.showModalErrorHandler = function(errorMessage) {
+            console.error(errorMessage);
 
-        // Применение файловых опций из шаблона (если есть)
-        applyFileOptions();
+            // Проверяем наличие контейнера для уведомлений
+            let alertContainer = document.getElementById('alertContainer');
+            if (!alertContainer) {
+                alertContainer = document.createElement('div');
+                alertContainer.id = 'alertContainer';
+                alertContainer.className = 'position-fixed top-0 start-50 translate-middle-x pt-3';
+                alertContainer.style.zIndex = '9999';
+                document.body.appendChild(alertContainer);
+            }
 
-        // Инициализация Sortable для таблицы полей
-        initTableSortable();
+            // Создаем уведомление
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+            alertDiv.role = 'alert';
+
+            // Добавляем иконку и текст
+            alertDiv.innerHTML = `
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <span>${errorMessage}</span>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+
+            // Добавляем в контейнер
+            alertContainer.appendChild(alertDiv);
+
+            // Автоматически скрываем через 5 секунд
+            setTimeout(() => {
+                const bsAlert = new bootstrap.Alert(alertDiv);
+                bsAlert.close();
+            }, 5000);
+        };
+
+        // Переключение параметров формата
+        updateFormatSettings();
+
+        // Обработчики событий для элементов формы
+        initFormHandlers();
+
+        // Если выбран шаблон, применяем его параметры
+        if ([[${selectedTemplate != null}]]) {
+            console.log('Применяем параметры выбранного шаблона');
+            applyTemplateParams();
+        }
+
+        // Инициализируем Sortable
+        initSortable();
+
+        console.log('Инициализация формы экспорта завершена');
     });
 
     // Инициализация обработчиков событий
-    function initHandlers() {
+    function initFormHandlers() {
         // Обработчик изменения формата файла
         const fileTypeSelect = document.getElementById('fileType');
         if (fileTypeSelect) {
@@ -775,6 +822,90 @@
         return baseName.replace(/([A-Z])/g, ' $1')
             .replace(/^./, str => str.toUpperCase())
             .trim();
+    }
+
+    // Функция валидации и отправки формы шаблона
+    function validateAndSubmitForm() {
+        console.log('Валидация и отправка формы шаблона');
+
+        // Валидация основных полей
+        const nameInput = document.getElementById('name');
+        if (!nameInput || !nameInput.value.trim()) {
+            alert('Пожалуйста, введите название шаблона');
+            if (nameInput) nameInput.focus();
+            return false;
+        }
+
+        // Проверка выбранных полей
+        const selectedFields = document.querySelectorAll('.field-checkbox:checked');
+        if (selectedFields.length === 0) {
+            alert('Пожалуйста, выберите хотя бы одно поле для шаблона');
+            return false;
+        }
+
+        // Собираем все выбранные поля
+        const fields = [];
+        selectedFields.forEach((checkbox, index) => {
+            const field = checkbox.value;
+            const headerKey = 'header_' + field.replace(/\./g, '_');
+            const headerInput = document.getElementById(headerKey);
+            const displayName = headerInput ? headerInput.value : getDefaultDisplayName(field);
+
+            // Создаем скрытые поля для отправки
+            let fieldInput = document.querySelector(`input[name="fields[${index}].originalField"]`);
+            if (!fieldInput) {
+                fieldInput = document.createElement('input');
+                fieldInput.type = 'hidden';
+                fieldInput.name = `fields[${index}].originalField`;
+                fieldInput.value = field;
+                document.getElementById('templateForm').appendChild(fieldInput);
+            } else {
+                fieldInput.value = field;
+            }
+
+            let displayNameInput = document.querySelector(`input[name="fields[${index}].displayName"]`);
+            if (!displayNameInput) {
+                displayNameInput = document.createElement('input');
+                displayNameInput.type = 'hidden';
+                displayNameInput.name = `fields[${index}].displayName`;
+                displayNameInput.value = displayName;
+                document.getElementById('templateForm').appendChild(displayNameInput);
+            } else {
+                displayNameInput.value = displayName;
+            }
+
+            fields.push({ field, displayName });
+        });
+
+        console.log(`Подготовлено ${fields.length} полей для отправки`);
+
+        // Добавляем параметры формата файла
+        const fileOptionsInput = document.getElementById('fileOptions');
+        if (!fileOptionsInput) {
+            const fileOptions = {
+                format: document.getElementById('fileType').value,
+                delimiter: document.getElementById('delimiter')?.value,
+                quoteChar: document.getElementById('quoteChar')?.value,
+                encoding: document.getElementById('encoding')?.value,
+                sheetName: document.getElementById('sheetName')?.value,
+                autoSizeColumns: document.getElementById('autoSizeColumns')?.checked,
+                includeHeader: document.getElementById('includeHeader')?.checked,
+                strategyId: document.getElementById('strategyId')?.value
+            };
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.id = 'fileOptions';
+            input.name = 'fileOptions';
+            input.value = JSON.stringify(fileOptions);
+            document.getElementById('templateForm').appendChild(input);
+
+            console.log('Добавлены параметры формата файла:', fileOptions);
+        }
+
+        // Отправляем форму
+        document.getElementById('templateForm').submit();
+        return true;
     }
 </script>
 </body>

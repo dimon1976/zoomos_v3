@@ -1,6 +1,8 @@
 // src/main/java/my/java/controller/ExportTemplateController.java
 package my.java.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.Client;
@@ -154,7 +156,6 @@ public class ExportTemplateController {
                                @RequestParam(value = "isDefault", required = false) Boolean isDefault,
                                @RequestParam Map<String, String> allParams,
                                RedirectAttributes redirectAttributes) {
-
         try {
             // Проверяем существование клиента
             Client client = clientService.findClientEntityById(clientId)
@@ -166,72 +167,47 @@ public class ExportTemplateController {
             // Устанавливаем клиента
             template.setClient(client);
 
-            // Обрабатываем поля шаблона из формы
-            List<ExportTemplate.ExportField> fields = new ArrayList<>();
-            for (Map.Entry<String, String> entry : allParams.entrySet()) {
-                if (entry.getKey().startsWith("field_") && entry.getValue() != null && !entry.getValue().isEmpty()) {
-                    String fieldName = entry.getValue();
-
-                    // Создаем поле шаблона
-                    ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
-                    exportField.setOriginalField(fieldName);
-
-                    // Ищем заголовок для поля
-                    String headerKey = "header_" + fieldName.replace(".", "_");
-                    if (allParams.containsKey(headerKey)) {
-                        exportField.setDisplayName(allParams.get(headerKey));
-                    } else {
-                        // Если заголовок не задан, используем имя поля
-                        exportField.setDisplayName(fieldName.substring(fieldName.lastIndexOf('.') + 1));
-                    }
-
-                    fields.add(exportField);
-                }
+            // Проверяем наличие сохраняемых полей
+            if (template.getFields() == null) {
+                template.setFields(new ArrayList<>());
             }
 
-            // Если поля не были обработаны стандартным путем, используем параметры с префиксом fields[
-            if (fields.isEmpty()) {
-                Map<Integer, String> originalFields = new HashMap<>();
-                Map<Integer, String> displayNames = new HashMap<>();
-
-                for (Map.Entry<String, String> entry : allParams.entrySet()) {
-                    if (entry.getKey().startsWith("fields[") && entry.getKey().contains("].originalField")) {
-                        int index = extractIndex(entry.getKey(), "fields[", "].originalField");
-                        originalFields.put(index, entry.getValue());
-                    } else if (entry.getKey().startsWith("fields[") && entry.getKey().contains("].displayName")) {
-                        int index = extractIndex(entry.getKey(), "fields[", "].displayName");
-                        displayNames.put(index, entry.getValue());
-                    }
-                }
-
-                // Объединяем данные в поля шаблона
-                for (Integer index : originalFields.keySet()) {
-                    String originalField = originalFields.get(index);
-                    String displayName = displayNames.getOrDefault(index,
-                            originalField.substring(originalField.lastIndexOf('.') + 1));
-
-                    ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
-                    exportField.setOriginalField(originalField);
-                    exportField.setDisplayName(displayName);
-                    fields.add(exportField);
-                }
-            }
-
-            // Устанавливаем поля в шаблон
-            template.setFields(fields);
-
-            // Собираем дополнительные параметры файла
+            // Собираем параметры файла
             Map<String, String> fileOptions = new HashMap<>();
+
+            // Добавляем основные параметры файла
+            fileOptions.put("format", template.getFileType());
+
+            // Парсим параметры файла из формы (с префиксом file_)
             for (Map.Entry<String, String> entry : allParams.entrySet()) {
-                if (entry.getKey().startsWith("file_") ||
-                        entry.getKey().equals("encoding") ||
-                        entry.getKey().equals("delimiter") ||
-                        entry.getKey().equals("quoteChar") ||
-                        entry.getKey().equals("sheetName") ||
-                        entry.getKey().equals("autoSizeColumns") ||
-                        entry.getKey().equals("includeHeader")) {
-                    fileOptions.put(entry.getKey(), entry.getValue());
+                if (entry.getKey().startsWith("file_")) {
+                    String paramName = entry.getKey().substring("file_".length());
+                    fileOptions.put(paramName, entry.getValue());
+                    log.debug("Получен параметр файла: {}={}", paramName, entry.getValue());
                 }
+            }
+
+            // Добавляем параметры без префикса file_ для обратной совместимости
+            for (String paramName : new String[]{"delimiter", "quoteChar", "encoding", "sheetName", "autoSizeColumns", "includeHeader"}) {
+                if (allParams.containsKey(paramName) && !fileOptions.containsKey(paramName)) {
+                    fileOptions.put(paramName, allParams.get(paramName));
+                    log.debug("Получен параметр файла без префикса: {}={}", paramName, allParams.get(paramName));
+                }
+            }
+
+            // Устанавливаем параметры стратегии
+            if (template.getStrategyId() != null && !template.getStrategyId().isEmpty()) {
+                fileOptions.put("strategyId", template.getStrategyId());
+            }
+
+            // Сохраняем параметры файла как JSON
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                String fileOptionsJson = objectMapper.writeValueAsString(fileOptions);
+                template.setFileOptions(fileOptionsJson);
+                log.debug("Параметры файла сохранены в JSON: {}", fileOptionsJson);
+            } catch (JsonProcessingException e) {
+                log.warn("Не удалось сохранить параметры файла как JSON: {}", e.getMessage());
             }
 
             // Сохраняем или обновляем шаблон
@@ -290,6 +266,51 @@ public class ExportTemplateController {
         }
 
         return "redirect:/clients/" + clientId + "/export/templates";
+    }
+
+    /**
+     * Удаление поля из шаблона
+     */
+    @PostMapping("/{id}/remove-field")
+    public String removeField(@PathVariable Long clientId,
+                              @PathVariable Long id,
+                              @RequestParam("fieldIndex") int fieldIndex,
+                              RedirectAttributes redirectAttributes) {
+        try {
+            // Получаем шаблон
+            Optional<ExportTemplate> templateOpt = templateService.getTemplateById(id);
+            if (templateOpt.isEmpty()) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не найден");
+                return "redirect:/clients/" + clientId + "/export/templates";
+            }
+
+            ExportTemplate template = templateOpt.get();
+
+            // Проверяем, что шаблон принадлежит клиенту
+            if (!template.getClient().getId().equals(clientId)) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Шаблон не принадлежит данному клиенту");
+                return "redirect:/clients/" + clientId + "/export/templates";
+            }
+
+            // Проверяем, что индекс валидный
+            if (fieldIndex < 0 || fieldIndex >= template.getFields().size()) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Неверный индекс поля");
+                return "redirect:/clients/" + clientId + "/export/templates/" + id;
+            }
+
+            // Удаляем поле
+            template.getFields().remove(fieldIndex);
+
+            // Сохраняем шаблон
+            templateService.updateTemplate(id, template);
+
+            redirectAttributes.addFlashAttribute("successMessage", "Поле успешно удалено из шаблона");
+        } catch (Exception e) {
+            log.error("Ошибка при удалении поля из шаблона: {}", e.getMessage(), e);
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка: " + e.getMessage());
+        }
+
+        return "redirect:/clients/" + clientId + "/export/templates/" + id;
     }
 
     /**

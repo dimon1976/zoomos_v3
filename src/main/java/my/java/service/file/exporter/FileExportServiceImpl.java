@@ -51,13 +51,17 @@ public class FileExportServiceImpl implements FileExportService {
             Map<String, Object> filterParams,
             FileWritingOptions options) {
 
+        // Сортируем поля по порядку из опций, если указан
+        fields = applySortingToFields(fields, options);
+
         // Создаем запись об операции в БД
         FileOperation operation = createFileOperation(client, options.getFileType());
 
         // Запускаем асинхронную обработку
+        List<String> finalFields = fields;
         CompletableFuture<FileOperationDto> future = CompletableFuture.supplyAsync(() -> {
             try {
-                return exportData(client, entityType, fields, filterParams, options, operation);
+                return exportData(client, entityType, finalFields, filterParams, options, operation);
             } catch (Exception e) {
                 operation.markAsFailed(e.getMessage());
                 fileOperationRepository.save(operation);
@@ -86,6 +90,9 @@ public class FileExportServiceImpl implements FileExportService {
             FileOperation tempOperation) {
 
         try {
+            // Сортируем поля по порядку из опций, если указан
+            fields = applySortingToFields(fields, options);
+
             // Получаем данные для экспорта
             List<Map<String, String>> data = entityDataService.getEntityDataForExport(
                     entityType, fields, filterParams, client.getId());
@@ -139,6 +146,8 @@ public class FileExportServiceImpl implements FileExportService {
             operation.updateStageProgress("data_fetch", 0);
 
             log.info("Начало экспорта для клиента {}, тип сущности: {}", client.getId(), entityType);
+
+            // Получаем данные уже с отсортированными полями
             List<Map<String, String>> data = entityDataService.getEntityDataForExport(
                     entityType, fields, filterParams, client.getId());
 
@@ -241,6 +250,43 @@ public class FileExportServiceImpl implements FileExportService {
 
             fileOperationRepository.save(operation);
             throw new FileOperationException("Ошибка при экспорте данных: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Применяет сортировку полей в соответствии с указанным порядком
+     */
+    private List<String> applySortingToFields(List<String> fields, FileWritingOptions options) {
+        // Проверяем наличие параметра fieldsOrder
+        String fieldsOrderJson = options.getAdditionalParams().get("fieldsOrder");
+        if (fieldsOrderJson == null || fieldsOrderJson.isEmpty()) {
+            return fields; // Порядок не указан, возвращаем исходный список
+        }
+
+        try {
+            // Преобразуем JSON в список полей
+            List<String> orderedFields = objectMapper.readValue(fieldsOrderJson,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+
+            // Фильтруем, оставляя только те поля, которые есть в исходном списке
+            List<String> filteredOrderedFields = orderedFields.stream()
+                    .filter(fields::contains)
+                    .collect(Collectors.toList());
+
+            // Добавляем поля, которые есть в исходном списке, но нет в порядке
+            fields.forEach(field -> {
+                if (!filteredOrderedFields.contains(field)) {
+                    filteredOrderedFields.add(field);
+                }
+            });
+
+            log.debug("Применен пользовательский порядок полей: {} -> {}",
+                    fields.size(), filteredOrderedFields.size());
+
+            return filteredOrderedFields;
+        } catch (Exception e) {
+            log.warn("Ошибка при применении порядка полей: {}", e.getMessage());
+            return fields; // В случае ошибки возвращаем исходный список
         }
     }
 

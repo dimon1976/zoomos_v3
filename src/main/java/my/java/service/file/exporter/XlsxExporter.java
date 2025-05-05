@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -60,6 +59,9 @@ public class XlsxExporter implements FileExporter {
             operation.addStage("xlsx_export", "Экспорт данных в Excel");
             operation.updateStageProgress("xlsx_export", 0);
 
+            // Логирование порядка полей перед экспортом
+            log.debug("Порядок полей для экспорта в Excel: {}", fields);
+
             try (Workbook workbook = new XSSFWorkbook();
                  FileOutputStream fileOut = new FileOutputStream(filePath.toFile())) {
 
@@ -68,18 +70,10 @@ public class XlsxExporter implements FileExporter {
                 Sheet sheet = workbook.createSheet(sheetName);
 
                 // Создаем стиль заголовков
-                CellStyle headerStyle = workbook.createCellStyle();
-                Font headerFont = workbook.createFont();
-                headerFont.setBold(true);
-                headerStyle.setFont(headerFont);
-                headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
-                headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-                headerStyle.setBorderBottom(BorderStyle.THIN);
-                headerStyle.setBorderTop(BorderStyle.THIN);
-                headerStyle.setBorderLeft(BorderStyle.THIN);
-                headerStyle.setBorderRight(BorderStyle.THIN);
+                CellStyle headerStyle = createHeaderStyle(workbook);
 
                 // Запись заголовков, если нужно
+                int startRow = 0;
                 if (options.isIncludeHeader()) {
                     Row headerRow = sheet.createRow(0);
                     for (int i = 0; i < fields.size(); i++) {
@@ -92,10 +86,10 @@ public class XlsxExporter implements FileExporter {
                         cell.setCellValue(headerValue);
                         cell.setCellStyle(headerStyle);
                     }
+                    startRow = 1;
                 }
 
-                // Запись данных
-                int startRow = options.isIncludeHeader() ? 1 : 0;
+                // Запись данных в порядке указанных полей
                 int totalRecords = data.size();
                 AtomicInteger progressCounter = new AtomicInteger(0);
 
@@ -149,6 +143,25 @@ public class XlsxExporter implements FileExporter {
             operation.failStage("xlsx_export", e.getMessage());
             throw new FileOperationException("Ошибка при экспорте в Excel: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Создает стиль для заголовков таблицы
+     */
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle headerStyle = workbook.createCellStyle();
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerStyle.setFont(headerFont);
+        headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        headerStyle.setBorderBottom(BorderStyle.THIN);
+        headerStyle.setBorderTop(BorderStyle.THIN);
+        headerStyle.setBorderLeft(BorderStyle.THIN);
+        headerStyle.setBorderRight(BorderStyle.THIN);
+        headerStyle.setAlignment(HorizontalAlignment.CENTER);
+        headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        return headerStyle;
     }
 
     /**

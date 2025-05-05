@@ -69,7 +69,7 @@ public class CsvExporter implements FileExporter {
                          writer,
                          delimiter,          // разделитель
                          quoteChar,          // символ кавычек
-                         CSVWriter.DEFAULT_ESCAPE_CHARACTER,  // символ экранирования (в OpenCSV используется для CSV по формату RFC4180)
+                         CSVWriter.DEFAULT_ESCAPE_CHARACTER,  // символ экранирования
                          System.lineSeparator()  // перевод строки
                  )) {
 
@@ -107,11 +107,15 @@ public class CsvExporter implements FileExporter {
             result.add(headers);
         }
 
-        // Добавляем данные
+        // Логирование порядка полей перед экспортом
+        log.debug("Порядок полей для экспорта: {}", fields);
+
+        // Добавляем данные в том же порядке, что и поля
         for (Map<String, String> row : data) {
             String[] values = new String[fields.size()];
             for (int i = 0; i < fields.size(); i++) {
-                values[i] = row.getOrDefault(fields.get(i), "");
+                String field = fields.get(i);
+                values[i] = row.getOrDefault(field, "");
             }
             result.add(values);
         }

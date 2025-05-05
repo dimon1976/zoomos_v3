@@ -53,6 +53,8 @@
                   th:action="@{${currentUri}}" method="post" id="exportForm">
 
                 <input type="hidden" name="entityType" th:value="${selectedEntityType}">
+                <!-- Скрытое поле для хранения порядка полей -->
+                <input type="hidden" id="fieldsOrder" name="fieldsOrder">
 
                 <!-- Шаблоны экспорта -->
                 <div class="card mb-3">
@@ -62,7 +64,7 @@
                     <div class="card-body">
                         <div class="form-group mb-3">
                             <label for="templateId">Выберите шаблон:</label>
-                            <select id="templateId" name="templateId" class="form-control" onchange="this.form.action = window.location.pathname + '?entityType=' + document.querySelector('input[name=entityType]').value + '&templateId=' + this.value; this.form.method = 'get'; this.form.submit();">
+                            <select id="templateId" name="templateId" class="form-control">
                                 <option value="">Без шаблона</option>
                                 <option th:each="template : ${templates}"
                                         th:value="${template.id}"
@@ -71,9 +73,15 @@
                                     Шаблон
                                 </option>
                             </select>
+                            <div class="mt-2">
+                                <button type="submit" class="btn btn-outline-secondary"
+                                        formaction="" formmethod="get" name="loadTemplate">
+                                    <i class="fas fa-sync-alt"></i> Загрузить шаблон
+                                </button>
+                            </div>
                         </div>
                         <div class="form-check mb-3">
-                            <input type="checkbox" class="form-check-input" id="saveAsTemplate" name="saveAsTemplate" onchange="document.getElementById('templateNameGroup').style.display = this.checked ? 'block' : 'none';">
+                            <input type="checkbox" class="form-check-input" id="saveAsTemplate" name="saveAsTemplate" onchange="toggleTemplateNameField()">
                             <label class="form-check-label" for="saveAsTemplate">
                                 Сохранить текущие настройки как шаблон
                             </label>
@@ -94,8 +102,7 @@
                         <!-- Выбор формата файла -->
                         <div class="form-group mb-3">
                             <label for="format">Формат экспорта:</label>
-                            <select id="format" name="format" class="form-control" required
-                                    onchange="toggleFormatSettings()">
+                            <select id="format" name="format" class="form-control" required onchange="toggleFormatSettings()">
                                 <option value="csv" th:selected="${fileFormat == null || fileFormat == 'csv'}">CSV</option>
                                 <option value="xlsx" th:selected="${fileFormat == 'xlsx'}">Excel (XLSX)</option>
                             </select>
@@ -104,8 +111,7 @@
                         <!-- Стратегия обработки данных -->
                         <div class="form-group mb-3">
                             <label for="strategyId">Стратегия обработки данных:</label>
-                            <select id="strategyId" name="strategyId" class="form-control"
-                                    onchange="document.getElementById('strategyParams').style.display = this.value ? 'block' : 'none';">
+                            <select id="strategyId" name="strategyId" class="form-control" onchange="toggleStrategyParams()">
                                 <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">Стандартная (без обработки)</option>
                                 <option th:each="strategy : ${strategies}"
                                         th:value="${strategy.id}"
@@ -157,7 +163,6 @@
                                             <option value="UTF-8" selected>UTF-8</option>
                                             <option value="Windows-1251">Windows-1251</option>
                                             <option value="ISO-8859-1">ISO-8859-1</option>
-                                            <option value="UTF-16">UTF-16</option>
                                         </select>
                                     </div>
                                 </div>
@@ -384,21 +389,18 @@
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Для сохранения порядка полей -->
-                        <input type="hidden" id="fieldsOrder" name="fieldsOrder">
                     </div>
                 </div>
 
                 <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary" onclick="saveFieldOrder()">
                         <i class="fas fa-file-export"></i> Экспортировать
                     </button>
 
                     <!-- Кнопка прямого скачивания с диалогом сохранения -->
                     <button type="submit" class="btn btn-success ms-2"
                             th:formaction="@{${currentUri} + '/direct-download'}"
-                            formmethod="post">
+                            formmethod="post" onclick="saveFieldOrder()">
                         <i class="fas fa-download"></i> Скачать файл
                     </button>
 
@@ -411,60 +413,163 @@
     </div>
 </div>
 
-<script>
-    // Минимально необходимый JavaScript
+<script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function() {
-        // Инициализация состояния формы
-        toggleFormatSettings();
+        // Инициализация UI элементов
+        initFormState();
 
-        // Применение параметров шаблона, если они есть
-        if (document.getElementById('templateId').value) {
-            applyTemplateParams();
+        // Загружаем настройки из шаблона при его выборе
+        var templateId = document.getElementById('templateId');
+        if (templateId) {
+            // Кнопка загрузки шаблона уже добавлена вместо события change
+            // для предотвращения автоматической отправки формы при выборе
         }
+
+        // Инициализация шаблона, если он выбран
+        if ([[${selectedTemplate != null}]]) {
+            applyTemplateSettings();
+        }
+
+        // Скрываем/показываем поле имени шаблона
+        toggleTemplateNameField();
     });
 
-    // Переключение параметров формата файла
+    // Инициализация состояния формы
+    function initFormState() {
+        // Инициализируем переключатели форматов и параметров
+        toggleFormatSettings();
+        toggleStrategyParams();
+
+        // Загружаем сохраненные настройки из модели, если есть
+        applyFileOptions();
+    }
+
+    // Переключение настроек формата файла
     function toggleFormatSettings() {
-        const format = document.getElementById('format').value;
-        document.getElementById('csvParams').style.display = format === 'csv' ? 'block' : 'none';
-        document.getElementById('excelParams').style.display = format === 'xlsx' ? 'block' : 'none';
+        var format = document.getElementById('format').value;
+        var csvParams = document.getElementById('csvParams');
+        var excelParams = document.getElementById('excelParams');
+
+        if (csvParams && excelParams) {
+            csvParams.style.display = format === 'csv' ? 'block' : 'none';
+            excelParams.style.display = format === 'xlsx' ? 'block' : 'none';
+        }
+    }
+
+    // Переключение настроек стратегии
+    function toggleStrategyParams() {
+        var strategyId = document.getElementById('strategyId').value;
+        var strategyParams = document.getElementById('strategyParams');
+
+        if (strategyParams) {
+            strategyParams.style.display = strategyId && strategyId !== '' ? 'block' : 'none';
+        }
+    }
+
+    // Показать/скрыть поле названия шаблона
+    function toggleTemplateNameField() {
+        var saveAsTemplate = document.getElementById('saveAsTemplate');
+        var templateNameGroup = document.getElementById('templateNameGroup');
+
+        if (saveAsTemplate && templateNameGroup) {
+            templateNameGroup.style.display = saveAsTemplate.checked ? 'block' : 'none';
+        }
+    }
+
+    // Применение настроек из выбранного шаблона
+    function applyTemplateSettings() {
+        // Настройки применяются через серверный рендеринг
+        // Обеспечиваем согласованное состояние UI
+        toggleFormatSettings();
+        toggleStrategyParams();
+    }
+
+    // Применение сохраненных параметров файла
+    function applyFileOptions() {
+        // Файловые опции шаблона
+        var fileOptions = [[${selectedTemplate != null ? selectedTemplate.fileOptionsAsMap : null}]];
+
+        if (fileOptions) {
+            // Устанавливаем формат файла
+            if (fileOptions.format) {
+                var formatSelect = document.getElementById('format');
+                if (formatSelect) formatSelect.value = fileOptions.format;
+            }
+
+            // Параметры для CSV
+            if (fileOptions.delimiter) {
+                var delimiterSelect = document.getElementById('delimiter');
+                if (delimiterSelect) delimiterSelect.value = fileOptions.delimiter;
+            }
+
+            if (fileOptions.quoteChar) {
+                var quoteCharSelect = document.getElementById('quoteChar');
+                if (quoteCharSelect) quoteCharSelect.value = fileOptions.quoteChar;
+            }
+
+            if (fileOptions.encoding) {
+                var encodingSelect = document.getElementById('encoding');
+                if (encodingSelect) encodingSelect.value = fileOptions.encoding;
+            }
+
+            // Параметры для Excel
+            if (fileOptions.sheetName) {
+                var sheetNameInput = document.getElementById('sheetName');
+                if (sheetNameInput) sheetNameInput.value = fileOptions.sheetName;
+            }
+
+            if (fileOptions.autoSizeColumns !== undefined) {
+                var autoSizeColumnsCheckbox = document.getElementById('autoSizeColumns');
+                if (autoSizeColumnsCheckbox) {
+                    autoSizeColumnsCheckbox.checked =
+                        fileOptions.autoSizeColumns === true ||
+                        fileOptions.autoSizeColumns === "true";
+                }
+            }
+
+            // Общие параметры
+            if (fileOptions.includeHeader !== undefined) {
+                var includeHeaderCheckbox = document.getElementById('includeHeader');
+                if (includeHeaderCheckbox) {
+                    includeHeaderCheckbox.checked =
+                        fileOptions.includeHeader === true ||
+                        fileOptions.includeHeader === "true";
+                }
+            }
+
+            // Стратегия
+            if (fileOptions.strategyId) {
+                var strategySelect = document.getElementById('strategyId');
+                if (strategySelect) strategySelect.value = fileOptions.strategyId;
+                toggleStrategyParams();
+            }
+
+            // Обновляем UI форматов после установки значений
+            toggleFormatSettings();
+        }
     }
 
     // Выбрать все поля
     function selectAllFields() {
-        document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+        document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
             checkbox.checked = true;
         });
     }
 
     // Снять выбор со всех полей
     function deselectAllFields() {
-        document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+        document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
             checkbox.checked = false;
         });
     }
 
-    // Применение параметров шаблона
-    function applyTemplateParams() {
-        // Все необходимые параметры уже применены через Thymeleaf на сервере
-        // Только обновляем видимость элементов в зависимости от выбранных параметров
-        toggleFormatSettings();
-        const strategyId = document.getElementById('strategyId').value;
-        document.getElementById('strategyParams').style.display = strategyId ? 'block' : 'none';
-    }
-
-    // Функция для сохранения порядка полей (вызывать перед отправкой формы)
+    // Сохранение порядка полей перед отправкой формы
     function saveFieldOrder() {
-        const selectedFields = Array.from(document.querySelectorAll('.field-checkbox:checked'))
-            .map(checkbox => checkbox.value);
+        var selectedFields = Array.from(document.querySelectorAll('input[name="fields"]:checked'))
+            .map(function(checkbox) { return checkbox.value; });
+
         document.getElementById('fieldsOrder').value = JSON.stringify(selectedFields);
     }
-
-    // Добавляем обработчик отправки формы
-    document.getElementById('exportForm')?.addEventListener('submit', function(event) {
-        // Сохраняем порядок полей перед отправкой
-        saveFieldOrder();
-    });
 </script>
 </body>
 </html>

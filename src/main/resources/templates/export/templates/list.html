@@ -72,7 +72,7 @@
                                 </a>
                                 <form th:action="@{/clients/{clientId}/export/templates/{id}/delete(clientId=${client.id},id=${template.id})}"
                                       method="post" class="d-inline"
-                                      onsubmit="return confirm('Вы действительно хотите удалить шаблон ' + $(this).data('name') + '?');"
+                                      onsubmit="return confirm('Вы действительно хотите удалить шаблон ' + this.getAttribute('data-name') + '?');"
                                       th:data-name="${template.name}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="fas fa-trash"></i> Удалить

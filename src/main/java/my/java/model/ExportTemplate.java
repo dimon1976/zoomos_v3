@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import my.java.service.file.options.FileWritingOptions;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -39,9 +40,6 @@ public class ExportTemplate {
     @Column(name = "entity_type", nullable = false)
     private String entityType;
 
-    @Column(name = "file_type", nullable = false)
-    private String fileType;
-
     @ElementCollection
     @CollectionTable(name = "export_template_fields",
             joinColumns = @JoinColumn(name = "template_id"))
@@ -50,9 +48,6 @@ public class ExportTemplate {
 
     @Column(name = "fields_json", columnDefinition = "TEXT", nullable = false)
     private String fieldsJson = "[]";  // Значение по умолчанию - пустой массив
-
-    @Column(name = "options_json", columnDefinition = "TEXT", nullable = false)
-    private String optionsJson = "{}";  // Значение по умолчанию - пустой объект
 
     @Column(name = "strategy_id")
     private String strategyId;
@@ -66,8 +61,16 @@ public class ExportTemplate {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt = ZonedDateTime.now();
 
+    @Column(name = "options_json", columnDefinition = "TEXT", nullable = false)
+    private String optionsJson = "{}";  // Значение по умолчанию - пустой объект
+
+    // Временное поле для обратной совместимости
     @Column(name = "file_options", columnDefinition = "TEXT")
     private String fileOptions;
+
+    // Параметры форматирования в виде объекта
+    @Transient
+    private FileWritingOptions exportOptions = new FileWritingOptions();
 
     @Embeddable
     @Data
@@ -94,14 +97,11 @@ public class ExportTemplate {
             this.fieldsJson = "[]";
         }
 
-        // Сериализуем параметры файла
+        // Сериализуем параметры экспорта
         try {
-            // Если fileOptions не задан, создаем пустой Map
-            Map<String, String> options = (fileOptions != null && !fileOptions.isEmpty()) ?
-                    objectMapper.readValue(fileOptions, new TypeReference<Map<String, String>>() {}) :
-                    new HashMap<>();
-
-            this.optionsJson = objectMapper.writeValueAsString(options);
+            this.optionsJson = objectMapper.writeValueAsString(exportOptions);
+            // Заполняем fileOptions для обратной совместимости
+            this.fileOptions = this.optionsJson;
         } catch (JsonProcessingException e) {
             log.error("Ошибка при сериализации параметров в JSON: {}", e.getMessage());
             // Устанавливаем пустой объект, чтобы избежать NULL значения
@@ -130,32 +130,77 @@ public class ExportTemplate {
             }
         }
 
-        // Загрузка параметров из optionsJson в fileOptions
-        if (this.optionsJson != null && !this.optionsJson.isEmpty() &&
-                (this.fileOptions == null || this.fileOptions.isEmpty())) {
+        // Загрузка параметров из optionsJson
+        if (this.optionsJson != null && !this.optionsJson.isEmpty()) {
             try {
-                this.fileOptions = this.optionsJson;
+                // Пытаемся загрузить как FileWritingOptions
+                this.exportOptions = objectMapper.readValue(this.optionsJson, FileWritingOptions.class);
             } catch (Exception e) {
-                log.error("Ошибка при обработке options_json: {}", e.getMessage());
+                log.warn("Не удалось десериализовать optionsJson в FileWritingOptions: {}", e.getMessage());
+
+                // Пытаемся загрузить как Map и создать FileWritingOptions
+                try {
+                    Map<String, String> optionsMap = objectMapper.readValue(
+                            this.optionsJson, new TypeReference<Map<String, String>>() {});
+                    this.exportOptions = FileWritingOptions.fromMap(optionsMap);
+                } catch (Exception ex) {
+                    log.error("Ошибка при создании FileWritingOptions из Map: {}", ex.getMessage());
+                    this.exportOptions = new FileWritingOptions();
+                }
+            }
+        } else if (this.fileOptions != null && !this.fileOptions.isEmpty()) {
+            // Пробуем использовать fileOptions для обратной совместимости
+            try {
+                Map<String, String> optionsMap = objectMapper.readValue(
+                        this.fileOptions, new TypeReference<Map<String, String>>() {});
+                this.exportOptions = FileWritingOptions.fromMap(optionsMap);
+            } catch (Exception e) {
+                log.error("Ошибка при создании FileWritingOptions из fileOptions: {}", e.getMessage());
+                this.exportOptions = new FileWritingOptions();
             }
         }
     }
 
     /**
-     * Возвращает параметры экспорта файла в виде Map
+     * Получает FileWritingOptions для экспорта
      */
-    public Map<String, String> getFileOptionsAsMap() {
-        String jsonToUse = fileOptions != null && !fileOptions.isEmpty() ? fileOptions : optionsJson;
-
-        if (jsonToUse == null || jsonToUse.isEmpty()) {
-            return new HashMap<>();
+    public FileWritingOptions getExportOptions() {
+        if (this.exportOptions == null) {
+            this.exportOptions = new FileWritingOptions();
         }
+        return this.exportOptions;
+    }
 
+    /**
+     * Устанавливает FileWritingOptions для экспорта
+     */
+    public void setExportOptions(FileWritingOptions options) {
+        this.exportOptions = options;
+
+        // Обновляем JSON для сохранения
         try {
-            return objectMapper.readValue(jsonToUse, new TypeReference<Map<String, String>>() {});
+            this.optionsJson = objectMapper.writeValueAsString(options);
+            this.fileOptions = this.optionsJson; // для обратной совместимости
         } catch (JsonProcessingException e) {
-            log.warn("Ошибка при чтении параметров файла: {}", e.getMessage());
-            return new HashMap<>();
+            log.error("Ошибка при сериализации FileWritingOptions: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Получает тип файла из параметров экспорта
+     */
+    @Transient
+    public String getFileType() {
+        return exportOptions != null ? exportOptions.getFileType() : null;
+    }
+
+    /**
+     * Устанавливает тип файла в параметрах экспорта
+     */
+    public void setFileType(String fileType) {
+        if (exportOptions == null) {
+            exportOptions = new FileWritingOptions();
+        }
+        exportOptions.setFileType(fileType);
     }
 }

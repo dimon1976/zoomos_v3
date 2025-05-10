@@ -1,7 +1,6 @@
 // src/main/java/my/java/controller/ExportTemplateController.java
 package my.java.controller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +10,7 @@ import my.java.service.client.ClientService;
 import my.java.service.file.exporter.ExportTemplateService;
 import my.java.service.file.metadata.EntityMetadata;
 import my.java.service.file.metadata.EntityRegistry;
+import my.java.service.file.options.FileWritingOptions;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -71,6 +71,9 @@ public class ExportTemplateController {
                     // Добавляем поля шаблона в модель
                     model.addAttribute("fields", template.getFields());
 
+                    // Добавляем параметры экспорта в модель
+                    addExportOptionsToModel(model, template.getExportOptions());
+
                     // Загружаем метаданные полей для типа сущности шаблона
                     loadEntityFields(model, template.getEntityType());
 
@@ -105,11 +108,18 @@ public class ExportTemplateController {
                     ExportTemplate template = new ExportTemplate();
                     template.setClient(client);
                     template.setEntityType(entityType);
-                    template.setFileType("csv"); // По умолчанию CSV
+
+                    // Создаем настройки экспорта по умолчанию
+                    FileWritingOptions options = new FileWritingOptions();
+                    options.setFileType("csv"); // По умолчанию CSV
+                    template.setExportOptions(options);
 
                     model.addAttribute("template", template);
                     model.addAttribute("client", client);
                     model.addAttribute("isNew", true);
+
+                    // Добавляем параметры экспорта в модель
+                    addExportOptionsToModel(model, options);
 
                     // Загружаем метаданные полей для выбранного типа сущности
                     loadEntityFields(model, entityType);
@@ -148,12 +158,46 @@ public class ExportTemplateController {
     }
 
     /**
+     * Добавляет параметры экспорта в модель
+     */
+    private void addExportOptionsToModel(Model model, FileWritingOptions options) {
+        model.addAttribute("fileFormat", options.getFileType());
+        model.addAttribute("includeHeader", options.isIncludeHeader());
+
+        // Параметры для CSV
+        if (options.getDelimiter() != null) {
+            model.addAttribute("delimiter", options.getDelimiter().toString());
+        }
+
+        if (options.getQuoteChar() != null) {
+            model.addAttribute("quoteChar", options.getQuoteChar().toString());
+        }
+
+        if (options.getCharset() != null) {
+            model.addAttribute("encoding", options.getCharset().name());
+        }
+
+        // Параметры для Excel
+        if (options.getSheetName() != null) {
+            model.addAttribute("sheetName", options.getSheetName());
+        }
+
+        model.addAttribute("autoSizeColumns", options.isAutoSizeColumns());
+
+        // Стратегия
+        if (options.getAdditionalParams() != null && options.getAdditionalParams().containsKey("strategyId")) {
+            model.addAttribute("strategyId", options.getAdditionalParams().get("strategyId"));
+        }
+    }
+
+    /**
      * Сохранение шаблона
      */
     @PostMapping("/save")
     public String saveTemplate(@PathVariable Long clientId,
                                @ModelAttribute ExportTemplate template,
                                @RequestParam(value = "isDefault", required = false) Boolean isDefault,
+                               @RequestParam(value = "strategyId", required = false) String strategyId,
                                @RequestParam Map<String, String> allParams,
                                RedirectAttributes redirectAttributes) {
         try {
@@ -167,48 +211,23 @@ public class ExportTemplateController {
             // Устанавливаем клиента
             template.setClient(client);
 
+            // Устанавливаем стратегию
+            template.setStrategyId(strategyId);
+
             // Проверяем наличие сохраняемых полей
             if (template.getFields() == null) {
                 template.setFields(new ArrayList<>());
             }
 
-            // Собираем параметры файла
-            Map<String, String> fileOptions = new HashMap<>();
+            // Создаем и заполняем настройки экспорта из параметров формы
+            FileWritingOptions options = createOptionsFromParams(allParams);
 
-            // Добавляем основные параметры файла
-            fileOptions.put("format", template.getFileType());
-
-            // Парсим параметры файла из формы (с префиксом file_)
-            for (Map.Entry<String, String> entry : allParams.entrySet()) {
-                if (entry.getKey().startsWith("file_")) {
-                    String paramName = entry.getKey().substring("file_".length());
-                    fileOptions.put(paramName, entry.getValue());
-                    log.debug("Получен параметр файла: {}={}", paramName, entry.getValue());
-                }
+            // Если стратегия указана, добавляем ее в параметры
+            if (strategyId != null && !strategyId.isEmpty()) {
+                options.getAdditionalParams().put("strategyId", strategyId);
             }
 
-            // Добавляем параметры без префикса file_ для обратной совместимости
-            for (String paramName : new String[]{"delimiter", "quoteChar", "encoding", "sheetName", "autoSizeColumns", "includeHeader"}) {
-                if (allParams.containsKey(paramName) && !fileOptions.containsKey(paramName)) {
-                    fileOptions.put(paramName, allParams.get(paramName));
-                    log.debug("Получен параметр файла без префикса: {}={}", paramName, allParams.get(paramName));
-                }
-            }
-
-            // Устанавливаем параметры стратегии
-            if (template.getStrategyId() != null && !template.getStrategyId().isEmpty()) {
-                fileOptions.put("strategyId", template.getStrategyId());
-            }
-
-            // Сохраняем параметры файла как JSON
-            try {
-                ObjectMapper objectMapper = new ObjectMapper();
-                String fileOptionsJson = objectMapper.writeValueAsString(fileOptions);
-                template.setFileOptions(fileOptionsJson);
-                log.debug("Параметры файла сохранены в JSON: {}", fileOptionsJson);
-            } catch (JsonProcessingException e) {
-                log.warn("Не удалось сохранить параметры файла как JSON: {}", e.getMessage());
-            }
+            template.setExportOptions(options);
 
             // Сохраняем или обновляем шаблон
             if (template.getId() == null) {
@@ -230,19 +249,199 @@ public class ExportTemplateController {
     }
 
     /**
-     * Извлекает индекс из строки формата "prefix[index]suffix"
+     * Сохранение шаблона из формы экспорта
      */
-    private int extractIndex(String key, String prefix, String suffix) {
-        int startIndex = key.indexOf(prefix) + prefix.length();
-        int endIndex = key.indexOf(suffix);
-        if (startIndex >= 0 && endIndex > startIndex) {
+    @PostMapping("/save-from-export")
+    public String saveTemplateFromExport(
+            @PathVariable Long clientId,
+            @RequestParam("templateName") String templateName,
+            @RequestParam(value = "templateId", required = false) Long templateId,
+            @RequestParam("entityType") String entityType,
+            @RequestParam("format") String format,
+            @RequestParam(value = "strategyId", required = false) String strategyId,
+            @RequestParam(value = "fields", required = false) List<String> fields,
+            @RequestParam Map<String, String> allParams,
+            RedirectAttributes redirectAttributes) {
+
+        log.info("Получен запрос на сохранение шаблона из формы экспорта. Клиент: {}, Сущность: {}, Имя шаблона: {}, templateId: {}",
+                clientId, entityType, templateName, templateId);
+        log.info("Получено {} полей для шаблона", fields != null ? fields.size() : 0);
+        log.info("Формат: {}, Стратегия: {}", format, strategyId);
+
+        try {
+            // Проверяем существование клиента
+            Client client = clientService.findClientEntityById(clientId)
+                    .orElseThrow(() -> new IllegalArgumentException("Клиент не найден: " + clientId));
+
+            // Проверяем наличие полей
+            if (fields == null || fields.isEmpty()) {
+                log.error("Не выбраны поля для шаблона");
+                throw new IllegalArgumentException("Необходимо выбрать хотя бы одно поле для шаблона");
+            }
+
+            ExportTemplate template;
+            boolean isUpdate = false;
+
+            // Проверяем, обновляем ли мы существующий шаблон
+            if (templateId != null) {
+                log.info("Обновляем существующий шаблон с ID: {}", templateId);
+                template = templateService.getTemplateById(templateId)
+                        .orElseThrow(() -> new IllegalArgumentException("Шаблон с ID " + templateId + " не найден"));
+
+                // Проверяем, принадлежит ли шаблон клиенту
+                if (!template.getClient().getId().equals(clientId)) {
+                    log.error("Шаблон с ID {} не принадлежит клиенту {}", templateId, clientId);
+                    throw new IllegalArgumentException("Шаблон не принадлежит указанному клиенту");
+                }
+
+                // Сохраняем существующие поля, если новые поля не переданы
+                if (fields.isEmpty() && !template.getFields().isEmpty()) {
+                    log.warn("Не получены новые поля, сохраняем существующие ({} полей)", template.getFields().size());
+                    fields = template.getFields().stream()
+                            .map(ExportTemplate.ExportField::getOriginalField)
+                            .collect(Collectors.toList());
+                }
+
+                isUpdate = true;
+            } else {
+                // Создаем новый шаблон
+                log.info("Создаем новый шаблон");
+                template = new ExportTemplate();
+                template.setClient(client);
+                template.setEntityType(entityType);
+            }
+
+            // Обновляем основные поля шаблона
+            template.setName(templateName);
+            template.setStrategyId(strategyId);
+
+            // Создаем настройки экспорта из параметров
+            FileWritingOptions options = createOptionsFromParams(allParams);
+            options.setFileType(format);
+
+            // Добавляем стратегию в параметры, если указана
+            if (strategyId != null && !strategyId.isEmpty()) {
+                options.getAdditionalParams().put("strategyId", strategyId);
+            }
+
+            // Устанавливаем настройки экспорта
+            template.setExportOptions(options);
+
+            log.info("Создан объект FileWritingOptions: {}", options);
+
+            // Обновляем поля шаблона
+            if (!fields.isEmpty()) {
+                List<ExportTemplate.ExportField> exportFields = new ArrayList<>();
+                for (String field : fields) {
+                    ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
+                    exportField.setOriginalField(field);
+
+                    // Проверяем, задан ли пользовательский заголовок
+                    String headerParam = "header_" + field.replace(".", "_");
+                    if (allParams.containsKey(headerParam)) {
+                        exportField.setDisplayName(allParams.get(headerParam));
+                    } else {
+                        // Проверяем, существует ли заголовок в текущих полях шаблона
+                        if (isUpdate) {
+                            Optional<ExportTemplate.ExportField> existingField = template.getFields().stream()
+                                    .filter(f -> f.getOriginalField().equals(field))
+                                    .findFirst();
+
+                            if (existingField.isPresent()) {
+                                exportField.setDisplayName(existingField.get().getDisplayName());
+                            } else {
+                                exportField.setDisplayName(getDefaultDisplayName(field));
+                            }
+                        } else {
+                            exportField.setDisplayName(getDefaultDisplayName(field));
+                        }
+                    }
+
+                    exportFields.add(exportField);
+                }
+
+                // Устанавливаем новые поля
+                template.setFields(exportFields);
+                log.info("Установлено {} полей в шаблоне", exportFields.size());
+            } else {
+                log.warn("Не установлены поля для шаблона!");
+            }
+
+            // Сохраняем шаблон
+            if (isUpdate) {
+                ExportTemplate updatedTemplate = templateService.updateTemplate(templateId, template);
+                log.info("Шаблон с ID {} успешно обновлен. Содержит {} полей",
+                        templateId, updatedTemplate.getFields().size());
+                redirectAttributes.addFlashAttribute("successMessage",
+                        "Шаблон '" + templateName + "' успешно обновлен");
+            } else {
+                ExportTemplate savedTemplate = templateService.saveTemplate(template);
+                log.info("Новый шаблон успешно создан с ID: {}. Содержит {} полей",
+                        savedTemplate.getId(), savedTemplate.getFields().size());
+                redirectAttributes.addFlashAttribute("successMessage",
+                        "Шаблон '" + templateName + "' успешно сохранен");
+            }
+
+            // Возвращаемся на страницу экспорта
+            return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
+
+        } catch (Exception e) {
+            log.error("Ошибка при сохранении шаблона из формы экспорта: {}", e.getMessage(), e);
+            redirectAttributes.addFlashAttribute("errorMessage", "Ошибка: " + e.getMessage());
+            return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
+        }
+    }
+
+    /**
+     * Создает объект FileWritingOptions из параметров запроса
+     */
+    private FileWritingOptions createOptionsFromParams(Map<String, String> params) {
+        FileWritingOptions options = new FileWritingOptions();
+
+        // Устанавливаем тип файла
+        if (params.containsKey("format")) {
+            options.setFileType(params.get("format"));
+        }
+
+        // Общие настройки
+        if (params.containsKey("includeHeader")) {
+            options.setIncludeHeader(Boolean.parseBoolean(params.get("includeHeader")));
+        }
+
+        // Настройки для CSV
+        if (params.containsKey("delimiter") && !params.get("delimiter").isEmpty()) {
+            options.setDelimiter(params.get("delimiter").charAt(0));
+        }
+
+        if (params.containsKey("quoteChar") && !params.get("quoteChar").isEmpty()) {
+            options.setQuoteChar(params.get("quoteChar").charAt(0));
+        }
+
+        if (params.containsKey("encoding") && !params.get("encoding").isEmpty()) {
             try {
-                return Integer.parseInt(key.substring(startIndex, endIndex));
-            } catch (NumberFormatException e) {
-                log.warn("Не удалось извлечь индекс из ключа: {}", key);
+                options.setCharset(java.nio.charset.Charset.forName(params.get("encoding")));
+            } catch (Exception e) {
+                log.warn("Неверная кодировка: {}, используется UTF-8", params.get("encoding"));
             }
         }
-        return -1;
+
+        // Настройки для Excel
+        if (params.containsKey("sheetName")) {
+            options.setSheetName(params.get("sheetName"));
+        }
+
+        if (params.containsKey("autoSizeColumns")) {
+            options.setAutoSizeColumns(Boolean.parseBoolean(params.get("autoSizeColumns")));
+        }
+
+        // Дополнительные параметры (включая параметры стратегии)
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            if (entry.getKey().startsWith("strategy_") && !entry.getValue().isEmpty()) {
+                options.getAdditionalParams().put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return options;
     }
 
     /**
@@ -337,6 +536,32 @@ public class ExportTemplateController {
     }
 
     /**
+     * Получение отображаемого имени поля по умолчанию
+     */
+    private String getDefaultDisplayName(String field) {
+        // Отделяем префикс сущности, если есть
+        int dotIndex = field.lastIndexOf('.');
+        if (dotIndex > 0) {
+            field = field.substring(dotIndex + 1);
+        }
+
+        // Преобразуем camelCase в читаемый текст
+        StringBuilder formatted = new StringBuilder();
+        for (int i = 0; i < field.length(); i++) {
+            char c = field.charAt(i);
+            if (i == 0) {
+                formatted.append(Character.toUpperCase(c));
+            } else if (Character.isUpperCase(c)) {
+                formatted.append(' ').append(c);
+            } else {
+                formatted.append(c);
+            }
+        }
+
+        return formatted.toString();
+    }
+
+    /**
      * API для загрузки доступных шаблонов
      */
     @GetMapping("/api/list")
@@ -388,7 +613,7 @@ public class ExportTemplateController {
                         result.put("strategyId", template.getStrategyId() != null ? template.getStrategyId() : "");
                         result.put("isDefault", template.isDefault());
                         result.put("fields", template.getFields());
-                        result.put("fileOptions", template.getFileOptionsAsMap());
+                        result.put("exportOptions", template.getExportOptions());
 
                         return ResponseEntity.ok(result);
                     })

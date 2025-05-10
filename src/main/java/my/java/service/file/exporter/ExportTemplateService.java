@@ -175,6 +175,9 @@ public class ExportTemplateService {
                         // Очищаем существующие поля и добавляем новые
                         template.getFields().clear();
                         template.getFields().addAll(updatedTemplate.getFields());
+
+                        // Явно вызываем метод синхронизации полей с JSON
+                        template.updateJsonFields();
                     } else {
                         log.warn("Переданный шаблон не содержит полей! Сохраняем существующие: {}",
                                 template.getFields().size());
@@ -184,8 +187,13 @@ public class ExportTemplateService {
                     template.setUpdatedAt(ZonedDateTime.now());
 
                     // Сохраняем обновленный шаблон
-                    ExportTemplate savedTemplate = templateRepository.save(template);
-                    log.info("Шаблон успешно обновлен: {}", savedTemplate.getName());
+                    ExportTemplate savedTemplate = templateRepository.saveAndFlush(template);
+
+                    // Принудительно перезагружаем данные из JSON
+                    savedTemplate.loadFromJson();
+
+                    log.info("Шаблон успешно обновлен: {}, содержит {} полей",
+                            savedTemplate.getName(), savedTemplate.getFields().size());
                     return savedTemplate;
                 })
                 .orElseThrow(() -> {

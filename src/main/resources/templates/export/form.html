@@ -57,6 +57,7 @@
                     <input type="hidden" id="templateFormat" name="format" value="csv">
                     <input type="hidden" id="templateStrategyId" name="strategyId" value="">
                     <input type="hidden" id="templateFieldsOrder" name="fieldsOrder" value="">
+                    <!-- Исправляем дублирование name="templateId" в скрытой форме, т.к. уже есть поле с таким именем -->
                     <input type="hidden" id="hiddenTemplateId" name="templateId" value="">
                     <input type="hidden" id="hiddenTemplateName" name="templateName" value="">
                     <!-- Поля будут добавлены динамически в JavaScript -->
@@ -437,78 +438,111 @@
 <script>
     // Настройка функций работы с шаблонами
     function setupTemplateHandlers() {
-        console.log('Настройка обработчиков шаблонов');
+        console.log('======= НАЧАЛО НАСТРОЙКИ ОБРАБОТЧИКОВ ШАБЛОНОВ =======');
 
         // Кнопка сохранения шаблона
         const saveBtn = document.getElementById('saveTemplateBtn');
         if (saveBtn) {
+            console.log('Настройка обработчика для кнопки "Сохранить как шаблон"');
             saveBtn.addEventListener('click', function() {
+                console.log('Нажата кнопка "Сохранить как шаблон"');
                 const templateName = document.getElementById('templateName').value;
+                console.log('Введенное имя шаблона:', templateName);
+
                 if (!templateName || templateName.trim() === '') {
+                    console.log('Ошибка: пустое имя шаблона');
                     alert('Пожалуйста, введите имя шаблона');
                     return;
                 }
 
                 // Проверяем, что хотя бы одно поле выбрано
                 const selectedFields = document.querySelectorAll('input[name="fields"]:checked');
+                console.log('Количество выбранных полей:', selectedFields.length);
+
                 if (selectedFields.length === 0) {
+                    console.log('Ошибка: не выбрано ни одно поле');
                     alert('Выберите хотя бы одно поле для шаблона');
                     return;
                 }
 
                 // Устанавливаем имя шаблона
                 document.getElementById('hiddenTemplateName').value = templateName;
+                console.log('Установлено hiddenTemplateName:', templateName);
 
                 // Сбрасываем ID шаблона для создания нового
                 document.getElementById('hiddenTemplateId').value = '';
+                console.log('Сброшено hiddenTemplateId для создания нового шаблона');
 
                 saveTemplate();
             });
+        } else {
+            console.error('Кнопка saveTemplateBtn не найдена!');
         }
 
         // Кнопка обновления шаблона
         const updateBtn = document.getElementById('updateTemplateBtn');
         if (updateBtn) {
+            console.log('Настройка обработчика для кнопки "Обновить шаблон"');
             updateBtn.addEventListener('click', function() {
+                console.log('Нажата кнопка "Обновить шаблон"');
                 const templateName = document.getElementById('templateName').value;
+                console.log('Введенное имя шаблона:', templateName);
+
                 if (!templateName || templateName.trim() === '') {
+                    console.log('Ошибка: пустое имя шаблона');
                     alert('Пожалуйста, введите имя шаблона');
                     return;
                 }
 
                 // Проверяем, что хотя бы одно поле выбрано
                 const selectedFields = document.querySelectorAll('input[name="fields"]:checked');
+                console.log('Количество выбранных полей:', selectedFields.length);
+
                 if (selectedFields.length === 0) {
+                    console.log('Ошибка: не выбрано ни одно поле');
                     alert('Выберите хотя бы одно поле для шаблона');
                     return;
                 }
 
                 // Получаем ID выбранного шаблона
                 const templateId = document.getElementById('templateId').value;
+                console.log('ID выбранного шаблона:', templateId);
+
                 if (!templateId) {
+                    console.log('Ошибка: не выбран шаблон для обновления');
                     alert('Выберите шаблон для обновления');
                     return;
                 }
 
                 // Устанавливаем имя шаблона
                 document.getElementById('hiddenTemplateName').value = templateName;
+                console.log('Установлено hiddenTemplateName:', templateName);
 
                 // Устанавливаем ID шаблона для обновления
                 document.getElementById('hiddenTemplateId').value = templateId;
+                console.log('Установлено hiddenTemplateId для обновления:', templateId);
 
-                console.log('Обновление шаблона с ID:', templateId);
-                console.log('Имя шаблона:', templateName);
+                // Проверяем, установилось ли значение
+                const checkValue = document.getElementById('hiddenTemplateId').value;
+                console.log('Проверка установленного значения hiddenTemplateId:', checkValue);
 
+                console.log('Вызов функции saveTemplate() для обновления шаблона');
                 saveTemplate();
             });
+        } else {
+            console.error('Кнопка updateTemplateBtn не найдена!');
         }
 
         // Обработчик изменения выбранного шаблона
         const templateSelect = document.getElementById('templateId');
         if (templateSelect) {
+            console.log('Настройка обработчика для выпадающего списка шаблонов');
             templateSelect.addEventListener('change', function() {
                 const templateId = this.value;
+                console.log('Выбран шаблон с ID:', templateId);
+
                 const updateBtn = document.getElementById('updateTemplateBtn');
+                console.log('Кнопка updateTemplateBtn:', updateBtn);
 
                 if (templateId) {
                     // Если выбран шаблон, показываем кнопку обновления
@@ -532,16 +566,36 @@
 
                     // Очищаем поле имени шаблона
                     document.getElementById('templateName').value = '';
+                    console.log('Очищено поле имени шаблона');
                 }
             });
+        } else {
+            console.error('Выпадающий список templateId не найден!');
         }
+
+        console.log('======= КОНЕЦ НАСТРОЙКИ ОБРАБОТЧИКОВ ШАБЛОНОВ =======');
     }
 
     // Функция для сохранения шаблона
     function saveTemplate() {
-        console.log('Начало функции saveTemplate()');
+        console.log('======= НАЧАЛО ФУНКЦИИ SAVE TEMPLATE =======');
         const templateForm = document.getElementById('saveTemplateForm');
         const mainForm = document.getElementById('exportForm');
+
+        // Проверка наличия формы
+        if (!templateForm) {
+            console.error('Критическая ошибка: форма saveTemplateForm не найдена в DOM');
+            return false;
+        }
+
+        // Логирование текущего состояния формы перед изменениями
+        console.log('URL формы:', templateForm.action);
+        console.log('Метод формы:', templateForm.method);
+
+        // Проверка ID шаблона
+        const templateIdField = document.getElementById('hiddenTemplateId');
+        console.log('Поле hiddenTemplateId:', templateIdField);
+        console.log('Значение hiddenTemplateId перед обработкой:', templateIdField ? templateIdField.value : 'не найдено');
 
         // Копируем имя шаблона
         const templateName = document.getElementById('templateName').value;
@@ -549,10 +603,25 @@
 
         // Обновляем скрытое поле для имени шаблона
         document.getElementById('hiddenTemplateName').value = templateName;
+        console.log('Установлено hiddenTemplateName:', document.getElementById('hiddenTemplateName').value);
 
         // Получаем режим работы (создание или обновление)
         const isUpdate = document.getElementById('hiddenTemplateId').value !== '';
         console.log('Режим работы:', isUpdate ? 'Обновление' : 'Создание');
+
+        // Проверяем параметр templateId при обновлении
+        if (isUpdate) {
+            const templateId = document.getElementById('hiddenTemplateId').value;
+            console.log('ID шаблона для обновления:', templateId);
+
+            // Проверяем, существует ли в форме поле с именем templateId
+            const templateIdInputs = templateForm.querySelectorAll('input[name="templateId"]');
+            console.log('Найдено полей с именем templateId:', templateIdInputs.length);
+            templateIdInputs.forEach((input, index) => {
+                console.log(`templateId поле #${index + 1}:`, input);
+                console.log(`templateId значение #${index + 1}:`, input.value);
+            });
+        }
 
         // Получаем выбранные поля
         const selectedFields = Array.from(document.querySelectorAll('input[name="fields"]:checked'));
@@ -560,9 +629,11 @@
 
         // Очищаем существующие скрытые поля для выбранных полей и заголовков
         const existingFields = templateForm.querySelectorAll('input[name="fields"]');
+        console.log('Удаление существующих полей:', existingFields.length);
         existingFields.forEach(field => field.remove());
 
         const existingHeaders = templateForm.querySelectorAll('input[name^="header_"]');
+        console.log('Удаление существующих заголовков:', existingHeaders.length);
         existingHeaders.forEach(header => header.remove());
 
         // Проверяем, что есть выбранные поля
@@ -573,6 +644,7 @@
         }
 
         // Добавляем выбранные поля в форму шаблона
+        console.log('Добавление полей в форму:');
         selectedFields.forEach((field, index) => {
             console.log(`Добавление поля ${index + 1}:`, field.value);
             const fieldInput = document.createElement('input');
@@ -638,11 +710,33 @@
         document.getElementById('templateFieldsOrder').value = fieldsOrder;
 
         // Проверяем содержимое формы перед отправкой
-        console.log('URL формы:', templateForm.action);
+        console.log('URL формы перед отправкой:', templateForm.action);
+
+        // Повторная проверка ID шаблона перед отправкой
+        if (isUpdate) {
+            // Проверка наличия параметра templateId в форме
+            const finalTemplateIdFields = templateForm.querySelectorAll('input[name="templateId"]');
+            console.log('Количество полей templateId перед отправкой:', finalTemplateIdFields.length);
+
+            if (finalTemplateIdFields.length === 0) {
+                // Если поле отсутствует, создаем его явно
+                console.log('CRITICAL: Поле templateId отсутствует в форме! Создаем его.');
+                const templateIdInput = document.createElement('input');
+                templateIdInput.type = 'hidden';
+                templateIdInput.name = 'templateId';
+                templateIdInput.value = document.getElementById('hiddenTemplateId').value;
+                templateForm.appendChild(templateIdInput);
+                console.log('Создано поле templateId со значением:', templateIdInput.value);
+            } else {
+                finalTemplateIdFields.forEach((field, index) => {
+                    console.log(`Финальное поле templateId #${index + 1}:`, field.value);
+                });
+            }
+        }
 
         // Получаем все поля формы для логирования
         const allInputs = templateForm.querySelectorAll('input[type="hidden"]');
-        console.log('Все поля формы:');
+        console.log('Все поля формы перед отправкой:');
         allInputs.forEach(input => {
             console.log(`${input.name}: ${input.value}`);
         });
@@ -666,21 +760,37 @@
 
         // Отправляем форму
         console.log('Отправка формы...');
+
+        // Преобразование формы в FormData для логирования окончательного содержимого
+        const formData = new FormData(templateForm);
+        console.log('Содержимое FormData:');
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+
         templateForm.submit();
         console.log('Форма отправлена');
+        console.log('======= КОНЕЦ ФУНКЦИИ SAVE TEMPLATE =======');
         return true;
     }
 
+
     // Вспомогательная функция для добавления скрытого поля
     function addHiddenInput(form, name, value) {
+        console.log(`Добавление/обновление скрытого поля ${name} со значением ${value}`);
+
         let input = form.querySelector(`input[name="${name}"]`);
         if (!input) {
+            console.log(`Поле ${name} не найдено, создаем новое`);
             input = document.createElement('input');
             input.type = 'hidden';
             input.name = name;
             form.appendChild(input);
+        } else {
+            console.log(`Поле ${name} найдено, обновляем значение`);
         }
         input.value = value;
+        console.log(`Итоговое значение поля ${name}: ${input.value}`);
         return input;
     }
 

@@ -2,6 +2,7 @@
 package my.java.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.Client;
@@ -261,38 +262,60 @@ public class ExportTemplateController {
             @RequestParam(value = "strategyId", required = false) String strategyId,
             @RequestParam(value = "fields", required = false) List<String> fields,
             @RequestParam Map<String, String> allParams,
-            RedirectAttributes redirectAttributes) {
+            RedirectAttributes redirectAttributes,
+            HttpServletRequest request) { // Добавляем HttpServletRequest для получения всех параметров
 
-        log.info("Получен запрос на сохранение шаблона из формы экспорта. Клиент: {}, Сущность: {}, Имя шаблона: {}, templateId: {}",
-                clientId, entityType, templateName, templateId);
-        log.info("Получено {} полей для шаблона", fields != null ? fields.size() : 0);
-        log.info("Формат: {}, Стратегия: {}", format, strategyId);
+        log.info("========== НАЧАЛО ОБРАБОТКИ ЗАПРОСА SAVE-FROM-EXPORT ==========");
+        log.info("Получен запрос на сохранение шаблона из формы экспорта:");
+        log.info("Client ID: {}", clientId);
+        log.info("Template Name: {}", templateName);
+        log.info("Template ID: {} (тип: {})", templateId, templateId != null ? templateId.getClass().getName() : "null");
+        log.info("Entity Type: {}", entityType);
+        log.info("Format: {}", format);
+        log.info("Strategy ID: {}", strategyId);
+        log.info("Fields count: {}", fields != null ? fields.size() : 0);
+
+        // Логирование всех параметров запроса
+        log.info("Все параметры запроса:");
+        Map<String, String[]> requestParams = request.getParameterMap();
+        for (Map.Entry<String, String[]> entry : requestParams.entrySet()) {
+            log.info("Параметр '{}': {}", entry.getKey(),
+                    entry.getValue() != null ? Arrays.toString(entry.getValue()) : "null");
+        }
 
         try {
+            // Проверяем режим работы (создание или обновление)
+            boolean isUpdate = templateId != null;
+            log.info("Режим работы: {}", isUpdate ? "Обновление существующего шаблона" : "Создание нового шаблона");
+
             // Проверяем существование клиента
             Client client = clientService.findClientEntityById(clientId)
                     .orElseThrow(() -> new IllegalArgumentException("Клиент не найден: " + clientId));
+            log.info("Клиент найден: {}", client.getName());
 
             // Проверяем наличие полей
             if (fields == null || fields.isEmpty()) {
                 log.error("Не выбраны поля для шаблона");
                 throw new IllegalArgumentException("Необходимо выбрать хотя бы одно поле для шаблона");
             }
+            log.info("Выбрано {} полей для шаблона", fields.size());
 
             ExportTemplate template;
-            boolean isUpdate = false;
 
             // Проверяем, обновляем ли мы существующий шаблон
-            if (templateId != null) {
+            if (isUpdate) {
                 log.info("Обновляем существующий шаблон с ID: {}", templateId);
                 template = templateService.getTemplateById(templateId)
                         .orElseThrow(() -> new IllegalArgumentException("Шаблон с ID " + templateId + " не найден"));
+                log.info("Существующий шаблон найден: {}", template.getName());
 
                 // Проверяем, принадлежит ли шаблон клиенту
                 if (!template.getClient().getId().equals(clientId)) {
-                    log.error("Шаблон с ID {} не принадлежит клиенту {}", templateId, clientId);
+                    log.error("Шаблон с ID {} не принадлежит клиенту {} (принадлежит клиенту {})",
+                            templateId, clientId, template.getClient().getId());
                     throw new IllegalArgumentException("Шаблон не принадлежит указанному клиенту");
                 }
+                log.info("Проверка принадлежности шаблона клиенту пройдена");
 
                 // Сохраняем существующие поля, если новые поля не переданы
                 if (fields.isEmpty() && !template.getFields().isEmpty()) {
@@ -301,8 +324,6 @@ public class ExportTemplateController {
                             .map(ExportTemplate.ExportField::getOriginalField)
                             .collect(Collectors.toList());
                 }
-
-                isUpdate = true;
             } else {
                 // Создаем новый шаблон
                 log.info("Создаем новый шаблон");
@@ -314,23 +335,26 @@ public class ExportTemplateController {
             // Обновляем основные поля шаблона
             template.setName(templateName);
             template.setStrategyId(strategyId);
+            log.info("Установлены основные поля шаблона: имя='{}', стратегия='{}'", templateName, strategyId);
 
             // Создаем настройки экспорта из параметров
             FileWritingOptions options = createOptionsFromParams(allParams);
             options.setFileType(format);
+            log.info("Создан объект FileWritingOptions с типом: {}", format);
 
             // Добавляем стратегию в параметры, если указана
             if (strategyId != null && !strategyId.isEmpty()) {
                 options.getAdditionalParams().put("strategyId", strategyId);
+                log.info("Добавлена стратегия в дополнительные параметры: {}", strategyId);
             }
 
             // Устанавливаем настройки экспорта
             template.setExportOptions(options);
-
-            log.info("Создан объект FileWritingOptions: {}", options);
+            log.info("Настройки экспорта установлены в шаблон");
 
             // Обновляем поля шаблона
             if (!fields.isEmpty()) {
+                log.info("Начинаем обновление полей шаблона ({} полей)", fields.size());
                 List<ExportTemplate.ExportField> exportFields = new ArrayList<>();
                 for (String field : fields) {
                     ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
@@ -340,6 +364,8 @@ public class ExportTemplateController {
                     String headerParam = "header_" + field.replace(".", "_");
                     if (allParams.containsKey(headerParam)) {
                         exportField.setDisplayName(allParams.get(headerParam));
+                        log.debug("Установлен пользовательский заголовок для поля {}: {}",
+                                field, allParams.get(headerParam));
                     } else {
                         // Проверяем, существует ли заголовок в текущих полях шаблона
                         if (isUpdate) {
@@ -349,11 +375,17 @@ public class ExportTemplateController {
 
                             if (existingField.isPresent()) {
                                 exportField.setDisplayName(existingField.get().getDisplayName());
+                                log.debug("Использован существующий заголовок для поля {}: {}",
+                                        field, existingField.get().getDisplayName());
                             } else {
                                 exportField.setDisplayName(getDefaultDisplayName(field));
+                                log.debug("Установлен заголовок по умолчанию для поля {}: {}",
+                                        field, getDefaultDisplayName(field));
                             }
                         } else {
                             exportField.setDisplayName(getDefaultDisplayName(field));
+                            log.debug("Установлен заголовок по умолчанию для поля {}: {}",
+                                    field, getDefaultDisplayName(field));
                         }
                     }
 
@@ -369,25 +401,37 @@ public class ExportTemplateController {
 
             // Сохраняем шаблон
             if (isUpdate) {
+                log.info("Вызов метода updateTemplate с ID: {}", templateId);
                 ExportTemplate updatedTemplate = templateService.updateTemplate(templateId, template);
+
+                // Принудительно загружаем данные из JSON после обновления
+                updatedTemplate.loadFromJson();
+
                 log.info("Шаблон с ID {} успешно обновлен. Содержит {} полей",
                         templateId, updatedTemplate.getFields().size());
                 redirectAttributes.addFlashAttribute("successMessage",
                         "Шаблон '" + templateName + "' успешно обновлен");
             } else {
+                log.info("Вызов метода saveTemplate для создания нового шаблона");
                 ExportTemplate savedTemplate = templateService.saveTemplate(template);
+
+                // Принудительно загружаем данные из JSON после сохранения
+                savedTemplate.loadFromJson();
+
                 log.info("Новый шаблон успешно создан с ID: {}. Содержит {} полей",
                         savedTemplate.getId(), savedTemplate.getFields().size());
                 redirectAttributes.addFlashAttribute("successMessage",
                         "Шаблон '" + templateName + "' успешно сохранен");
             }
 
+            log.info("========== КОНЕЦ ОБРАБОТКИ ЗАПРОСА SAVE-FROM-EXPORT ==========");
             // Возвращаемся на страницу экспорта
             return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
 
         } catch (Exception e) {
             log.error("Ошибка при сохранении шаблона из формы экспорта: {}", e.getMessage(), e);
             redirectAttributes.addFlashAttribute("errorMessage", "Ошибка: " + e.getMessage());
+            log.info("========== КОНЕЦ ОБРАБОТКИ ЗАПРОСА SAVE-FROM-EXPORT (С ОШИБКОЙ) ==========");
             return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
         }
     }

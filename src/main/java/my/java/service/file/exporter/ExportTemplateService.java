@@ -14,10 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -148,58 +145,69 @@ public class ExportTemplateService {
     public ExportTemplate updateTemplate(Long id, ExportTemplate updatedTemplate) {
         log.info("Обновление шаблона с ID: {}", id);
 
-        return templateRepository.findById(id)
-                .map(template -> {
-                    log.debug("Найден шаблон для обновления: {}", template.getName());
-
-                    // Обновляем основные поля шаблона
-                    template.setName(updatedTemplate.getName());
-                    if (updatedTemplate.getDescription() != null) {
-                        template.setDescription(updatedTemplate.getDescription());
-                    }
-                    template.setDefault(updatedTemplate.isDefault());
-                    template.setStrategyId(updatedTemplate.getStrategyId());
-
-                    // Обновляем настройки экспорта
-                    if (updatedTemplate.getExportOptions() != null) {
-                        template.setExportOptions(updatedTemplate.getExportOptions());
-                        log.debug("Обновлены настройки экспорта: {}", updatedTemplate.getExportOptions());
-                    }
-
-                    // Устанавливаем новые поля с проверкой
-                    if (updatedTemplate.getFields() != null && !updatedTemplate.getFields().isEmpty()) {
-                        log.debug("Обновление полей шаблона: {} -> {}",
-                                template.getFields().size(),
-                                updatedTemplate.getFields().size());
-
-                        // Очищаем существующие поля и добавляем новые
-                        template.getFields().clear();
-                        template.getFields().addAll(updatedTemplate.getFields());
-
-                        // Явно вызываем метод синхронизации полей с JSON
-                        template.updateJsonFields();
-                    } else {
-                        log.warn("Переданный шаблон не содержит полей! Сохраняем существующие: {}",
-                                template.getFields().size());
-                    }
-
-                    // Обновляем время изменения
-                    template.setUpdatedAt(ZonedDateTime.now());
-
-                    // Сохраняем обновленный шаблон
-                    ExportTemplate savedTemplate = templateRepository.saveAndFlush(template);
-
-                    // Принудительно перезагружаем данные из JSON
-                    savedTemplate.loadFromJson();
-
-                    log.info("Шаблон успешно обновлен: {}, содержит {} полей",
-                            savedTemplate.getName(), savedTemplate.getFields().size());
-                    return savedTemplate;
-                })
+        ExportTemplate template = templateRepository.findById(id)
                 .orElseThrow(() -> {
                     log.error("Шаблон с ID {} не найден", id);
                     return new IllegalArgumentException("Шаблон с ID " + id + " не найден");
                 });
+
+        log.debug("Найден шаблон для обновления: {}, fields.size={}, fieldsJson={}",
+                template.getName(), template.getFields().size(), template.getFieldsJson());
+
+        // Обновляем основные поля шаблона
+        template.setName(updatedTemplate.getName());
+        if (updatedTemplate.getDescription() != null) {
+            template.setDescription(updatedTemplate.getDescription());
+        }
+        template.setDefault(updatedTemplate.isDefault());
+        template.setStrategyId(updatedTemplate.getStrategyId());
+
+        // Обновляем настройки экспорта
+        if (updatedTemplate.getExportOptions() != null) {
+            template.setExportOptions(updatedTemplate.getExportOptions());
+            log.debug("Обновлены настройки экспорта: {}", updatedTemplate.getExportOptions());
+        }
+
+        // НЕ ИСПОЛЬЗУЕМ clear() и addAll() для коллекции fields, т.к. при @ElementCollection это может вызвать проблемы
+        if (updatedTemplate.getFields() != null && !updatedTemplate.getFields().isEmpty()) {
+            log.debug("Обновление полей шаблона: {} -> {}, updatedTemplate.fieldsJson={}",
+                    template.getFields().size(),
+                    updatedTemplate.getFields().size(),
+                    updatedTemplate.getFieldsJson());
+
+            // РЕШЕНИЕ: Вместо template.getFields().clear() и template.getFields().addAll()
+            // устанавливаем поля через сеттер ПОСЛЕ обнуления их через сеттер
+            List<ExportTemplate.ExportField> newFields = new ArrayList<>(updatedTemplate.getFields());
+            template.setFields(new ArrayList<>()); // Сначала устанавливаем пустой список
+            template.setFields(newFields);         // Затем устанавливаем новый список
+
+            // Прямо устанавливаем значение fieldsJson
+            try {
+                String fieldsJson = objectMapper.writeValueAsString(newFields);
+                template.setFieldsJson(fieldsJson);
+                log.debug("Явно установлен fieldsJson: {}", fieldsJson);
+            } catch (Exception e) {
+                log.error("Ошибка при сериализации полей в JSON: {}", e.getMessage());
+            }
+        } else {
+            log.warn("Переданный шаблон не содержит полей! Сохраняем существующие: {}",
+                    template.getFields().size());
+        }
+
+        // Обновляем время изменения
+        template.setUpdatedAt(ZonedDateTime.now());
+
+        // Принудительно вызываем синхронизацию JSON полей
+        template.updateJsonFields();
+        log.debug("После updateJsonFields: fields.size={}, fieldsJson={}",
+                template.getFields().size(), template.getFieldsJson());
+
+        // Выполняем saveAndFlush для немедленной записи в БД
+        ExportTemplate savedTemplate = templateRepository.saveAndFlush(template);
+        log.debug("После сохранения: fields.size={}, fieldsJson={}",
+                savedTemplate.getFields().size(), savedTemplate.getFieldsJson());
+
+        return savedTemplate;
     }
 
     /**

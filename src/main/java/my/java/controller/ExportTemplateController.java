@@ -31,6 +31,7 @@ public class ExportTemplateController {
     private final ClientService clientService;
     private final ExportTemplateService templateService;
     private final EntityRegistry entityRegistry;
+    private final ObjectMapper objectMapper;
 
     /**
      * Отображение списка шаблонов
@@ -390,11 +391,27 @@ public class ExportTemplateController {
                     }
 
                     exportFields.add(exportField);
+                    log.debug("Добавлено поле: originalField={}, displayName={}",
+                            exportField.getOriginalField(), exportField.getDisplayName());
                 }
 
                 // Устанавливаем новые поля
                 template.setFields(exportFields);
                 log.info("Установлено {} полей в шаблоне", exportFields.size());
+
+                // Принудительно сериализуем поля в JSON
+                try {
+                    String fieldsJson = objectMapper.writeValueAsString(exportFields);
+                    template.setFieldsJson(fieldsJson);
+                    log.debug("Сериализованы поля в JSON: {}", fieldsJson);
+                } catch (Exception e) {
+                    log.error("Ошибка при сериализации полей: {}", e.getMessage());
+                }
+
+                // Принудительно вызываем updateJsonFields
+                template.updateJsonFields();
+                log.debug("Вызван updateJsonFields, fields.size={}, fieldsJson={}",
+                        template.getFields().size(), template.getFieldsJson());
             } else {
                 log.warn("Не установлены поля для шаблона!");
             }

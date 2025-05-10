@@ -1,7 +1,6 @@
 // src/main/java/my/java/controller/ExportController.java
 package my.java.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -140,9 +139,43 @@ public class ExportController {
                     ));
             model.addAttribute("fieldHeaders", fieldHeaders);
 
-            // Параметры формата файла
-            model.addAttribute("fileFormat", template.getFileType());
-            model.addAttribute("strategyId", template.getStrategyId());
+            // Параметры экспорта из шаблона
+            FileWritingOptions options = template.getExportOptions();
+            if (options != null) {
+                // Основные параметры
+                model.addAttribute("fileFormat", options.getFileType());
+                model.addAttribute("includeHeader", options.isIncludeHeader());
+
+                // Параметры CSV
+                if (options.getDelimiter() != null) {
+                    model.addAttribute("delimiter", options.getDelimiter().toString());
+                }
+
+                if (options.getQuoteChar() != null) {
+                    model.addAttribute("quoteChar", options.getQuoteChar().toString());
+                }
+
+                if (options.getCharset() != null) {
+                    model.addAttribute("encoding", options.getCharset().name());
+                }
+
+                // Параметры Excel
+                if (options.getSheetName() != null) {
+                    model.addAttribute("sheetName", options.getSheetName());
+                }
+
+                model.addAttribute("autoSizeColumns", options.isAutoSizeColumns());
+
+                // Стратегия
+                if (options.getAdditionalParams().containsKey("strategyId")) {
+                    model.addAttribute("strategyId", options.getAdditionalParams().get("strategyId"));
+                } else if (template.getStrategyId() != null) {
+                    model.addAttribute("strategyId", template.getStrategyId());
+                }
+            } else {
+                model.addAttribute("fileFormat", "csv");
+                model.addAttribute("strategyId", template.getStrategyId());
+            }
         }
     }
 
@@ -188,10 +221,8 @@ public class ExportController {
             @RequestParam("format") String format,
             @RequestParam(value = "fields", required = false) List<String> fields,
             @RequestParam(value = "fieldsOrder", required = false) String fieldsOrder,
-            @RequestParam(value = "saveAsTemplate", required = false) Boolean saveAsTemplate,
-            @RequestParam(value = "templateName", required = false) String templateName,
             @RequestParam(value = "strategyId", required = false) String strategyId,
-            @RequestParam(value = "encoding", required = false) String encoding,
+            @RequestParam(value = "includeHeader", required = false, defaultValue = "true") Boolean includeHeader,
             @RequestParam Map<String, String> allParams,
             RedirectAttributes redirectAttributes) {
 
@@ -208,30 +239,29 @@ public class ExportController {
                     .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
 
             // Создаем настройки экспорта
-            FileWritingOptions options = FileWritingOptions.fromMap(allParams);
+            FileWritingOptions options = createOptionsFromParams(allParams);
             options.setFileType(format);
+            options.setIncludeHeader(includeHeader);
 
             // Устанавливаем кодировку для CSV экспорта
-            if (encoding != null && !encoding.isEmpty() && format.equalsIgnoreCase("csv")) {
+            if (allParams.containsKey("encoding") && !allParams.get("encoding").isEmpty() && format.equalsIgnoreCase("csv")) {
                 try {
-                    options.setCharset(Charset.forName(encoding));
-                    log.debug("Установлена кодировка {} для экспорта", encoding);
+                    options.setCharset(Charset.forName(allParams.get("encoding")));
+                    log.debug("Установлена кодировка {} для экспорта", allParams.get("encoding"));
                 } catch (Exception e) {
-                    log.warn("Не удалось установить кодировку {}, используется UTF-8", encoding);
+                    log.warn("Не удалось установить кодировку {}, используется UTF-8", allParams.get("encoding"));
                     options.setCharset(StandardCharsets.UTF_8);
                 }
             }
 
             // Устанавливаем стратегию экспорта
-            Map<String, String> strategyParams = new HashMap<>();
             if (strategyId != null && !strategyId.isEmpty()) {
                 options.getAdditionalParams().put("strategyId", strategyId);
 
                 // Собираем параметры для стратегии из запроса
                 for (Map.Entry<String, String> entry : allParams.entrySet()) {
                     if (entry.getKey().startsWith("strategy_")) {
-                        String paramName = entry.getKey().substring("strategy_".length());
-                        strategyParams.put(paramName, entry.getValue());
+                        options.getAdditionalParams().put(entry.getKey(), entry.getValue());
                     }
                 }
             }
@@ -288,11 +318,6 @@ public class ExportController {
             // Получаем результат операции
             FileOperationDto operation = future.join();
 
-            // Если требуется сохранить как шаблон
-            if (Boolean.TRUE.equals(saveAsTemplate) && templateName != null && !templateName.isEmpty()) {
-                saveAsTemplate(client, entityType, fields, format, strategyId, allParams, templateName);
-            }
-
             // Добавляем сообщение об успешном начале экспорта
             redirectAttributes.addFlashAttribute("successMessage",
                     "Экспорт данных успешно начат. ID операции: " + operation.getId());
@@ -322,7 +347,7 @@ public class ExportController {
             @RequestParam(value = "fields", required = false) List<String> fields,
             @RequestParam(value = "fieldsOrder", required = false) String fieldsOrder,
             @RequestParam(value = "strategyId", required = false) String strategyId,
-            @RequestParam(value = "encoding", required = false) String encoding,
+            @RequestParam(value = "includeHeader", required = false, defaultValue = "true") Boolean includeHeader,
             @RequestParam Map<String, String> allParams) {
 
         log.info("POST запрос на прямое скачивание данных для клиента: {}, тип сущности: {}, формат: {}",
@@ -338,19 +363,9 @@ public class ExportController {
                     .orElseThrow(() -> new IllegalArgumentException("Клиент с ID " + clientId + " не найден"));
 
             // Создаем настройки экспорта из параметров формы
-            FileWritingOptions options = FileWritingOptions.fromMap(allParams);
+            FileWritingOptions options = createOptionsFromParams(allParams);
             options.setFileType(format);
-
-            // Устанавливаем кодировку для CSV экспорта
-            if (encoding != null && !encoding.isEmpty() && format.equalsIgnoreCase("csv")) {
-                try {
-                    options.setCharset(Charset.forName(encoding));
-                    log.debug("Установлена кодировка {} для экспорта", encoding);
-                } catch (Exception e) {
-                    log.warn("Не удалось установить кодировку {}, используется UTF-8", encoding);
-                    options.setCharset(StandardCharsets.UTF_8);
-                }
-            }
+            options.setIncludeHeader(includeHeader);
 
             // Устанавливаем стратегию экспорта, если указана
             if (strategyId != null && !strategyId.isEmpty()) {
@@ -449,6 +464,59 @@ public class ExportController {
     }
 
     /**
+     * Создает объект FileWritingOptions из параметров запроса
+     */
+    private FileWritingOptions createOptionsFromParams(Map<String, String> params) {
+        FileWritingOptions options = new FileWritingOptions();
+
+        // Устанавливаем тип файла
+        if (params.containsKey("format")) {
+            options.setFileType(params.get("format"));
+        }
+
+        // Общие настройки
+        if (params.containsKey("includeHeader")) {
+            options.setIncludeHeader(Boolean.parseBoolean(params.get("includeHeader")));
+        }
+
+        // Настройки для CSV
+        if (params.containsKey("delimiter") && !params.get("delimiter").isEmpty()) {
+            options.setDelimiter(params.get("delimiter").charAt(0));
+        }
+
+        if (params.containsKey("quoteChar") && !params.get("quoteChar").isEmpty()) {
+            options.setQuoteChar(params.get("quoteChar").charAt(0));
+        }
+
+        if (params.containsKey("encoding") && !params.get("encoding").isEmpty()) {
+            try {
+                options.setCharset(Charset.forName(params.get("encoding")));
+            } catch (Exception e) {
+                log.warn("Неверная кодировка: {}, используется UTF-8", params.get("encoding"));
+            }
+        }
+
+        // Настройки для Excel
+        if (params.containsKey("sheetName")) {
+            options.setSheetName(params.get("sheetName"));
+        }
+
+        if (params.containsKey("autoSizeColumns")) {
+            options.setAutoSizeColumns(Boolean.parseBoolean(params.get("autoSizeColumns")));
+        }
+
+        // Дополнительные параметры (включая параметры стратегии)
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            if ((entry.getKey().startsWith("strategy_") || entry.getKey().startsWith("header_")) &&
+                    !entry.getValue().isEmpty()) {
+                options.getAdditionalParams().put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return options;
+    }
+
+    /**
      * Генерирует имя файла в формате "Имя клиента_год_дата_время"
      */
     private String generateFileName(Client client, String entityType, String format) {
@@ -457,135 +525,6 @@ public class ExportController {
         // Форматируем текущую дату и время
         String dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy_MM_dd_HHmmss"));
         return clientName + "_" + dateTime + "." + format.toLowerCase();
-    }
-
-    /**
-     * Создание шаблона экспорта из текущих настроек
-     */
-    private void saveAsTemplate(Client client, String entityType, List<String> fields,
-                                String format, String strategyId, Map<String, String> params,
-                                String templateName) {
-        try {
-            log.info("Создание нового шаблона '{}' из текущих настроек экспорта", templateName);
-
-            ExportTemplate template = new ExportTemplate();
-            template.setClient(client);
-            template.setEntityType(entityType);
-            template.setName(templateName);
-            template.setFileType(format);
-            template.setStrategyId(strategyId);
-
-            // Маппинг полей с настройками заголовков
-            for (String field : fields) {
-                ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
-                exportField.setOriginalField(field);
-
-                // Проверяем, задан ли пользовательский заголовок
-                String headerKey = "header_" + field.replace(".", "_");
-                if (params.containsKey(headerKey)) {
-                    exportField.setDisplayName(params.get(headerKey));
-                } else {
-                    exportField.setDisplayName(getDefaultDisplayName(field));
-                }
-
-                template.getFields().add(exportField);
-            }
-
-            log.debug("Добавлено {} полей в шаблон", template.getFields().size());
-
-            // Сохраняем параметры файла
-            Map<String, String> fileOptions = new HashMap<>();
-
-            // Добавляем базовые параметры
-            fileOptions.put("format", format);
-            fileOptions.put("strategyId", strategyId != null ? strategyId : "");
-
-            // Добавляем параметры из формы
-            for (Map.Entry<String, String> entry : params.entrySet()) {
-                if (entry.getKey().startsWith("file_") ||
-                        entry.getKey().equals("encoding") ||
-                        entry.getKey().equals("delimiter") ||
-                        entry.getKey().equals("quoteChar") ||
-                        entry.getKey().equals("sheetName") ||
-                        entry.getKey().equals("autoSizeColumns") ||
-                        entry.getKey().equals("includeHeader")) {
-                    fileOptions.put(entry.getKey(), entry.getValue());
-                    log.debug("Добавлен параметр файла: {} = {}", entry.getKey(), entry.getValue());
-                }
-            }
-
-            // Добавляем общие параметры в стандартизированном формате
-            if (params.containsKey("delimiter")) {
-                fileOptions.put("delimiter", params.get("delimiter"));
-            }
-
-            if (params.containsKey("quoteChar")) {
-                fileOptions.put("quoteChar", params.get("quoteChar"));
-            }
-
-            if (params.containsKey("encoding")) {
-                fileOptions.put("encoding", params.get("encoding"));
-            }
-
-            if (params.containsKey("sheetName")) {
-                fileOptions.put("sheetName", params.get("sheetName"));
-            }
-
-            if (params.containsKey("autoSizeColumns")) {
-                fileOptions.put("autoSizeColumns", params.get("autoSizeColumns"));
-            }
-
-            if (params.containsKey("includeHeader")) {
-                fileOptions.put("includeHeader", params.get("includeHeader"));
-            }
-
-            // Сохраняем порядок полей, если он указан
-            if (params.containsKey("fieldsOrder")) {
-                fileOptions.put("fieldsOrder", params.get("fieldsOrder"));
-                log.debug("Сохранен порядок полей: {}", params.get("fieldsOrder"));
-            }
-
-            // Преобразуем параметры в JSON и сохраняем
-            ObjectMapper objectMapper = new ObjectMapper();
-            String fileOptionsJson = objectMapper.writeValueAsString(fileOptions);
-            template.setFileOptions(fileOptionsJson);
-
-            log.debug("Параметры файла сохранены в JSON: {}", fileOptionsJson);
-
-            // Сохраняем шаблон
-            ExportTemplate savedTemplate = templateService.saveTemplate(template);
-            log.info("Создан новый шаблон экспорта: {}, ID={}", savedTemplate.getName(), savedTemplate.getId());
-
-        } catch (Exception e) {
-            log.error("Ошибка при сохранении шаблона: {}", e.getMessage(), e);
-            // Не прерываем основной процесс экспорта в случае ошибки сохранения шаблона
-        }
-    }
-
-    /**
-     * Преобразует имя поля в отображаемое название
-     */
-    private String getDefaultDisplayName(String field) {
-        // Отделяем префикс сущности, если есть
-        int dotIndex = field.lastIndexOf('.');
-        if (dotIndex > 0) {
-            field = field.substring(dotIndex + 1);
-        }
-
-        // Преобразуем camelCase в нормальный текст
-        StringBuilder formatted = new StringBuilder();
-        for (int i = 0; i < field.length(); i++) {
-            char c = field.charAt(i);
-            if (i == 0) {
-                formatted.append(Character.toUpperCase(c));
-            } else if (Character.isUpperCase(c)) {
-                formatted.append(' ').append(c);
-            } else {
-                formatted.append(c);
-            }
-        }
-
-        return formatted.toString();
     }
 
     /**

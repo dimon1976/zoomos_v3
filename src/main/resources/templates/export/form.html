@@ -57,7 +57,6 @@
                     <input type="hidden" id="templateFormat" name="format" value="csv">
                     <input type="hidden" id="templateStrategyId" name="strategyId" value="">
                     <input type="hidden" id="templateFieldsOrder" name="fieldsOrder" value="">
-                    <!-- Исправляем дублирование name="templateId" в скрытой форме, т.к. уже есть поле с таким именем -->
                     <input type="hidden" id="hiddenTemplateId" name="templateId" value="">
                     <input type="hidden" id="hiddenTemplateName" name="templateName" value="">
                     <!-- Поля будут добавлены динамически в JavaScript -->
@@ -109,103 +108,115 @@
 
                     <!-- Формат и основные настройки -->
                     <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h5><i class="fas fa-cog"></i> Формат и параметры экспорта</h5>
+                        <div class="card-header bg-light" id="format-settings-header">
+                            <h5 class="mb-0">
+                                <button class="btn btn-link text-decoration-none w-100 text-start d-flex justify-content-between align-items-center"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#format-settings-body"
+                                        aria-expanded="false"
+                                        aria-controls="format-settings-body">
+                                    <span><i class="fas fa-cog"></i> Формат и параметры экспорта</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </h5>
                         </div>
-                        <div class="card-body">
-                            <!-- Выбор формата файла -->
-                            <div class="form-group mb-3">
-                                <label for="format">Формат экспорта:</label>
-                                <select id="format" name="format" class="form-control" required
-                                        onchange="toggleFormatSettings()">
-                                    <option value="csv" th:selected="${fileFormat == null || fileFormat == 'csv'}">CSV</option>
-                                    <option value="xlsx" th:selected="${fileFormat == 'xlsx'}">Excel (XLSX)</option>
-                                </select>
-                            </div>
+                        <div id="format-settings-body" class="collapse">
+                            <div class="card-body">
+                                <!-- Выбор формата файла -->
+                                <div class="form-group mb-3">
+                                    <label for="format">Формат экспорта:</label>
+                                    <select id="format" name="format" class="form-control" required
+                                            onchange="toggleFormatSettings()">
+                                        <option value="csv" th:selected="${fileFormat == null || fileFormat == 'csv'}">CSV</option>
+                                        <option value="xlsx" th:selected="${fileFormat == 'xlsx'}">Excel (XLSX)</option>
+                                    </select>
+                                </div>
 
-                            <!-- Стратегия обработки данных -->
-                            <div class="form-group mb-3">
-                                <label for="strategyId">Стратегия обработки данных:</label>
-                                <select id="strategyId" name="strategyId" class="form-control"
-                                        onchange="toggleStrategySettings()">
-                                    <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">Стандартная (без обработки)</option>
-                                    <option th:each="strategy : ${strategies}"
-                                            th:value="${strategy.id}"
-                                            th:text="${strategy.name}"
-                                            th:selected="${strategyId != null && strategyId == strategy.id}">
-                                        Стратегия
-                                    </option>
-                                </select>
-                                <small class="form-text text-muted">Выберите стратегию обработки данных перед экспортом</small>
-                            </div>
+                                <!-- Стратегия обработки данных -->
+                                <div class="form-group mb-3">
+                                    <label for="strategyId">Стратегия обработки данных:</label>
+                                    <select id="strategyId" name="strategyId" class="form-control"
+                                            onchange="toggleStrategySettings()">
+                                        <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">Стандартная (без обработки)</option>
+                                        <option th:each="strategy : ${strategies}"
+                                                th:value="${strategy.id}"
+                                                th:text="${strategy.name}"
+                                                th:selected="${strategyId != null && strategyId == strategy.id}">
+                                            Стратегия
+                                        </option>
+                                    </select>
+                                    <small class="form-text text-muted">Выберите стратегию обработки данных перед экспортом</small>
+                                </div>
 
-                            <!-- Общие параметры -->
-                            <div class="form-check mb-2">
-                                <input type="checkbox" class="form-check-input" id="includeHeader"
-                                       name="includeHeader" value="true"
-                                       th:checked="${includeHeader == null || includeHeader == true}">
-                                <label class="form-check-label" for="includeHeader">
-                                    Включить заголовки колонок
-                                </label>
-                            </div>
+                                <!-- Общие параметры -->
+                                <div class="form-check mb-2">
+                                    <input type="checkbox" class="form-check-input" id="includeHeader"
+                                           name="includeHeader" value="true"
+                                           th:checked="${includeHeader == null || includeHeader == true}">
+                                    <label class="form-check-label" for="includeHeader">
+                                        Включить заголовки колонок
+                                    </label>
+                                </div>
 
-                            <!-- Параметры CSV -->
-                            <div id="csvParams" th:style="${fileFormat != 'xlsx' ? '' : 'display: none;'}">
-                                <h6 class="mt-3">Параметры CSV</h6>
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        <div class="form-group mb-2">
-                                            <label for="delimiter">Разделитель:</label>
-                                            <select id="delimiter" name="delimiter" class="form-control">
-                                                <option value="," th:selected="${delimiter == null || delimiter == ','}">Запятая (,)</option>
-                                                <option value=";" th:selected="${delimiter == ';'}">Точка с запятой (;)</option>
-                                                <option value="|" th:selected="${delimiter == '|'}">Вертикальная черта (|)</option>
-                                                <option value="&#09" th:selected="${delimiter == '	'}">Табуляция</option>
-                                            </select>
+                                <!-- Параметры CSV -->
+                                <div id="csvParams" th:style="${fileFormat != 'xlsx' ? '' : 'display: none;'}">
+                                    <h6 class="mt-3">Параметры CSV</h6>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="form-group mb-2">
+                                                <label for="delimiter">Разделитель:</label>
+                                                <select id="delimiter" name="delimiter" class="form-control">
+                                                    <option value="," th:selected="${delimiter == null || delimiter == ','}">Запятая (,)</option>
+                                                    <option value=";" th:selected="${delimiter == ';'}">Точка с запятой (;)</option>
+                                                    <option value="|" th:selected="${delimiter == '|'}">Вертикальная черта (|)</option>
+                                                    <option value="&#09" th:selected="${delimiter == '	'}">Табуляция</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group mb-2">
-                                            <label for="quoteChar">Символ кавычек:</label>
-                                            <select id="quoteChar" name="quoteChar" class="form-control">
-                                                <option value="&quot;" th:selected="${quoteChar == null || #strings.toString(quoteChar) == '&quot;'}">Двойные кавычки (")</option>
-                                                <option value="'" th:selected="${#strings.toString(quoteChar) == ''''}">Одинарные кавычки (')</option>
-                                            </select>
+                                        <div class="col-md-4">
+                                            <div class="form-group mb-2">
+                                                <label for="quoteChar">Символ кавычек:</label>
+                                                <select id="quoteChar" name="quoteChar" class="form-control">
+                                                    <option value="&quot;" th:selected="${quoteChar == null || #strings.toString(quoteChar) == '&quot;'}">Двойные кавычки (")</option>
+                                                    <option value="'" th:selected="${#strings.toString(quoteChar) == ''''}">Одинарные кавычки (')</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group mb-2">
-                                            <label for="encoding">Кодировка:</label>
-                                            <select id="encoding" name="encoding" class="form-control">
-                                                <option value="UTF-8" th:selected="${encoding == null || encoding == 'UTF-8'}">UTF-8</option>
-                                                <option value="Windows-1251" th:selected="${encoding == 'windows-1251'}">Windows-1251</option>
-                                                <option value="ISO-8859-1" th:selected="${encoding == 'ISO-8859-1'}">ISO-8859-1</option>
-                                                <option value="UTF-16" th:selected="${encoding == 'UTF-16'}">UTF-16</option>
-                                            </select>
+                                        <div class="col-md-4">
+                                            <div class="form-group mb-2">
+                                                <label for="encoding">Кодировка:</label>
+                                                <select id="encoding" name="encoding" class="form-control">
+                                                    <option value="UTF-8" th:selected="${encoding == null || encoding == 'UTF-8'}">UTF-8</option>
+                                                    <option value="Windows-1251" th:selected="${encoding == 'windows-1251'}">Windows-1251</option>
+                                                    <option value="ISO-8859-1" th:selected="${encoding == 'ISO-8859-1'}">ISO-8859-1</option>
+                                                    <option value="UTF-16" th:selected="${encoding == 'UTF-16'}">UTF-16</option>
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- Параметры Excel -->
-                            <div id="excelParams" th:style="${fileFormat == 'xlsx' ? '' : 'display: none;'}">
-                                <h6 class="mt-3">Параметры Excel</h6>
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group mb-2">
-                                            <label for="sheetName">Имя листа:</label>
-                                            <input type="text" id="sheetName" name="sheetName"
-                                                   class="form-control" th:value="${sheetName != null ? sheetName : 'Данные'}">
+                                <!-- Параметры Excel -->
+                                <div id="excelParams" th:style="${fileFormat == 'xlsx' ? '' : 'display: none;'}">
+                                    <h6 class="mt-3">Параметры Excel</h6>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-group mb-2">
+                                                <label for="sheetName">Имя листа:</label>
+                                                <input type="text" id="sheetName" name="sheetName"
+                                                       class="form-control" th:value="${sheetName != null ? sheetName : 'Данные'}">
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-check mt-4">
-                                            <input type="checkbox" class="form-check-input" id="autoSizeColumns"
-                                                   name="autoSizeColumns" value="true"
-                                                   th:checked="${autoSizeColumns == null || autoSizeColumns == true}">
-                                            <label class="form-check-label" for="autoSizeColumns">
-                                                Автоматически подгонять ширину колонок
-                                            </label>
+                                        <div class="col-md-6">
+                                            <div class="form-check mt-4">
+                                                <input type="checkbox" class="form-check-input" id="autoSizeColumns"
+                                                       name="autoSizeColumns" value="true"
+                                                       th:checked="${autoSizeColumns == null || autoSizeColumns == true}">
+                                                <label class="form-check-label" for="autoSizeColumns">
+                                                    Автоматически подгонять ширину колонок
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -327,84 +338,97 @@
 
                     <!-- Выбор полей -->
                     <div class="card mb-3">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="fas fa-list"></i> Выберите поля для экспорта</h5>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllFields()">
-                                    <i class="fas fa-check-square"></i> Выбрать все
+                        <div class="card-header bg-light" id="fields-selection-header">
+                            <h5 class="mb-0">
+                                <button class="btn btn-link text-decoration-none w-100 text-start d-flex justify-content-between align-items-center"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#fields-selection-body"
+                                        aria-expanded="false"
+                                        aria-controls="fields-selection-body">
+                                    <span><i class="fas fa-list"></i> Выберите поля для экспорта</span>
+                                    <i class="fas fa-chevron-down"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllFields()">
-                                    <i class="fas fa-square"></i> Снять выбор
-                                </button>
-                            </div>
+                            </h5>
                         </div>
-                        <div class="card-body">
-                            <!-- Поля основной сущности -->
-                            <div th:if="${entityFields != null}" class="mt-3">
-                                <h6 class="border-bottom pb-2 mb-3">
-                                    <i class="fas fa-table"></i> Основная сущность:
-                                    <span th:text="${selectedEntityType}">Product</span>
-                                </h6>
+                        <div id="fields-selection-body" class="collapse">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="selectAllFields()">
+                                        <i class="fas fa-check-square"></i> Выбрать все
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllFields()">
+                                        <i class="fas fa-square"></i> Снять выбор
+                                    </button>
+                                </div>
 
-                                <div class="row">
-                                    <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-2">
-                                        <div class="form-check">
-                                            <input type="checkbox" class="form-check-input field-checkbox"
-                                                   th:id="${'field_main_' + stat.index}"
-                                                   name="fields"
-                                                   th:value="${field.key}"
-                                                   th:checked="${selectedFields != null && selectedFields.contains(field.key)}">
-                                            <label class="form-check-label"
-                                                   th:for="${'field_main_' + stat.index}"
-                                                   th:text="${field.value.displayName}"></label>
-                                        </div>
-                                        <!-- Заголовок поля (можно редактировать) -->
-                                        <div class="ms-4 mt-1">
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text">Заголовок</span>
-                                                <input type="text" class="form-control form-control-sm field-header"
-                                                       th:name="${'header_' + field.key.replace('.', '_')}"
-                                                       th:id="${'header_' + field.key.replace('.', '_')}"
-                                                       th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
-                                                                 fieldHeaders.get(field.key) : field.value.displayName}"
-                                                       th:data-field="${field.key}">
+                                <!-- Поля основной сущности -->
+                                <div th:if="${entityFields != null}" class="mt-3">
+                                    <h6 class="border-bottom pb-2 mb-3">
+                                        <i class="fas fa-table"></i> Основная сущность:
+                                        <span th:text="${selectedEntityType}">Product</span>
+                                    </h6>
+
+                                    <div class="row">
+                                        <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input field-checkbox"
+                                                       th:id="${'field_main_' + stat.index}"
+                                                       name="fields"
+                                                       th:value="${field.key}"
+                                                       th:checked="${selectedFields != null && selectedFields.contains(field.key)}">
+                                                <label class="form-check-label"
+                                                       th:for="${'field_main_' + stat.index}"
+                                                       th:text="${field.value.displayName}"></label>
+                                            </div>
+                                            <!-- Заголовок поля (можно редактировать) -->
+                                            <div class="ms-4 mt-1">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">Заголовок</span>
+                                                    <input type="text" class="form-control form-control-sm field-header"
+                                                           th:name="${'header_' + field.key.replace('.', '_')}"
+                                                           th:id="${'header_' + field.key.replace('.', '_')}"
+                                                           th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
+                                                                     fieldHeaders.get(field.key) : field.value.displayName}"
+                                                           th:data-field="${field.key}">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- Поля связанных сущностей -->
-                            <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}" class="mt-4">
-                                <h6 class="border-bottom pb-2 mb-3">
-                                    <i class="fas fa-link"></i> Связанная сущность:
-                                    <span th:text="${entityEntry.key}">Related Entity</span>
-                                </h6>
+                                <!-- Поля связанных сущностей -->
+                                <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}" class="mt-4">
+                                    <h6 class="border-bottom pb-2 mb-3">
+                                        <i class="fas fa-link"></i> Связанная сущность:
+                                        <span th:text="${entityEntry.key}">Related Entity</span>
+                                    </h6>
 
-                                <div class="row">
-                                    <div th:each="field, stat : ${entityEntry.value}" class="col-md-6 mb-2">
-                                        <div class="form-check">
-                                            <input type="checkbox" class="form-check-input field-checkbox"
-                                                   th:id="${'field_' + entityEntry.key + '_' + stat.index}"
-                                                   name="fields"
-                                                   th:value="${field.key}"
-                                                   th:checked="${relatedSelectedFields != null &&
-                                                              relatedSelectedFields.get(entityEntry.key) != null &&
-                                                              relatedSelectedFields.get(entityEntry.key).contains(field.key)}">
-                                            <label class="form-check-label"
-                                                   th:for="${'field_' + entityEntry.key + '_' + stat.index}"
-                                                   th:text="${field.value.displayName}"></label>
-                                        </div>
-                                        <!-- Заголовок поля (можно редактировать) -->
-                                        <div class="ms-4 mt-1">
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text">Заголовок</span>
-                                                <input type="text" class="form-control form-control-sm field-header"
-                                                       th:name="${'header_' + field.key.replace('.', '_')}"
-                                                       th:id="${'header_' + field.key.replace('.', '_')}"
-                                                       th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
-                                                                 fieldHeaders.get(field.key) : field.value.displayName}"
-                                                       th:data-field="${field.key}">
+                                    <div class="row">
+                                        <div th:each="field, stat : ${entityEntry.value}" class="col-md-6 mb-2">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input field-checkbox"
+                                                       th:id="${'field_' + entityEntry.key + '_' + stat.index}"
+                                                       name="fields"
+                                                       th:value="${field.key}"
+                                                       th:checked="${relatedSelectedFields != null &&
+                                                                  relatedSelectedFields.get(entityEntry.key) != null &&
+                                                                  relatedSelectedFields.get(entityEntry.key).contains(field.key)}">
+                                                <label class="form-check-label"
+                                                       th:for="${'field_' + entityEntry.key + '_' + stat.index}"
+                                                       th:text="${field.value.displayName}"></label>
+                                            </div>
+                                            <!-- Заголовок поля (можно редактировать) -->
+                                            <div class="ms-4 mt-1">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">Заголовок</span>
+                                                    <input type="text" class="form-control form-control-sm field-header"
+                                                           th:name="${'header_' + field.key.replace('.', '_')}"
+                                                           th:id="${'header_' + field.key.replace('.', '_')}"
+                                                           th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
+                                                                     fieldHeaders.get(field.key) : field.value.displayName}"
+                                                           th:data-field="${field.key}">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -436,418 +460,128 @@
 </div>
 
 <script>
-    // Настройка функций работы с шаблонами
-    function setupTemplateHandlers() {
-        console.log('======= НАЧАЛО НАСТРОЙКИ ОБРАБОТЧИКОВ ШАБЛОНОВ =======');
-
-        // Кнопка сохранения шаблона
-        const saveBtn = document.getElementById('saveTemplateBtn');
-        if (saveBtn) {
-            console.log('Настройка обработчика для кнопки "Сохранить как шаблон"');
-            saveBtn.addEventListener('click', function() {
-                console.log('Нажата кнопка "Сохранить как шаблон"');
-                const templateName = document.getElementById('templateName').value;
-                console.log('Введенное имя шаблона:', templateName);
-
-                if (!templateName || templateName.trim() === '') {
-                    console.log('Ошибка: пустое имя шаблона');
-                    alert('Пожалуйста, введите имя шаблона');
-                    return;
-                }
-
-                // Проверяем, что хотя бы одно поле выбрано
-                const selectedFields = document.querySelectorAll('input[name="fields"]:checked');
-                console.log('Количество выбранных полей:', selectedFields.length);
-
-                if (selectedFields.length === 0) {
-                    console.log('Ошибка: не выбрано ни одно поле');
-                    alert('Выберите хотя бы одно поле для шаблона');
-                    return;
-                }
-
-                // Устанавливаем имя шаблона
-                document.getElementById('hiddenTemplateName').value = templateName;
-                console.log('Установлено hiddenTemplateName:', templateName);
-
-                // Сбрасываем ID шаблона для создания нового
-                document.getElementById('hiddenTemplateId').value = '';
-                console.log('Сброшено hiddenTemplateId для создания нового шаблона');
-
-                saveTemplate();
-            });
-        } else {
-            console.error('Кнопка saveTemplateBtn не найдена!');
+    // Инициализация формы экспорта
+    function initExportForm() {
+        // Переключение параметров формата файла
+        const formatSelect = document.getElementById('format');
+        if (formatSelect) {
+            formatSelect.addEventListener('change', toggleFormatSettings);
+            toggleFormatSettings(); // Инициализация при загрузке
         }
 
-        // Кнопка обновления шаблона
-        const updateBtn = document.getElementById('updateTemplateBtn');
-        if (updateBtn) {
-            console.log('Настройка обработчика для кнопки "Обновить шаблон"');
-            updateBtn.addEventListener('click', function() {
-                console.log('Нажата кнопка "Обновить шаблон"');
-                const templateName = document.getElementById('templateName').value;
-                console.log('Введенное имя шаблона:', templateName);
+        // Переключение стратегии
+        const strategySelect = document.getElementById('strategyId');
+        if (strategySelect) {
+            strategySelect.addEventListener('change', toggleStrategySettings);
+            toggleStrategySettings(); // Инициализация при загрузке
+        }
 
+        // Обработчик для кнопки сохранения шаблона
+        const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+        if (saveTemplateBtn) {
+            saveTemplateBtn.addEventListener('click', function() {
+                const templateName = document.getElementById('templateName').value;
                 if (!templateName || templateName.trim() === '') {
-                    console.log('Ошибка: пустое имя шаблона');
+                    alert('Пожалуйста, введите имя шаблона');
+                    return;
+                }
+                saveTemplate();
+            });
+        }
+
+        // Обработчик для кнопки обновления шаблона
+        const updateTemplateBtn = document.getElementById('updateTemplateBtn');
+        if (updateTemplateBtn) {
+            updateTemplateBtn.addEventListener('click', function() {
+                const templateName = document.getElementById('templateName').value;
+                if (!templateName || templateName.trim() === '') {
                     alert('Пожалуйста, введите имя шаблона');
                     return;
                 }
 
-                // Проверяем, что хотя бы одно поле выбрано
-                const selectedFields = document.querySelectorAll('input[name="fields"]:checked');
-                console.log('Количество выбранных полей:', selectedFields.length);
-
-                if (selectedFields.length === 0) {
-                    console.log('Ошибка: не выбрано ни одно поле');
-                    alert('Выберите хотя бы одно поле для шаблона');
-                    return;
-                }
-
-                // Получаем ID выбранного шаблона
                 const templateId = document.getElementById('templateId').value;
-                console.log('ID выбранного шаблона:', templateId);
-
                 if (!templateId) {
-                    console.log('Ошибка: не выбран шаблон для обновления');
                     alert('Выберите шаблон для обновления');
                     return;
                 }
 
-                // Устанавливаем имя шаблона
                 document.getElementById('hiddenTemplateName').value = templateName;
-                console.log('Установлено hiddenTemplateName:', templateName);
-
-                // Устанавливаем ID шаблона для обновления
                 document.getElementById('hiddenTemplateId').value = templateId;
-                console.log('Установлено hiddenTemplateId для обновления:', templateId);
 
-                // Проверяем, установилось ли значение
-                const checkValue = document.getElementById('hiddenTemplateId').value;
-                console.log('Проверка установленного значения hiddenTemplateId:', checkValue);
-
-                console.log('Вызов функции saveTemplate() для обновления шаблона');
                 saveTemplate();
             });
-        } else {
-            console.error('Кнопка updateTemplateBtn не найдена!');
         }
-
-        // Обработчик изменения выбранного шаблона
-        const templateSelect = document.getElementById('templateId');
-        if (templateSelect) {
-            console.log('Настройка обработчика для выпадающего списка шаблонов');
-            templateSelect.addEventListener('change', function() {
-                const templateId = this.value;
-                console.log('Выбран шаблон с ID:', templateId);
-
-                const updateBtn = document.getElementById('updateTemplateBtn');
-                console.log('Кнопка updateTemplateBtn:', updateBtn);
-
-                if (templateId) {
-                    // Если выбран шаблон, показываем кнопку обновления
-                    if (updateBtn) {
-                        updateBtn.style.display = 'inline-block';
-                        console.log('Показана кнопка обновления для шаблона с ID:', templateId);
-                    }
-
-                    // Также можно заполнить имя шаблона из выбранного элемента
-                    const selectedOption = this.options[this.selectedIndex];
-                    if (selectedOption && selectedOption.text) {
-                        document.getElementById('templateName').value = selectedOption.text;
-                        console.log('Установлено имя шаблона:', selectedOption.text);
-                    }
-                } else {
-                    // Если шаблон не выбран, скрываем кнопку обновления
-                    if (updateBtn) {
-                        updateBtn.style.display = 'none';
-                        console.log('Скрыта кнопка обновления');
-                    }
-
-                    // Очищаем поле имени шаблона
-                    document.getElementById('templateName').value = '';
-                    console.log('Очищено поле имени шаблона');
-                }
-            });
-        } else {
-            console.error('Выпадающий список templateId не найден!');
-        }
-
-        console.log('======= КОНЕЦ НАСТРОЙКИ ОБРАБОТЧИКОВ ШАБЛОНОВ =======');
-    }
-
-    // Функция для сохранения шаблона
-    function saveTemplate() {
-        console.log('======= НАЧАЛО ФУНКЦИИ SAVE TEMPLATE =======');
-        const templateForm = document.getElementById('saveTemplateForm');
-        const mainForm = document.getElementById('exportForm');
-
-        // Проверка наличия формы
-        if (!templateForm) {
-            console.error('Критическая ошибка: форма saveTemplateForm не найдена в DOM');
-            return false;
-        }
-
-        // Логирование текущего состояния формы перед изменениями
-        console.log('URL формы:', templateForm.action);
-        console.log('Метод формы:', templateForm.method);
-
-        // Проверка ID шаблона
-        const templateIdField = document.getElementById('hiddenTemplateId');
-        console.log('Поле hiddenTemplateId:', templateIdField);
-        console.log('Значение hiddenTemplateId перед обработкой:', templateIdField ? templateIdField.value : 'не найдено');
-
-        // Копируем имя шаблона
-        const templateName = document.getElementById('templateName').value;
-        console.log('Имя шаблона:', templateName);
-
-        // Обновляем скрытое поле для имени шаблона
-        document.getElementById('hiddenTemplateName').value = templateName;
-        console.log('Установлено hiddenTemplateName:', document.getElementById('hiddenTemplateName').value);
-
-        // Получаем режим работы (создание или обновление)
-        const isUpdate = document.getElementById('hiddenTemplateId').value !== '';
-        console.log('Режим работы:', isUpdate ? 'Обновление' : 'Создание');
-
-        // Проверяем параметр templateId при обновлении
-        if (isUpdate) {
-            const templateId = document.getElementById('hiddenTemplateId').value;
-            console.log('ID шаблона для обновления:', templateId);
-
-            // Проверяем, существует ли в форме поле с именем templateId
-            const templateIdInputs = templateForm.querySelectorAll('input[name="templateId"]');
-            console.log('Найдено полей с именем templateId:', templateIdInputs.length);
-            templateIdInputs.forEach((input, index) => {
-                console.log(`templateId поле #${index + 1}:`, input);
-                console.log(`templateId значение #${index + 1}:`, input.value);
-            });
-        }
-
-        // Получаем выбранные поля
-        const selectedFields = Array.from(document.querySelectorAll('input[name="fields"]:checked'));
-        console.log('Выбрано полей:', selectedFields.length);
-
-        // Очищаем существующие скрытые поля для выбранных полей и заголовков
-        const existingFields = templateForm.querySelectorAll('input[name="fields"]');
-        console.log('Удаление существующих полей:', existingFields.length);
-        existingFields.forEach(field => field.remove());
-
-        const existingHeaders = templateForm.querySelectorAll('input[name^="header_"]');
-        console.log('Удаление существующих заголовков:', existingHeaders.length);
-        existingHeaders.forEach(header => header.remove());
-
-        // Проверяем, что есть выбранные поля
-        if (selectedFields.length === 0) {
-            console.error('Ошибка: нет выбранных полей!');
-            alert('Пожалуйста, выберите хотя бы одно поле для шаблона');
-            return false;
-        }
-
-        // Добавляем выбранные поля в форму шаблона
-        console.log('Добавление полей в форму:');
-        selectedFields.forEach((field, index) => {
-            console.log(`Добавление поля ${index + 1}:`, field.value);
-            const fieldInput = document.createElement('input');
-            fieldInput.type = 'hidden';
-            fieldInput.name = 'fields';
-            fieldInput.value = field.value;
-            templateForm.appendChild(fieldInput);
-
-            // Добавляем заголовок поля
-            const headerField = document.getElementById('header_' + field.value.replace('.', '_'));
-            if (headerField) {
-                console.log(`Добавление заголовка для поля ${field.value}:`, headerField.value);
-                const headerInput = document.createElement('input');
-                headerInput.type = 'hidden';
-                headerInput.name = 'header_' + field.value.replace('.', '_');
-                headerInput.value = headerField.value;
-                templateForm.appendChild(headerInput);
-            } else {
-                console.warn(`Не найден элемент заголовка для поля ${field.value}`);
-            }
-        });
-
-        // Копируем параметры форматирования
-        console.log('Формат файла:', document.getElementById('format').value);
-        // Обновляем формат
-        document.getElementById('templateFormat').value = document.getElementById('format').value;
-
-        if (document.getElementById('format').value === 'csv') {
-            // Параметры CSV
-            addHiddenInput(templateForm, 'delimiter', document.getElementById('delimiter').value);
-            addHiddenInput(templateForm, 'quoteChar', document.getElementById('quoteChar').value);
-            addHiddenInput(templateForm, 'encoding', document.getElementById('encoding').value);
-        } else {
-            // Параметры Excel
-            addHiddenInput(templateForm, 'sheetName', document.getElementById('sheetName').value);
-            addHiddenInput(templateForm, 'autoSizeColumns', document.getElementById('autoSizeColumns').checked);
-        }
-
-        // Общие параметры
-        addHiddenInput(templateForm, 'includeHeader', document.getElementById('includeHeader').checked);
-
-        // Параметры стратегии
-        const strategyId = document.getElementById('strategyId').value;
-        console.log('Стратегия:', strategyId);
-        // Обновляем стратегию
-        document.getElementById('templateStrategyId').value = strategyId;
-
-        if (strategyId) {
-            // Добавляем параметры стратегии
-            const strategyInputs = mainForm.querySelectorAll('input[name^="strategy_"], select[name^="strategy_"]');
-            strategyInputs.forEach(input => {
-                if (input.value) {
-                    console.log(`Добавление параметра стратегии: ${input.name} = ${input.value}`);
-                    addHiddenInput(templateForm, input.name, input.value);
-                }
-            });
-        }
-
-        // Сохраняем порядок полей
-        saveFieldOrder();
-        const fieldsOrder = document.getElementById('fieldsOrder').value;
-        console.log('Порядок полей:', fieldsOrder);
-        document.getElementById('templateFieldsOrder').value = fieldsOrder;
-
-        // Проверяем содержимое формы перед отправкой
-        console.log('URL формы перед отправкой:', templateForm.action);
-
-        // Повторная проверка ID шаблона перед отправкой
-        if (isUpdate) {
-            // Проверка наличия параметра templateId в форме
-            const finalTemplateIdFields = templateForm.querySelectorAll('input[name="templateId"]');
-            console.log('Количество полей templateId перед отправкой:', finalTemplateIdFields.length);
-
-            if (finalTemplateIdFields.length === 0) {
-                // Если поле отсутствует, создаем его явно
-                console.log('CRITICAL: Поле templateId отсутствует в форме! Создаем его.');
-                const templateIdInput = document.createElement('input');
-                templateIdInput.type = 'hidden';
-                templateIdInput.name = 'templateId';
-                templateIdInput.value = document.getElementById('hiddenTemplateId').value;
-                templateForm.appendChild(templateIdInput);
-                console.log('Создано поле templateId со значением:', templateIdInput.value);
-            } else {
-                finalTemplateIdFields.forEach((field, index) => {
-                    console.log(`Финальное поле templateId #${index + 1}:`, field.value);
-                });
-            }
-        }
-
-        // Получаем все поля формы для логирования
-        const allInputs = templateForm.querySelectorAll('input[type="hidden"]');
-        console.log('Все поля формы перед отправкой:');
-        allInputs.forEach(input => {
-            console.log(`${input.name}: ${input.value}`);
-        });
-
-        // Дополнительная проверка наличия всех необходимых полей
-        const requiredFields = ['entityType', 'format', 'templateName'];
-        let missingFields = [];
-
-        requiredFields.forEach(field => {
-            if (!templateForm.querySelector(`input[name="${field}"]`) ||
-                !templateForm.querySelector(`input[name="${field}"]`).value) {
-                missingFields.push(field);
-            }
-        });
-
-        if (missingFields.length > 0) {
-            console.error('Отсутствуют обязательные поля:', missingFields.join(', '));
-            alert('Ошибка: не все обязательные поля заполнены: ' + missingFields.join(', '));
-            return false;
-        }
-
-        // Отправляем форму
-        console.log('Отправка формы...');
-
-        // Преобразование формы в FormData для логирования окончательного содержимого
-        const formData = new FormData(templateForm);
-        console.log('Содержимое FormData:');
-        for (let pair of formData.entries()) {
-            console.log(pair[0] + ': ' + pair[1]);
-        }
-
-        templateForm.submit();
-        console.log('Форма отправлена');
-        console.log('======= КОНЕЦ ФУНКЦИИ SAVE TEMPLATE =======');
-        return true;
-    }
-
-
-    // Вспомогательная функция для добавления скрытого поля
-    function addHiddenInput(form, name, value) {
-        console.log(`Добавление/обновление скрытого поля ${name} со значением ${value}`);
-
-        let input = form.querySelector(`input[name="${name}"]`);
-        if (!input) {
-            console.log(`Поле ${name} не найдено, создаем новое`);
-            input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            form.appendChild(input);
-        } else {
-            console.log(`Поле ${name} найдено, обновляем значение`);
-        }
-        input.value = value;
-        console.log(`Итоговое значение поля ${name}: ${input.value}`);
-        return input;
-    }
-
-    // Инициализация формы экспорта
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('Инициализация формы экспорта');
-
-        // Инициализация состояния формы
-        toggleFormatSettings();
-        toggleStrategySettings();
-
-        // Применение параметров шаблона, если они есть
-        if (document.getElementById('templateId').value) {
-            applyTemplateParams();
-        }
-
-        // Настройка обработчиков шаблонов
-        setupTemplateHandlers();
 
         // Обработчик отправки формы
         const exportForm = document.getElementById('exportForm');
         if (exportForm) {
             exportForm.addEventListener('submit', function(event) {
+                // Сохраняем порядок полей перед отправкой
                 saveFieldOrder();
             });
         }
-    });
 
-    // Переключение параметров формата файла
+        // Инициализация изменений состояния фильтров при клике на кнопки заголовка
+        initCollapseIcons();
+    }
+
+    // Инициализация иконок свертывания/развертывания блоков
+    function initCollapseIcons() {
+        document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(button => {
+            button.addEventListener('click', function() {
+                const icon = this.querySelector('.fas.fa-chevron-down, .fas.fa-chevron-up');
+                if (icon) {
+                    if (icon.classList.contains('fa-chevron-down')) {
+                        icon.classList.replace('fa-chevron-down', 'fa-chevron-up');
+                    } else {
+                        icon.classList.replace('fa-chevron-up', 'fa-chevron-down');
+                    }
+                }
+            });
+
+            // Проверка начального состояния
+            const target = document.querySelector(button.getAttribute('data-bs-target'));
+            if (target && target.classList.contains('show')) {
+                const icon = button.querySelector('.fas.fa-chevron-down');
+                if (icon) {
+                    icon.classList.replace('fa-chevron-down', 'fa-chevron-up');
+                }
+            }
+        });
+    }
+
+    // Переключает настройки в зависимости от выбранного формата файла
     function toggleFormatSettings() {
         const format = document.getElementById('format').value;
-        document.getElementById('csvParams').style.display = format === 'csv' ? 'block' : 'none';
-        document.getElementById('excelParams').style.display = format === 'xlsx' ? 'block' : 'none';
+        const csvParams = document.getElementById('csvParams');
+        const excelParams = document.getElementById('excelParams');
 
-        // Обновляем формат в форме шаблона
-        document.getElementById('templateFormat').value = format;
+        if (csvParams && excelParams) {
+            csvParams.style.display = format === 'csv' ? 'block' : 'none';
+            excelParams.style.display = format === 'xlsx' ? 'block' : 'none';
+        }
     }
 
-    // Переключение настроек стратегии
+    // Переключает настройки в зависимости от выбранной стратегии
     function toggleStrategySettings() {
         const strategyId = document.getElementById('strategyId').value;
-        document.getElementById('strategyParams').style.display = strategyId ? 'block' : 'none';
+        const strategyParams = document.getElementById('strategyParams');
 
-        // Обновляем стратегию в форме шаблона
-        document.getElementById('templateStrategyId').value = strategyId;
+        if (strategyParams) {
+            strategyParams.style.display = strategyId && strategyId !== '' ? 'block' : 'none';
+        }
     }
 
-    // Выбрать все поля
+    // Выбирает все поля для экспорта
     function selectAllFields() {
-        document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+        document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
             checkbox.checked = true;
         });
     }
 
-    // Снять выбор со всех полей
+    // Снимает выбор со всех полей
     function deselectAllFields() {
-        document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+        document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
             checkbox.checked = false;
         });
     }
@@ -871,16 +605,114 @@
     function saveFieldOrder() {
         const selectedFields = Array.from(document.querySelectorAll('input[name="fields"]:checked'))
             .map(checkbox => checkbox.value);
-        document.getElementById('fieldsOrder').value = JSON.stringify(selectedFields);
+
+        const orderInput = document.getElementById('fieldsOrder');
+        if (orderInput) {
+            orderInput.value = JSON.stringify(selectedFields);
+        }
     }
 
-    // Применение параметров шаблона
-    function applyTemplateParams() {
-        // Все необходимые параметры уже применены через Thymeleaf на сервере
-        // Только обновляем видимость элементов в зависимости от выбранных параметров
-        toggleFormatSettings();
-        toggleStrategySettings();
+    // Сохраняет текущие настройки как шаблон
+    function saveTemplate() {
+        const templateForm = document.getElementById('saveTemplateForm');
+        const mainForm = document.getElementById('exportForm');
+
+        // Копируем имя шаблона
+        const templateName = document.getElementById('templateName').value;
+
+        // Получаем выбранные поля
+        const selectedFields = Array.from(document.querySelectorAll('input[name="fields"]:checked'));
+
+        // Очищаем существующие скрытые поля для выбранных полей и заголовков
+        const existingFields = templateForm.querySelectorAll('input[name="fields"]');
+        existingFields.forEach(field => field.remove());
+
+        const existingHeaders = templateForm.querySelectorAll('input[name^="header_"]');
+        existingHeaders.forEach(header => header.remove());
+
+        // Проверяем, что есть выбранные поля
+        if (selectedFields.length === 0) {
+            alert('Пожалуйста, выберите хотя бы одно поле для шаблона');
+            return false;
+        }
+
+        // Добавляем выбранные поля в форму шаблона
+        selectedFields.forEach((field, index) => {
+            const fieldInput = document.createElement('input');
+            fieldInput.type = 'hidden';
+            fieldInput.name = 'fields';
+            fieldInput.value = field.value;
+            templateForm.appendChild(fieldInput);
+
+            // Добавляем заголовок поля
+            const headerField = document.getElementById('header_' + field.value.replace('.', '_'));
+            if (headerField) {
+                const headerInput = document.createElement('input');
+                headerInput.type = 'hidden';
+                headerInput.name = 'header_' + field.value.replace('.', '_');
+                headerInput.value = headerField.value;
+                templateForm.appendChild(headerInput);
+            }
+        });
+
+        // Копируем параметры форматирования
+        document.getElementById('templateFormat').value = document.getElementById('format').value;
+
+        if (document.getElementById('format').value === 'csv') {
+            // Параметры CSV
+            addHiddenInput(templateForm, 'delimiter', document.getElementById('delimiter').value);
+            addHiddenInput(templateForm, 'quoteChar', document.getElementById('quoteChar').value);
+            addHiddenInput(templateForm, 'encoding', document.getElementById('encoding').value);
+        } else {
+            // Параметры Excel
+            addHiddenInput(templateForm, 'sheetName', document.getElementById('sheetName').value);
+            addHiddenInput(templateForm, 'autoSizeColumns', document.getElementById('autoSizeColumns').checked);
+        }
+
+        // Общие параметры
+        addHiddenInput(templateForm, 'includeHeader', document.getElementById('includeHeader').checked);
+
+        // Параметры стратегии
+        const strategyId = document.getElementById('strategyId').value;
+        document.getElementById('templateStrategyId').value = strategyId;
+
+        if (strategyId) {
+            // Добавляем параметры стратегии
+            const strategyInputs = mainForm.querySelectorAll('input[name^="strategy_"], select[name^="strategy_"]');
+            strategyInputs.forEach(input => {
+                if (input.value) {
+                    addHiddenInput(templateForm, input.name, input.value);
+                }
+            });
+        }
+
+        // Сохраняем порядок полей
+        saveFieldOrder();
+        const fieldsOrder = document.getElementById('fieldsOrder').value;
+        document.getElementById('templateFieldsOrder').value = fieldsOrder;
+
+        // Отправляем форму
+        templateForm.submit();
+        return true;
     }
+
+    // Вспомогательная функция для добавления скрытого поля
+    function addHiddenInput(form, name, value) {
+        let input = form.querySelector(`input[name="${name}"]`);
+        if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            form.appendChild(input);
+        }
+        input.value = value;
+        return input;
+    }
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', function() {
+        initExportForm();
+    });
 </script>
 </body>
 </html>

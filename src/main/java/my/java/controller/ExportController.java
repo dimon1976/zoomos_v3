@@ -60,6 +60,8 @@ public class ExportController {
             @PathVariable Long clientId,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) Long templateId,
+            // Добавляем параметр для предвыбора операции импорта
+            @RequestParam(required = false) Long preselectedOperation,
             Model model,
             HttpServletRequest request,
             RedirectAttributes redirectAttributes) {
@@ -109,6 +111,17 @@ public class ExportController {
                             model.addAttribute("strategies", fileExportService.getAvailableStrategies());
                         }
                     }
+                    // Если указана операция для предварительного выбора
+                    if (preselectedOperation != null) {
+                        model.addAttribute("preselectedOperation", preselectedOperation);
+                    }
+
+                    // Загружаем список операций импорта для клиента
+                    List<FileOperation> importOperations = fileOperationRepository.findByClientIdAndOperationTypeAndStatus(
+                            clientId,
+                            FileOperation.OperationType.IMPORT,
+                            FileOperation.OperationStatus.COMPLETED);
+                    model.addAttribute("importOperations", importOperations);
 
                     return "export/form";
                 })

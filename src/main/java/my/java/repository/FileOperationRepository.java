@@ -17,6 +17,12 @@ import java.util.List;
 @Repository
 public interface FileOperationRepository extends JpaRepository<FileOperation, Long>, JpaSpecificationExecutor<FileOperation> {
 
+    // В файле FileOperationRepository.java добавьте метод:
+    List<FileOperation> findByClientIdAndOperationTypeAndStatus(
+            Long clientId,
+            FileOperation.OperationType operationType,
+            FileOperation.OperationStatus status);
+
     // Найти все операции для указанного клиента
     List<FileOperation> findByClientId(Long clientId);
 

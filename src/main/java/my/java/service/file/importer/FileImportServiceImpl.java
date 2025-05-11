@@ -287,9 +287,14 @@ public class FileImportServiceImpl implements FileImportService {
             processedRecords++;
 
             try {
-                // Обрабатываем строку и добавляем результаты
+                // Передаем операцию в метод обработки строки
                 List<ImportableEntity> entitiesFromRow = compositeEntityService.processRowWithOptions(
-                        applyMapping(row, fieldMapping), fieldMapping, client.getId(), options);
+                        applyMapping(row, fieldMapping),
+                        fieldMapping,
+                        client.getId(),
+                        options,
+                        operation);  // Передаем operation
+
                 resultEntities.addAll(entitiesFromRow);
             } catch (Exception e) {
                 if ("stop".equals(errorHandling)) {

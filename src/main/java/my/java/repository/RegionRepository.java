@@ -11,6 +11,12 @@ import java.util.Optional;
 @Repository
 public interface RegionRepository extends JpaRepository<Region, Long> {
 
+    // Поиск данных региона по операции импорта
+    List<Region> findByImportOperationId(Long importOperationId);
+
+    // Подсчет количества записей по операции импорта
+    Long countByImportOperationId(Long importOperationId);
+
     // Поиск данных региона по продукту
     List<Region> findByProductId(Long productId);
 

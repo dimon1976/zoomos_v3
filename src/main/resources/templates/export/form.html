@@ -51,7 +51,8 @@
             <!-- Формы экспорта данных -->
             <div th:if="${selectedEntityType != null && !selectedEntityType.isEmpty()}">
                 <!-- Скрытая форма для сохранения шаблона -->
-                <form id="saveTemplateForm" th:action="@{/clients/{id}/export/templates/save-from-export(id=${client.id})}"
+                <form id="saveTemplateForm"
+                      th:action="@{/clients/{id}/export/templates/save-from-export(id=${client.id})}"
                       method="post" style="display: none;">
                     <input type="hidden" id="templateEntityType" name="entityType" th:value="${selectedEntityType}">
                     <input type="hidden" id="templateFormat" name="format" value="csv">
@@ -75,7 +76,8 @@
                         <div class="card-body">
                             <div class="form-group mb-3">
                                 <label for="templateId">Выберите шаблон:</label>
-                                <select id="templateId" name="templateId" class="form-control" onchange="loadTemplate()">
+                                <select id="templateId" name="templateId" class="form-control"
+                                        onchange="loadTemplate()">
                                     <option value="">Без шаблона</option>
                                     <option th:each="template : ${templates}"
                                             th:value="${template.id}"
@@ -100,7 +102,8 @@
                                             <i class="fas fa-sync-alt"></i> Обновить шаблон
                                         </button>
                                     </div>
-                                    <small class="form-text text-muted">Сохраните текущие настройки как шаблон для повторного использования</small>
+                                    <small class="form-text text-muted">Сохраните текущие настройки как шаблон для
+                                        повторного использования</small>
                                 </div>
                             </div>
                         </div>
@@ -128,7 +131,9 @@
                                     <label for="format">Формат экспорта:</label>
                                     <select id="format" name="format" class="form-control" required
                                             onchange="toggleFormatSettings()">
-                                        <option value="csv" th:selected="${fileFormat == null || fileFormat == 'csv'}">CSV</option>
+                                        <option value="csv" th:selected="${fileFormat == null || fileFormat == 'csv'}">
+                                            CSV
+                                        </option>
                                         <option value="xlsx" th:selected="${fileFormat == 'xlsx'}">Excel (XLSX)</option>
                                     </select>
                                 </div>
@@ -138,7 +143,9 @@
                                     <label for="strategyId">Стратегия обработки данных:</label>
                                     <select id="strategyId" name="strategyId" class="form-control"
                                             onchange="toggleStrategySettings()">
-                                        <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">Стандартная (без обработки)</option>
+                                        <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">
+                                            Стандартная (без обработки)
+                                        </option>
                                         <option th:each="strategy : ${strategies}"
                                                 th:value="${strategy.id}"
                                                 th:text="${strategy.name}"
@@ -146,7 +153,8 @@
                                             Стратегия
                                         </option>
                                     </select>
-                                    <small class="form-text text-muted">Выберите стратегию обработки данных перед экспортом</small>
+                                    <small class="form-text text-muted">Выберите стратегию обработки данных перед
+                                        экспортом</small>
                                 </div>
 
                                 <!-- Общие параметры -->
@@ -167,10 +175,19 @@
                                             <div class="form-group mb-2">
                                                 <label for="delimiter">Разделитель:</label>
                                                 <select id="delimiter" name="delimiter" class="form-control">
-                                                    <option value="," th:selected="${delimiter == null || delimiter == ','}">Запятая (,)</option>
-                                                    <option value=";" th:selected="${delimiter == ';'}">Точка с запятой (;)</option>
-                                                    <option value="|" th:selected="${delimiter == '|'}">Вертикальная черта (|)</option>
-                                                    <option value="&#09" th:selected="${delimiter == '	'}">Табуляция</option>
+                                                    <option value=","
+                                                            th:selected="${delimiter == null || delimiter == ','}">
+                                                        Запятая (,)
+                                                    </option>
+                                                    <option value=";" th:selected="${delimiter == ';'}">Точка с запятой
+                                                        (;)
+                                                    </option>
+                                                    <option value="|" th:selected="${delimiter == '|'}">Вертикальная
+                                                        черта (|)
+                                                    </option>
+                                                    <option value="&#09" th:selected="${delimiter == '	'}">
+                                                        Табуляция
+                                                    </option>
                                                 </select>
                                             </div>
                                         </div>
@@ -178,8 +195,14 @@
                                             <div class="form-group mb-2">
                                                 <label for="quoteChar">Символ кавычек:</label>
                                                 <select id="quoteChar" name="quoteChar" class="form-control">
-                                                    <option value="&quot;" th:selected="${quoteChar == null || #strings.toString(quoteChar) == '&quot;'}">Двойные кавычки (")</option>
-                                                    <option value="'" th:selected="${#strings.toString(quoteChar) == ''''}">Одинарные кавычки (')</option>
+                                                    <option value="&quot;"
+                                                            th:selected="${quoteChar == null || #strings.toString(quoteChar) == '&quot;'}">
+                                                        Двойные кавычки (")
+                                                    </option>
+                                                    <option value="'"
+                                                            th:selected="${#strings.toString(quoteChar) == ''''}">
+                                                        Одинарные кавычки (')
+                                                    </option>
                                                 </select>
                                             </div>
                                         </div>
@@ -187,10 +210,19 @@
                                             <div class="form-group mb-2">
                                                 <label for="encoding">Кодировка:</label>
                                                 <select id="encoding" name="encoding" class="form-control">
-                                                    <option value="UTF-8" th:selected="${encoding == null || encoding == 'UTF-8'}">UTF-8</option>
-                                                    <option value="Windows-1251" th:selected="${encoding == 'windows-1251'}">Windows-1251</option>
-                                                    <option value="ISO-8859-1" th:selected="${encoding == 'ISO-8859-1'}">ISO-8859-1</option>
-                                                    <option value="UTF-16" th:selected="${encoding == 'UTF-16'}">UTF-16</option>
+                                                    <option value="UTF-8"
+                                                            th:selected="${encoding == null || encoding == 'UTF-8'}">
+                                                        UTF-8
+                                                    </option>
+                                                    <option value="Windows-1251"
+                                                            th:selected="${encoding == 'windows-1251'}">Windows-1251
+                                                    </option>
+                                                    <option value="ISO-8859-1"
+                                                            th:selected="${encoding == 'ISO-8859-1'}">ISO-8859-1
+                                                    </option>
+                                                    <option value="UTF-16" th:selected="${encoding == 'UTF-16'}">
+                                                        UTF-16
+                                                    </option>
                                                 </select>
                                             </div>
                                         </div>
@@ -205,7 +237,8 @@
                                             <div class="form-group mb-2">
                                                 <label for="sheetName">Имя листа:</label>
                                                 <input type="text" id="sheetName" name="sheetName"
-                                                       class="form-control" th:value="${sheetName != null ? sheetName : 'Данные'}">
+                                                       class="form-control"
+                                                       th:value="${sheetName != null ? sheetName : 'Данные'}">
                                             </div>
                                         </div>
                                         <div class="col-md-6">
@@ -225,18 +258,60 @@
                     </div>
 
                     <!-- Параметры стратегии -->
-                    <div id="strategyParams" class="card mb-3" th:style="${strategyId != null && !strategyId.isEmpty() ? '' : 'display: none;'}">
+                    <div id="strategyParams" class="card mb-3"
+                         th:style="${strategyId != null && !strategyId.isEmpty() ? '' : 'display: none;'}">
                         <div class="card-header bg-light">
                             <h5><i class="fas fa-sliders-h"></i> Параметры стратегии</h5>
                         </div>
                         <div class="card-body">
+
+                            <!-- Параметры фильтрации данных (независимо от стратегии) -->
+                            <div class="card mb-3">
+                                <div class="card-header bg-light" id="filter-settings-header">
+                                    <h5 class="mb-0">
+                                        <button class="btn btn-link text-decoration-none w-100 text-start d-flex justify-content-between align-items-center"
+                                                type="button"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#filter-settings-body"
+                                                aria-expanded="false"
+                                                aria-controls="filter-settings-body">
+                                            <span><i class="fas fa-filter"></i> Фильтрация данных</span>
+                                            <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                    </h5>
+                                </div>
+                                <div id="filter-settings-body" class="collapse">
+                                    <div class="card-body">
+                                        <!-- Фильтрация по операциям импорта -->
+                                        <div class="mb-3">
+                                            <label for="filter_importOperations">Фильтрация по операциям
+                                                импорта:</label>
+                                            <select id="filter_importOperations" name="filter_importOperations"
+                                                    class="form-select" multiple size="5">
+                                                <option value="">-- Все операции --</option>
+                                                <option th:each="operation : ${importOperations}"
+                                                        th:value="${operation.id}"
+                                                        th:text="${operation.fileName + ' (' + #temporals.format(operation.completedAt, 'dd.MM.yyyy HH:mm') + ') - ' + operation.recordCount + ' записей'}"
+                                                        th:selected="${preselectedOperation != null && preselectedOperation == operation.id}">
+                                                    Операция импорта
+                                                </option>
+                                            </select>
+                                            <small class="form-text text-muted">Для выбора нескольких операций
+                                                удерживайте Ctrl</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+
                             <!-- Фильтрация по текстовому полю -->
                             <div id="filteredStrategyParams">
                                 <h6>Фильтрация данных</h6>
                                 <div class="row mb-3">
                                     <div class="col-md-6">
                                         <label for="strategy_textField">Поле для текстового поиска:</label>
-                                        <select id="strategy_textField" name="strategy_textField" class="form-control">
+                                        <select id="strategy_textField" name="strategy_textField"
+                                                class="form-control">
                                             <option value="">-- Выберите поле --</option>
                                             <optgroup label="Основные поля">
                                                 <option th:each="field : ${entityFields}"
@@ -302,7 +377,8 @@
                                 <div class="row mb-3">
                                     <div class="col-md-4">
                                         <label for="strategy_dateField">Поле с датой:</label>
-                                        <select id="strategy_dateField" name="strategy_dateField" class="form-control">
+                                        <select id="strategy_dateField" name="strategy_dateField"
+                                                class="form-control">
                                             <option value="">-- Выберите поле --</option>
                                             <optgroup label="Основные поля">
                                                 <option th:each="field : ${entityFields}"
@@ -329,7 +405,8 @@
                                     </div>
                                     <div class="col-md-4">
                                         <label for="strategy_toDate">Дата по:</label>
-                                        <input type="date" id="strategy_toDate" name="strategy_toDate" class="form-control">
+                                        <input type="date" id="strategy_toDate" name="strategy_toDate"
+                                               class="form-control">
                                     </div>
                                 </div>
                             </div>
@@ -354,10 +431,12 @@
                         <div id="fields-selection-body" class="collapse">
                             <div class="card-body">
                                 <div class="d-flex justify-content-end mb-3">
-                                    <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="selectAllFields()">
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-2"
+                                            onclick="selectAllFields()">
                                         <i class="fas fa-check-square"></i> Выбрать все
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllFields()">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            onclick="deselectAllFields()">
                                         <i class="fas fa-square"></i> Снять выбор
                                     </button>
                                 </div>
@@ -385,7 +464,8 @@
                                             <div class="ms-4 mt-1">
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text">Заголовок</span>
-                                                    <input type="text" class="form-control form-control-sm field-header"
+                                                    <input type="text"
+                                                           class="form-control form-control-sm field-header"
                                                            th:name="${'header_' + field.key.replace('.', '_')}"
                                                            th:id="${'header_' + field.key.replace('.', '_')}"
                                                            th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
@@ -398,7 +478,8 @@
                                 </div>
 
                                 <!-- Поля связанных сущностей -->
-                                <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}" class="mt-4">
+                                <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}"
+                                     class="mt-4">
                                     <h6 class="border-bottom pb-2 mb-3">
                                         <i class="fas fa-link"></i> Связанная сущность:
                                         <span th:text="${entityEntry.key}">Related Entity</span>
@@ -422,7 +503,8 @@
                                             <div class="ms-4 mt-1">
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text">Заголовок</span>
-                                                    <input type="text" class="form-control form-control-sm field-header"
+                                                    <input type="text"
+                                                           class="form-control form-control-sm field-header"
                                                            th:name="${'header_' + field.key.replace('.', '_')}"
                                                            th:id="${'header_' + field.key.replace('.', '_')}"
                                                            th:value="${fieldHeaders != null && fieldHeaders.containsKey(field.key) ?
@@ -449,7 +531,8 @@
                             <i class="fas fa-download"></i> Скачать файл
                         </button>
 
-                        <a th:href="@{/clients/{id}(id=${client != null ? client.id : ''})}" class="btn btn-secondary">
+                        <a th:href="@{/clients/{id}(id=${client != null ? client.id : ''})}"
+                           class="btn btn-secondary">
                             <i class="fas fa-times"></i> Отмена
                         </a>
                     </div>
@@ -479,7 +562,7 @@
         // Обработчик для кнопки сохранения шаблона
         const saveTemplateBtn = document.getElementById('saveTemplateBtn');
         if (saveTemplateBtn) {
-            saveTemplateBtn.addEventListener('click', function() {
+            saveTemplateBtn.addEventListener('click', function () {
                 const templateName = document.getElementById('templateName').value;
                 if (!templateName || templateName.trim() === '') {
                     alert('Пожалуйста, введите имя шаблона');
@@ -492,7 +575,7 @@
         // Обработчик для кнопки обновления шаблона
         const updateTemplateBtn = document.getElementById('updateTemplateBtn');
         if (updateTemplateBtn) {
-            updateTemplateBtn.addEventListener('click', function() {
+            updateTemplateBtn.addEventListener('click', function () {
                 const templateName = document.getElementById('templateName').value;
                 if (!templateName || templateName.trim() === '') {
                     alert('Пожалуйста, введите имя шаблона');
@@ -515,7 +598,7 @@
         // Обработчик отправки формы
         const exportForm = document.getElementById('exportForm');
         if (exportForm) {
-            exportForm.addEventListener('submit', function(event) {
+            exportForm.addEventListener('submit', function (event) {
                 // Сохраняем порядок полей перед отправкой
                 saveFieldOrder();
             });
@@ -528,7 +611,7 @@
     // Инициализация иконок свертывания/развертывания блоков
     function initCollapseIcons() {
         document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(button => {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function () {
                 const icon = this.querySelector('.fas.fa-chevron-down, .fas.fa-chevron-up');
                 if (icon) {
                     if (icon.classList.contains('fa-chevron-down')) {
@@ -574,14 +657,14 @@
 
     // Выбирает все поля для экспорта
     function selectAllFields() {
-        document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
+        document.querySelectorAll('input[name="fields"]').forEach(function (checkbox) {
             checkbox.checked = true;
         });
     }
 
     // Снимает выбор со всех полей
     function deselectAllFields() {
-        document.querySelectorAll('input[name="fields"]').forEach(function(checkbox) {
+        document.querySelectorAll('input[name="fields"]').forEach(function (checkbox) {
             checkbox.checked = false;
         });
     }
@@ -710,7 +793,7 @@
     }
 
     // Инициализация при загрузке страницы
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         initExportForm();
     });
 </script>

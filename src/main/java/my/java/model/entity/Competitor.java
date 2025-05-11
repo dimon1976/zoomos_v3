@@ -22,6 +22,9 @@ public class Competitor implements ImportableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "import_operation_id")
+    private Long importOperationId;
+
     private Long clientId;
 
     @Column(length = 400)

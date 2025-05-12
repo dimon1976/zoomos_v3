@@ -157,8 +157,49 @@ public class FilteredExportStrategy implements ExportProcessingStrategy {
                     log.warn("Неверный формат конечной даты: {}", params.get("toDate"));
                 }
             }
-        }
 
+        }
+        // Фильтр по операциям импорта
+        if (params.containsKey("importOperations")) {
+            String importOperationsParam = params.get("importOperations");
+            if (importOperationsParam != null && !importOperationsParam.isEmpty()) {
+                List<Long> operationIds = parseOperationIds(importOperationsParam);
+                if (!operationIds.isEmpty()) {
+                    filter = filter.and(row -> {
+                        // Проверяем наличие информации об импорте в данных
+                        if (row.containsKey("importOperationId")) {
+                            String importOpIdStr = row.get("importOperationId");
+                            if (importOpIdStr != null && !importOpIdStr.isEmpty()) {
+                                try {
+                                    Long importOpId = Long.parseLong(importOpIdStr);
+                                    return operationIds.contains(importOpId);
+                                } catch (NumberFormatException e) {
+                                    return false;
+                                }
+                            }
+                        }
+                        return false;
+                    });
+                }
+            }
+        }
         return filter;
     }
+
+    private List<Long> parseOperationIds(String operationsParam) {
+        List<Long> result = new ArrayList<>();
+        try {
+            // Разбираем строку с разделителями
+            String[] ids = operationsParam.split(",");
+            for (String id : ids) {
+                if (!id.trim().isEmpty()) {
+                    result.add(Long.parseLong(id.trim()));
+                }
+            }
+        } catch (NumberFormatException e) {
+            log.error("Ошибка при разборе ID операций: {}", e.getMessage());
+        }
+        return result;
+    }
+
 }

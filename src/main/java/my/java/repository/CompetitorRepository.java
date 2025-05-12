@@ -14,6 +14,12 @@ import java.util.Optional;
 @Repository
 public interface CompetitorRepository extends JpaRepository<Competitor, Long> {
 
+    // Поиск данных конкурента по операции импорта
+    List<Competitor> findByImportOperationId(Long importOperationId);
+
+    // Подсчет количества записей по операции импорта
+    Long countByImportOperationId(Long importOperationId);
+
     // Поиск данных конкурентов по продукту
     List<Competitor> findByProductId(Long productId);
 

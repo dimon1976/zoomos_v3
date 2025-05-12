@@ -318,36 +318,72 @@ public class EntityDataService {
                 continue;
             }
 
-            switch (key) {
-                case "name":
-                    sql.append(" AND product_name ILIKE ?");
-                    params.add("%" + value + "%");
-                    break;
-                case "fromDate":
-                    sql.append(" AND created_at >= ?");
+            // Добавляем фильтр по операциям импорта
+            if (key.equals("importOperationIds")) {
+                if (value instanceof List) {
+                    List<?> operationIds = (List<?>) value;
+                    if (!operationIds.isEmpty()) {
+                        sql.append(" AND import_operation_id IN (");
+                        for (int i = 0; i < operationIds.size(); i++) {
+                            sql.append(i > 0 ? ", ?" : "?");
+                            params.add(operationIds.get(i));
+                        }
+                        sql.append(")");
+                    }
+                } else if (value instanceof String) {
+                    // Если передана строка с разделителями
+                    String[] ids = ((String) value).split(",");
+                    if (ids.length > 0) {
+                        sql.append(" AND import_operation_id IN (");
+                        for (int i = 0; i < ids.length; i++) {
+                            sql.append(i > 0 ? ", ?" : "?");
+                            try {
+                                params.add(Long.parseLong(ids[i].trim()));
+                            } catch (NumberFormatException e) {
+                                log.warn("Некорректный формат ID операции: {}", ids[i]);
+                            }
+                        }
+                        sql.append(")");
+                    }
+                } else {
+                    // Если передано одно значение
+                    sql.append(" AND import_operation_id = ?");
                     params.add(value);
-                    break;
-                case "toDate":
-                    sql.append(" AND created_at <= ?");
-                    params.add(value);
-                    break;
-                case "minPrice":
-                    sql.append(" AND CAST(product_price AS numeric) >= ?");
-                    params.add(value);
-                    break;
-                case "maxPrice":
-                    sql.append(" AND CAST(product_price AS numeric) <= ?");
-                    params.add(value);
-                    break;
-                default:
-                    // Для других фильтров добавляем прямое сравнение
-                    String column = convertFieldNameToDbColumn(key);
-                    sql.append(" AND ").append(column).append(" = ?");
-                    params.add(value);
-                    break;
+                }
+            } else {
+                // Существующая логика для других фильтров...
+                switch (key) {
+                    case "name":
+                        sql.append(" AND product_name ILIKE ?");
+                        params.add("%" + value + "%");
+                        break;
+                    case "fromDate":
+                        sql.append(" AND created_at >= ?");
+                        params.add(value);
+                        break;
+                    case "toDate":
+                        sql.append(" AND created_at <= ?");
+                        params.add(value);
+                        break;
+                    case "minPrice":
+                        sql.append(" AND CAST(product_price AS numeric) >= ?");
+                        params.add(value);
+                        break;
+                    case "maxPrice":
+                        sql.append(" AND CAST(product_price AS numeric) <= ?");
+                        params.add(value);
+                        break;
+                    default:
+                        // Для других фильтров добавляем прямое сравнение
+                        String column = convertFieldNameToDbColumn(key);
+                        sql.append(" AND ").append(column).append(" = ?");
+                        params.add(value);
+                        break;
+                }
             }
         }
     }
+
 
     /**
      * Преобразует результаты запроса в нужный формат

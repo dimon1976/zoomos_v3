@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import my.java.service.file.options.FileWritingOptions;
 
@@ -46,6 +47,11 @@ public class ExportTemplate {
     @OrderColumn(name = "display_order")
     private List<ExportField> fields = new ArrayList<>();
 
+    /**
+     * -- GETTER --
+     *  Получает JSON-представление полей
+     */
+    @Getter
     @Column(name = "fields_json", columnDefinition = "TEXT", nullable = false)
     private String fieldsJson = "[]";  // Значение по умолчанию - пустой массив
 
@@ -90,7 +96,9 @@ public class ExportTemplate {
     public void updateJsonFields() {
         // Сериализуем коллекцию полей
         try {
+            log.debug("updateJsonFields: сериализация коллекции полей, размер: {}", this.fields != null ? this.fields.size() : 0);
             this.fieldsJson = objectMapper.writeValueAsString(this.fields);
+            log.debug("updateJsonFields: поля сериализованы в JSON: {}", this.fieldsJson);
         } catch (JsonProcessingException e) {
             log.error("Ошибка при сериализации полей в JSON: {}", e.getMessage());
             // Устанавливаем пустой массив, чтобы избежать NULL значения
@@ -102,6 +110,7 @@ public class ExportTemplate {
             this.optionsJson = objectMapper.writeValueAsString(exportOptions);
             // Заполняем fileOptions для обратной совместимости
             this.fileOptions = this.optionsJson;
+            log.debug("updateJsonFields: параметры экспорта сериализованы в JSON: {}", this.optionsJson);
         } catch (JsonProcessingException e) {
             log.error("Ошибка при сериализации параметров в JSON: {}", e.getMessage());
             // Устанавливаем пустой объект, чтобы избежать NULL значения
@@ -114,20 +123,30 @@ public class ExportTemplate {
      */
     @PostLoad
     public void loadFromJson() {
+        log.debug("loadFromJson: начало загрузки полей из JSON: {}", this.fieldsJson);
+
         // Загрузка полей из fieldsJson
         if (this.fieldsJson != null && !this.fieldsJson.isEmpty()) {
+            log.debug("loadFromJson: fieldsJson не пустой, начинаем десериализацию");
             try {
                 List<ExportField> loadedFields = objectMapper.readValue(
                         this.fieldsJson, new TypeReference<List<ExportField>>() {});
+
+                log.debug("loadFromJson: десериализовано полей: {}", loadedFields != null ? loadedFields.size() : 0);
 
                 // Обновляем коллекцию только если загрузились поля
                 if (loadedFields != null && !loadedFields.isEmpty()) {
                     this.fields.clear();
                     this.fields.addAll(loadedFields);
+                    log.debug("loadFromJson: обновлена коллекция полей, новый размер: {}", this.fields.size());
+                } else {
+                    log.warn("loadFromJson: после десериализации получен пустой список полей");
                 }
             } catch (JsonProcessingException e) {
                 log.error("Ошибка при десериализации JSON в поля: {}", e.getMessage());
             }
+        } else {
+            log.warn("loadFromJson: fieldsJson пустой или null, невозможно загрузить поля");
         }
 
         // Загрузка параметров из optionsJson
@@ -135,6 +154,7 @@ public class ExportTemplate {
             try {
                 // Пытаемся загрузить как FileWritingOptions
                 this.exportOptions = objectMapper.readValue(this.optionsJson, FileWritingOptions.class);
+                log.debug("loadFromJson: параметры успешно загружены из optionsJson");
             } catch (Exception e) {
                 log.warn("Не удалось десериализовать optionsJson в FileWritingOptions: {}", e.getMessage());
 
@@ -143,6 +163,7 @@ public class ExportTemplate {
                     Map<String, String> optionsMap = objectMapper.readValue(
                             this.optionsJson, new TypeReference<Map<String, String>>() {});
                     this.exportOptions = FileWritingOptions.fromMap(optionsMap);
+                    log.debug("loadFromJson: параметры загружены из optionsJson через Map");
                 } catch (Exception ex) {
                     log.error("Ошибка при создании FileWritingOptions из Map: {}", ex.getMessage());
                     this.exportOptions = new FileWritingOptions();
@@ -154,11 +175,14 @@ public class ExportTemplate {
                 Map<String, String> optionsMap = objectMapper.readValue(
                         this.fileOptions, new TypeReference<Map<String, String>>() {});
                 this.exportOptions = FileWritingOptions.fromMap(optionsMap);
+                log.debug("loadFromJson: параметры загружены из fileOptions");
             } catch (Exception e) {
                 log.error("Ошибка при создании FileWritingOptions из fileOptions: {}", e.getMessage());
                 this.exportOptions = new FileWritingOptions();
             }
         }
+
+        log.debug("loadFromJson: завершено, fields.size={}", this.fields.size());
     }
 
     /**
@@ -202,5 +226,21 @@ public class ExportTemplate {
             exportOptions = new FileWritingOptions();
         }
         exportOptions.setFileType(fileType);
+    }
+
+    /**
+     * Устанавливает список полей шаблона
+     */
+    public void setFields(List<ExportField> fields) {
+        this.fields = fields;
+
+        // Обновляем JSON-представление при изменении списка полей
+        try {
+            this.fieldsJson = objectMapper.writeValueAsString(fields);
+            log.debug("setFields: автоматически обновлен fieldsJson: {}", this.fieldsJson);
+        } catch (JsonProcessingException e) {
+            log.error("setFields: ошибка при сериализации полей: {}", e.getMessage());
+            this.fieldsJson = "[]";
+        }
     }
 }

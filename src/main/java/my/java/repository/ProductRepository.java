@@ -13,6 +13,12 @@ import java.util.Optional;
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
+    // Поиск продуктов по операции импорта
+    List<Product> findByImportOperationId(Long importOperationId);
+
+    // Подсчет количества записей по операции импорта
+    Long countByImportOperationId(Long importOperationId);
+
     // Поиск по идентификатору продукта
     Optional<Product> findByProductId(String productId);
 

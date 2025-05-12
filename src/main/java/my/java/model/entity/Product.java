@@ -21,6 +21,9 @@ public class Product implements ImportableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "import_operation_id")
+    private Long importOperationId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "data_source")
     private DataSourceType dataSource;

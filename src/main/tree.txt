@@ -148,6 +148,7 @@ E:.
     |           V4__Add_Entity_Indexes.sql
     |           V5__AddColumnFieldMappings.sql
     |           V6__Update_file_operations.sql
+    |           V7__Add_Import_Operation_Id.sql
     |           
     +---static
     |   |   favicon.ico

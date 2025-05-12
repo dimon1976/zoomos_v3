@@ -200,6 +200,7 @@ public class ExportTemplateController {
                                @ModelAttribute ExportTemplate template,
                                @RequestParam(value = "isDefault", required = false) Boolean isDefault,
                                @RequestParam(value = "strategyId", required = false) String strategyId,
+                               @RequestParam(value = "fieldsOrder", required = false) String fieldsOrder,
                                @RequestParam Map<String, String> allParams,
                                RedirectAttributes redirectAttributes) {
         try {
@@ -227,6 +228,12 @@ public class ExportTemplateController {
             // Если стратегия указана, добавляем ее в параметры
             if (strategyId != null && !strategyId.isEmpty()) {
                 options.getAdditionalParams().put("strategyId", strategyId);
+            }
+
+            // Если есть порядок полей, добавляем его в дополнительные параметры
+            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
+                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
+                log.debug("Установлен порядок полей: {}", fieldsOrder);
             }
 
             template.setExportOptions(options);
@@ -262,9 +269,10 @@ public class ExportTemplateController {
             @RequestParam("format") String format,
             @RequestParam(value = "strategyId", required = false) String strategyId,
             @RequestParam(value = "fields", required = false) List<String> fields,
+            @RequestParam(value = "fieldsOrder", required = false) String fieldsOrder,
             @RequestParam Map<String, String> allParams,
             RedirectAttributes redirectAttributes,
-            HttpServletRequest request) { // Добавляем HttpServletRequest для получения всех параметров
+            HttpServletRequest request) {
 
         log.info("========== НАЧАЛО ОБРАБОТКИ ЗАПРОСА SAVE-FROM-EXPORT ==========");
         log.info("Получен запрос на сохранение шаблона из формы экспорта:");
@@ -275,6 +283,7 @@ public class ExportTemplateController {
         log.info("Format: {}", format);
         log.info("Strategy ID: {}", strategyId);
         log.info("Fields count: {}", fields != null ? fields.size() : 0);
+        log.info("Fields Order: {}", fieldsOrder);
 
         // Логирование всех параметров запроса
         log.info("Все параметры запроса:");
@@ -349,6 +358,12 @@ public class ExportTemplateController {
                 log.info("Добавлена стратегия в дополнительные параметры: {}", strategyId);
             }
 
+            // Если есть порядок полей, добавляем его в дополнительные параметры
+            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
+                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
+                log.info("Добавлен порядок полей: {}", fieldsOrder);
+            }
+
             // Устанавливаем настройки экспорта
             template.setExportOptions(options);
             log.info("Настройки экспорта установлены в шаблон");
@@ -398,20 +413,6 @@ public class ExportTemplateController {
                 // Устанавливаем новые поля
                 template.setFields(exportFields);
                 log.info("Установлено {} полей в шаблоне", exportFields.size());
-
-                // Принудительно сериализуем поля в JSON
-                try {
-                    String fieldsJson = objectMapper.writeValueAsString(exportFields);
-                    template.setFieldsJson(fieldsJson);
-                    log.debug("Сериализованы поля в JSON: {}", fieldsJson);
-                } catch (Exception e) {
-                    log.error("Ошибка при сериализации полей: {}", e.getMessage());
-                }
-
-                // Принудительно вызываем updateJsonFields
-                template.updateJsonFields();
-                log.debug("Вызван updateJsonFields, fields.size={}, fieldsJson={}",
-                        template.getFields().size(), template.getFieldsJson());
             } else {
                 log.warn("Не установлены поля для шаблона!");
             }
@@ -420,10 +421,6 @@ public class ExportTemplateController {
             if (isUpdate) {
                 log.info("Вызов метода updateTemplate с ID: {}", templateId);
                 ExportTemplate updatedTemplate = templateService.updateTemplate(templateId, template);
-
-                // Принудительно загружаем данные из JSON после обновления
-                updatedTemplate.loadFromJson();
-
                 log.info("Шаблон с ID {} успешно обновлен. Содержит {} полей",
                         templateId, updatedTemplate.getFields().size());
                 redirectAttributes.addFlashAttribute("successMessage",
@@ -431,10 +428,6 @@ public class ExportTemplateController {
             } else {
                 log.info("Вызов метода saveTemplate для создания нового шаблона");
                 ExportTemplate savedTemplate = templateService.saveTemplate(template);
-
-                // Принудительно загружаем данные из JSON после сохранения
-                savedTemplate.loadFromJson();
-
                 log.info("Новый шаблон успешно создан с ID: {}. Содержит {} полей",
                         savedTemplate.getId(), savedTemplate.getFields().size());
                 redirectAttributes.addFlashAttribute("successMessage",

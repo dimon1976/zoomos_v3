@@ -240,6 +240,7 @@ public class ExportController {
             RedirectAttributes redirectAttributes) {
 
         log.info("POST запрос на экспорт данных для клиента: {}, тип сущности: {}, формат: {}", clientId, entityType, format);
+        log.info("Порядок полей: {}", fieldsOrder);
 
         if (fields == null || fields.isEmpty()) {
             redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите поля для экспорта");
@@ -279,45 +280,16 @@ public class ExportController {
                 }
             }
 
+            // Сохраняем порядок полей, если он определен
+            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
+                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
+                log.debug("Сохранен порядок полей: {}", fieldsOrder);
+            }
+
             // Собираем все заголовки полей из формы
             for (Map.Entry<String, String> entry : allParams.entrySet()) {
                 if (entry.getKey().startsWith("header_")) {
                     options.getAdditionalParams().put(entry.getKey(), entry.getValue());
-                }
-            }
-
-            // Применяем порядок полей, если он указан
-            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
-                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
-
-                // Если у нас есть порядок полей в JSON, преобразуем его в список и используем для сортировки
-                try {
-                    List<String> orderedFields = new ArrayList<>();
-                    // Удаляем квадратные скобки и кавычки из строки JSON, затем разбиваем по запятой
-                    String cleanJson = fieldsOrder.replaceAll("[\\[\\]\"]", "");
-                    String[] fieldArray = cleanJson.split(",");
-
-                    orderedFields.addAll(Arrays.asList(fieldArray));
-
-                    // Если порядок полей действительно задан, используем его вместо исходного списка
-                    if (!orderedFields.isEmpty()) {
-                        // Фильтруем, оставляя только те поля, которые есть в исходном списке
-                        List<String> filteredOrderedFields = orderedFields.stream()
-                                .filter(fields::contains)
-                                .collect(Collectors.toList());
-
-                        // Добавляем поля, которые выбраны, но не указаны в порядке
-                        for (String field : fields) {
-                            if (!filteredOrderedFields.contains(field)) {
-                                filteredOrderedFields.add(field);
-                            }
-                        }
-
-                        // Заменяем исходный список на отсортированный
-                        fields = filteredOrderedFields;
-                    }
-                } catch (Exception e) {
-                    log.warn("Ошибка при разборе порядка полей: {}", e.getMessage());
                 }
             }
 
@@ -338,12 +310,8 @@ public class ExportController {
             // Перенаправляем на страницу операций
             return "redirect:/clients/" + clientId + "/operations/" + operation.getId();
 
-        } catch (IllegalArgumentException e) {
-            log.error("Ошибка при экспорте: {}", e.getMessage());
-            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
-            return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
         } catch (Exception e) {
-            log.error("Непредвиденная ошибка при экспорте: {}", e.getMessage(), e);
+            log.error("Ошибка при экспорте: {}", e.getMessage(), e);
             redirectAttributes.addFlashAttribute("errorMessage", "Произошла ошибка: " + e.getMessage());
             return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
         }
@@ -365,6 +333,7 @@ public class ExportController {
 
         log.info("POST запрос на прямое скачивание данных для клиента: {}, тип сущности: {}, формат: {}",
                 clientId, entityType, format);
+        log.info("Порядок полей: {}", fieldsOrder);
 
         if (fields == null || fields.isEmpty()) {
             throw new IllegalArgumentException("Пожалуйста, выберите поля для экспорта");
@@ -385,45 +354,16 @@ public class ExportController {
                 options.getAdditionalParams().put("strategyId", strategyId);
             }
 
+            // Сохраняем порядок полей, если он определен
+            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
+                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
+                log.debug("Сохранен порядок полей: {}", fieldsOrder);
+            }
+
             // Собираем все заголовки полей из формы
             for (Map.Entry<String, String> entry : allParams.entrySet()) {
                 if (entry.getKey().startsWith("header_")) {
                     options.getAdditionalParams().put(entry.getKey(), entry.getValue());
-                }
-            }
-
-            // Применяем порядок полей, если он указан
-            if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
-                options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
-
-                // Если у нас есть порядок полей в JSON, преобразуем его в список и используем для сортировки
-                try {
-                    List<String> orderedFields = new ArrayList<>();
-                    // Удаляем квадратные скобки и кавычки из строки JSON, затем разбиваем по запятой
-                    String cleanJson = fieldsOrder.replaceAll("[\\[\\]\"]", "");
-                    String[] fieldArray = cleanJson.split(",");
-
-                    orderedFields.addAll(Arrays.asList(fieldArray));
-
-                    // Если порядок полей действительно задан, используем его вместо исходного списка
-                    if (!orderedFields.isEmpty()) {
-                        // Фильтруем, оставляя только те поля, которые есть в исходном списке
-                        List<String> filteredOrderedFields = orderedFields.stream()
-                                .filter(fields::contains)
-                                .collect(Collectors.toList());
-
-                        // Добавляем поля, которые выбраны, но не указаны в порядке
-                        for (String field : fields) {
-                            if (!filteredOrderedFields.contains(field)) {
-                                filteredOrderedFields.add(field);
-                            }
-                        }
-
-                        // Заменяем исходный список на отсортированный
-                        fields = filteredOrderedFields;
-                    }
-                } catch (Exception e) {
-                    log.warn("Ошибка при разборе порядка полей: {}", e.getMessage());
                 }
             }
 

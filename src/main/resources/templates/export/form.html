@@ -598,7 +598,7 @@
         // Обработчик отправки формы
         const exportForm = document.getElementById('exportForm');
         if (exportForm) {
-            exportForm.addEventListener('submit', function (event) {
+            document.getElementById('exportForm').addEventListener('submit', function(event) {
                 // Сохраняем порядок полей перед отправкой
                 saveFieldOrder();
             });
@@ -692,9 +692,9 @@
         const orderInput = document.getElementById('fieldsOrder');
         if (orderInput) {
             orderInput.value = JSON.stringify(selectedFields);
+            console.log("Сохранен порядок полей:", orderInput.value);
         }
     }
-
     // Сохраняет текущие настройки как шаблон
     function saveTemplate() {
         const templateForm = document.getElementById('saveTemplateForm');

@@ -169,6 +169,10 @@
                         <!-- Существующие поля шаблона (отображаем в таблице) -->
                         <div th:if="${template.id != null && template.fields != null && !template.fields.isEmpty()}"
                              class="mb-4">
+
+                            <!-- Добавляем скрытое поле для хранения порядка полей -->
+                            <input type="hidden" id="fieldsOrder" name="fieldsOrder" value="">
+                            <!-- Обновляем таблицу полей, добавляя иконку для перетаскивания -->
                             <div class="table-responsive">
                                 <table class="table table-hover" id="fieldsTable">
                                     <thead>
@@ -313,66 +317,31 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
 <script th:inline="javascript">
-    // Инициализация при загрузке страницы
     document.addEventListener('DOMContentLoaded', function() {
-        // Инициализация сортировки для выбранных полей
-        const selectedFieldsList = document.getElementById('selectedFieldsList');
-        if (selectedFieldsList) {
-            new Sortable(selectedFieldsList, {
+        // Инициализация Sortable для таблицы полей
+        const fieldsList = document.getElementById('selectedFieldsList');
+        if (fieldsList) {
+            new Sortable(fieldsList, {
                 handle: '.drag-handle',
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 onEnd: function() {
-                    // Обновляем индексы полей после сортировки
                     updateFieldIndices();
                 }
             });
         }
 
-        // Инициализация переключателя формата файла
-        const formatSelect = document.getElementById('fileType');
-        if (formatSelect) {
-            formatSelect.addEventListener('change', toggleFormatSettings);
-            toggleFormatSettings(); // Инициализация при загрузке
-        }
-
-        // Обработчики для чекбоксов полей
-        document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
-            checkbox.addEventListener('change', function() {
-                if (this.checked) {
-                    addNewField(this.getAttribute('data-field'), this.getAttribute('data-display'));
-                } else {
-                    removeFieldFromSelected(this.getAttribute('data-field'));
-                }
-            });
-        });
-
-        // Обработчики для кнопок выбора всех/снятия выбора всех полей
-        const selectAllBtn = document.getElementById('selectAllBtn');
-        if (selectAllBtn) {
-            selectAllBtn.addEventListener('click', selectAllFields);
-        }
-
-        const deselectAllBtn = document.getElementById('deselectAllBtn');
-        if (deselectAllBtn) {
-            deselectAllBtn.addEventListener('click', deselectAllFields);
-        }
-
-        // Глобальный обработчик для удаления строк из таблицы
+        // Обработчик для кнопок удаления полей
         document.addEventListener('click', function(event) {
+            // Проверяем, был ли клик по кнопке удаления
             if (event.target.closest('.delete-row-btn')) {
-                event.preventDefault();
+                event.preventDefault(); // Предотвращаем действие ссылки по умолчанию
+
+                // Находим кнопку и родительскую строку
                 const button = event.target.closest('.delete-row-btn');
                 const row = button.closest('tr');
-                const fieldName = row.querySelector('input[name$="].originalField"]').value;
 
                 if (row && confirm('Удалить это поле из шаблона?')) {
-                    // Снимаем выбор с соответствующего чекбокса
-                    const checkbox = document.querySelector(`.field-checkbox[data-field="${fieldName}"]`);
-                    if (checkbox) {
-                        checkbox.checked = false;
-                    }
-
                     // Удаляем строку
                     row.remove();
 
@@ -381,23 +350,27 @@
                 }
             }
         });
+
+        // Обработчик отправки формы
+        const form = document.getElementById('templateForm');
+        if (form) {
+            form.addEventListener('submit', function(event) {
+                // Обновляем порядок полей перед отправкой
+                updateFieldIndices();
+            });
+        }
+
+        // Обновление индексов полей и порядка
+        updateFieldIndices();
     });
 
-    // Переключение настроек в зависимости от выбранного формата файла
-    function toggleFormatSettings() {
-        const format = document.getElementById('fileType').value;
-        const csvParams = document.getElementById('csvParams');
-        const excelParams = document.getElementById('excelParams');
-
-        if (csvParams && excelParams) {
-            csvParams.style.display = format === 'csv' ? 'block' : 'none';
-            excelParams.style.display = format === 'xlsx' ? 'block' : 'none';
-        }
-    }
-
-    // Обновление индексов полей после изменения порядка
+    // Функция обновления индексов полей и порядка полей
     function updateFieldIndices() {
         const rows = document.querySelectorAll('#selectedFieldsList tr');
+
+        // Создаем массив для хранения порядка полей
+        const fieldOrder = [];
+
         rows.forEach((row, index) => {
             // Обновляем номер
             const numSpan = row.querySelector('td:first-child span');
@@ -408,13 +381,26 @@
             // Обновляем имена полей формы
             row.querySelectorAll('input').forEach(input => {
                 if (input.name && input.name.startsWith('fields[')) {
+                    const oldName = input.name;
                     input.name = input.name.replace(/fields\[\d+\]/, `fields[${index}]`);
+
+                    // Если это поле originalField, добавляем его в порядок полей
+                    if (oldName.endsWith('.originalField')) {
+                        fieldOrder.push(input.value);
+                    }
                 }
             });
         });
+
+        // Сохраняем порядок полей в скрытом поле
+        const fieldOrderInput = document.getElementById('fieldsOrder');
+        if (fieldOrderInput) {
+            fieldOrderInput.value = JSON.stringify(fieldOrder);
+            console.log("Порядок полей обновлен:", fieldOrderInput.value);
+        }
     }
 
-    // Добавление нового поля в список выбранных
+    // Функция добавления нового поля (вызывается при выборе поля в чекбоксах)
     function addNewField(fieldName, displayName) {
         // Проверяем, есть ли уже такое поле в таблице
         const existingField = document.querySelector(`input[value="${fieldName}"][name$="].originalField"]`);
@@ -459,52 +445,8 @@
         // Добавляем строку в таблицу
         tableBody.appendChild(row);
 
-        // Скрываем сообщение о пустом списке, если оно есть
-        const emptyMessage = document.querySelector('.alert-info');
-        if (emptyMessage) {
-            emptyMessage.style.display = 'none';
-        }
-
         // Обновляем индексы полей
         updateFieldIndices();
-    }
-
-    // Удаление поля из списка выбранных по имени поля
-    function removeFieldFromSelected(fieldName) {
-        const existingField = document.querySelector(`input[value="${fieldName}"][name$="].originalField"]`);
-        if (existingField) {
-            const row = existingField.closest('tr');
-            if (row) {
-                row.remove();
-                updateFieldIndices();
-            }
-        }
-
-        // Проверяем, остались ли еще поля
-        const tableBody = document.getElementById('selectedFieldsList');
-        if (tableBody && tableBody.querySelectorAll('tr').length === 0) {
-            // Показываем сообщение о пустом списке
-            const emptyMessage = document.querySelector('.alert-info');
-            if (emptyMessage) {
-                emptyMessage.style.display = 'block';
-            }
-        }
-    }
-
-    // Выбор всех полей
-    function selectAllFields() {
-        document.querySelectorAll('.field-checkbox:not(:checked)').forEach(function(checkbox) {
-            checkbox.checked = true;
-            addNewField(checkbox.getAttribute('data-field'), checkbox.getAttribute('data-display'));
-        });
-    }
-
-    // Снятие выбора со всех полей
-    function deselectAllFields() {
-        document.querySelectorAll('.field-checkbox:checked').forEach(function(checkbox) {
-            checkbox.checked = false;
-            removeFieldFromSelected(checkbox.getAttribute('data-field'));
-        });
     }
 
     // Получение отображаемого имени поля по умолчанию
@@ -519,6 +461,24 @@
             .replace(/^./, str => str.toUpperCase())
             .trim();
     }
+
+    // Обработчики для чекбоксов полей
+    document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                // Если поле выбрано, добавляем его в таблицу
+                addNewField(this.getAttribute('data-field'), this.getAttribute('data-display'));
+            } else {
+                // Если поле снято, удаляем его из таблицы
+                const field = this.getAttribute('data-field');
+                const row = document.querySelector(`#selectedFieldsList tr input[value="${field}"][name$="].originalField"]`).closest('tr');
+                if (row) {
+                    row.remove();
+                    updateFieldIndices();
+                }
+            }
+        });
+    });
 </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 // src/main/java/my/java/service/file/exporter/FileExportServiceImpl.java
 package my.java.service.file.exporter;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -86,6 +87,44 @@ public class FileExportServiceImpl implements FileExportService {
             FileOperation tempOperation) {
 
         try {
+            // Проверяем наличие порядка полей в дополнительных параметрах
+            String fieldsOrderJson = options.getAdditionalParams().get("fieldsOrder");
+            if (fieldsOrderJson != null && !fieldsOrderJson.isEmpty()) {
+                try {
+                    // Преобразуем JSON в List
+                    List<String> orderedFields = objectMapper.readValue(
+                            fieldsOrderJson, new TypeReference<List<String>>() {});
+
+                    if (!orderedFields.isEmpty()) {
+                        log.info("Применяем пользовательский порядок полей для прямого экспорта");
+
+                        // Создаем новый список, содержащий только поля из исходного списка fields,
+                        // но в порядке, определенном в orderedFields
+                        List<String> sortedFields = new ArrayList<>();
+
+                        // Сначала добавляем поля в порядке из orderedFields
+                        for (String field : orderedFields) {
+                            if (fields.contains(field)) {
+                                sortedFields.add(field);
+                            }
+                        }
+
+                        // Затем добавляем поля, которые есть в исходном списке, но не были в orderedFields
+                        for (String field : fields) {
+                            if (!sortedFields.contains(field)) {
+                                sortedFields.add(field);
+                            }
+                        }
+
+                        // Заменяем исходный список отсортированным
+                        fields = sortedFields;
+                        log.info("Применен пользовательский порядок полей: {}", fields);
+                    }
+                } catch (Exception e) {
+                    log.warn("Ошибка при применении порядка полей: {}", e.getMessage());
+                }
+            }
+
             // Получаем данные для экспорта
             List<Map<String, String>> data = entityDataService.getEntityDataForExport(
                     entityType, fields, filterParams, client.getId());
@@ -115,6 +154,7 @@ public class FileExportServiceImpl implements FileExportService {
         }
     }
 
+
     @Transactional
     public FileOperationDto exportData(
             Client client,
@@ -133,6 +173,44 @@ public class FileExportServiceImpl implements FileExportService {
             // Обновляем статус операции
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
+
+            // Проверяем наличие порядка полей в дополнительных параметрах
+            String fieldsOrderJson = options.getAdditionalParams().get("fieldsOrder");
+            if (fieldsOrderJson != null && !fieldsOrderJson.isEmpty()) {
+                try {
+                    // Преобразуем JSON в List
+                    List<String> orderedFields = objectMapper.readValue(
+                            fieldsOrderJson, new TypeReference<List<String>>() {});
+
+                    if (!orderedFields.isEmpty()) {
+                        log.info("Применяем пользовательский порядок полей для асинхронного экспорта");
+
+                        // Создаем новый список, содержащий только поля из исходного списка fields,
+                        // но в порядке, определенном в orderedFields
+                        List<String> sortedFields = new ArrayList<>();
+
+                        // Сначала добавляем поля в порядке из orderedFields
+                        for (String field : orderedFields) {
+                            if (fields.contains(field)) {
+                                sortedFields.add(field);
+                            }
+                        }
+
+                        // Затем добавляем поля, которые есть в исходном списке, но не были в orderedFields
+                        for (String field : fields) {
+                            if (!sortedFields.contains(field)) {
+                                sortedFields.add(field);
+                            }
+                        }
+
+                        // Заменяем исходный список отсортированным
+                        fields = sortedFields;
+                        log.info("Применен пользовательский порядок полей: {}", fields);
+                    }
+                } catch (Exception e) {
+                    log.warn("Ошибка при применении порядка полей: {}", e.getMessage());
+                }
+            }
 
             // Этап 1: Получение данных
             operation.addStage("data_fetch", "Получение данных");

@@ -1,6 +1,7 @@
 // src/main/java/my/java/controller/ExportController.java
 package my.java.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,7 @@ public class ExportController {
     private final FileExportService fileExportService;
     private final EntityRegistry entityRegistry;
     private final ExportTemplateService templateService;
+    private final ObjectMapper objectMapper;
 
     /**
      * Отображение страницы экспорта
@@ -286,6 +288,31 @@ public class ExportController {
                 log.debug("Сохранен порядок полей: {}", fieldsOrder);
             }
 
+            // Если указан ID шаблона в параметрах, используем порядок полей из шаблона
+            if (allParams.containsKey("templateId")) {
+                try {
+                    Long templateId = Long.parseLong(allParams.get("templateId"));
+                    Optional<ExportTemplate> template = templateService.getTemplateById(templateId);
+
+                    if (template.isPresent() && !template.get().getFields().isEmpty()) {
+                        ExportTemplate existingTemplate = template.get();
+
+                        // Получаем поля в порядке, сохраненном в БД
+                        List<String> orderedFields = existingTemplate.getFields().stream()
+                                .map(ExportTemplate.ExportField::getOriginalField)
+                                .collect(Collectors.toList());
+
+                        log.info("Порядок полей из шаблона: {}", orderedFields);
+
+                        // Устанавливаем порядок в параметры, переопределяя fieldsOrder из запроса
+                        options.getAdditionalParams().put("fieldsOrder", objectMapper.writeValueAsString(orderedFields));
+                        log.info("Обновлен порядок полей из шаблона в БД");
+                    }
+                } catch (Exception e) {
+                    log.warn("Ошибка при получении порядка полей из шаблона: {}", e.getMessage());
+                }
+            }
+
             // Собираем все заголовки полей из формы
             for (Map.Entry<String, String> entry : allParams.entrySet()) {
                 if (entry.getKey().startsWith("header_")) {
@@ -293,7 +320,7 @@ public class ExportController {
                 }
             }
 
-            // Извлекаем параметры фильтрации
+            // Собираем параметры фильтрации
             Map<String, Object> filterParams = extractFilterParams(allParams);
 
             // Запускаем асинхронный экспорт
@@ -310,8 +337,12 @@ public class ExportController {
             // Перенаправляем на страницу операций
             return "redirect:/clients/" + clientId + "/operations/" + operation.getId();
 
+        } catch (IllegalArgumentException e) {
+            log.error("Ошибка при экспорте: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+            return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
         } catch (Exception e) {
-            log.error("Ошибка при экспорте: {}", e.getMessage(), e);
+            log.error("Непредвиденная ошибка при экспорте: {}", e.getMessage(), e);
             redirectAttributes.addFlashAttribute("errorMessage", "Произошла ошибка: " + e.getMessage());
             return "redirect:/clients/" + clientId + "/export?entityType=" + entityType;
         }
@@ -358,6 +389,31 @@ public class ExportController {
             if (fieldsOrder != null && !fieldsOrder.isEmpty()) {
                 options.getAdditionalParams().put("fieldsOrder", fieldsOrder);
                 log.debug("Сохранен порядок полей: {}", fieldsOrder);
+            }
+
+            // Если указан ID шаблона в параметрах, используем порядок полей из шаблона
+            if (allParams.containsKey("templateId")) {
+                try {
+                    Long templateId = Long.parseLong(allParams.get("templateId"));
+                    Optional<ExportTemplate> template = templateService.getTemplateById(templateId);
+
+                    if (template.isPresent() && !template.get().getFields().isEmpty()) {
+                        ExportTemplate existingTemplate = template.get();
+
+                        // Получаем поля в порядке, сохраненном в БД
+                        List<String> orderedFields = existingTemplate.getFields().stream()
+                                .map(ExportTemplate.ExportField::getOriginalField)
+                                .collect(Collectors.toList());
+
+                        log.info("Порядок полей из шаблона: {}", orderedFields);
+
+                        // Устанавливаем порядок в параметры, переопределяя fieldsOrder из запроса
+                        options.getAdditionalParams().put("fieldsOrder", objectMapper.writeValueAsString(orderedFields));
+                        log.info("Обновлен порядок полей из шаблона в БД");
+                    }
+                } catch (Exception e) {
+                    log.warn("Ошибка при получении порядка полей из шаблона: {}", e.getMessage());
+                }
             }
 
             // Собираем все заголовки полей из формы

@@ -44,6 +44,8 @@ public class FileExportServiceImpl implements FileExportService {
 
     private final Map<Long, CompletableFuture<FileOperationDto>> activeExportTasks = new ConcurrentHashMap<>();
 
+    //TODO Починить галочку Автоматически подгонять ширину колонок для Excell файлов
+
     @Override
     public CompletableFuture<FileOperationDto> exportDataAsync(
             Client client,

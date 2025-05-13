@@ -194,7 +194,15 @@ public class CompositeEntityService {
                     // При работе с кэшем, сохраняем операцию импорта
                     cachedProduct.setImportOperationId(operationId);
 
-                    // Остальная логика обработки...
+                    // Обрабатываем по выбранной стратегии
+                    switch (duplicateHandling) {
+                        case "error":
+                            throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                        case "skip":
+                            return cachedProduct;
+                        case "update":
+                            return updateExistingProduct(cachedProduct, product);
+                    }
                 }
 
                 // Проверяем БД
@@ -205,7 +213,18 @@ public class CompositeEntityService {
                     Product existing = existingProduct.get();
                     existing.setImportOperationId(operationId); // Обновляем ID операции
 
-                    // Остальная логика обработки...
+                    // Обрабатываем по выбранной стратегии
+                    switch (duplicateHandling) {
+                        case "error":
+                            throw new FileOperationException("Найден дубликат продукта: " + product.getProductId());
+                        case "skip":
+                            productCache.put(cacheKey, existing);
+                            return existing;
+                        case "update":
+                            Product updatedProduct = updateExistingProduct(existing, product);
+                            productCache.put(cacheKey, updatedProduct);
+                            return updatedProduct;
+                    }
                 }
             }
 

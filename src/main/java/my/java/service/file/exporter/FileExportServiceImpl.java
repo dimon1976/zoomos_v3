@@ -1,6 +1,7 @@
 // src/main/java/my/java/service/file/exporter/FileExportServiceImpl.java
 package my.java.service.file.exporter;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,8 @@ public class FileExportServiceImpl implements FileExportService {
     private final TaskExecutor fileProcessingExecutor;
 
     private final Map<Long, CompletableFuture<FileOperationDto>> activeExportTasks = new ConcurrentHashMap<>();
+
+    //TODO Починить галочку Автоматически подгонять ширину колонок для Excell файлов
 
     @Override
     public CompletableFuture<FileOperationDto> exportDataAsync(
@@ -86,9 +89,14 @@ public class FileExportServiceImpl implements FileExportService {
             FileOperation tempOperation) {
 
         try {
+            // Применяем пользовательский порядок полей, если он задан
+            List<String> sortedFields = applyFieldOrder(fields, options);
+            log.info("Поля после сортировки: {}", sortedFields);
+
+            // ВАЖНО: Используем sortedFields вместо fields!
             // Получаем данные для экспорта
             List<Map<String, String>> data = entityDataService.getEntityDataForExport(
-                    entityType, fields, filterParams, client.getId());
+                    entityType, sortedFields, filterParams, client.getId());
 
             if (data.isEmpty()) {
                 throw new FileOperationException("Нет данных для экспорта");
@@ -101,19 +109,20 @@ public class FileExportServiceImpl implements FileExportService {
             ExportProcessingStrategy strategy = findStrategy(strategyId);
 
             // Обрабатываем данные
-            List<Map<String, String>> processedData = strategy.processData(data, fields, options.getAdditionalParams());
+            List<Map<String, String>> processedData = strategy.processData(data, sortedFields, options.getAdditionalParams());
 
             // Получаем экспортер для выбранного формата
             FileExporter exporter = findExporter(options.getFileType());
 
-            // Экспортируем данные во временный файл
-            return exporter.exportData(processedData, fields, options, tempOperation);
+            // Экспортируем данные во временный файл с использованием sortedFields!
+            return exporter.exportData(processedData, sortedFields, options, tempOperation);
 
         } catch (Exception e) {
             log.error("Ошибка при прямом экспорте данных: {}", e.getMessage(), e);
             throw new FileOperationException("Ошибка при экспорте данных: " + e.getMessage(), e);
         }
     }
+
 
     @Transactional
     public FileOperationDto exportData(
@@ -133,6 +142,9 @@ public class FileExportServiceImpl implements FileExportService {
             // Обновляем статус операции
             operation.markAsProcessing();
             operation = fileOperationRepository.save(operation);
+
+            // Применяем пользовательский порядок полей, если он задан
+            fields = applyFieldOrder(fields, options);
 
             // Этап 1: Получение данных
             operation.addStage("data_fetch", "Получение данных");
@@ -242,6 +254,73 @@ public class FileExportServiceImpl implements FileExportService {
             fileOperationRepository.save(operation);
             throw new FileOperationException("Ошибка при экспорте данных: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Применяет пользовательский порядок полей, если он задан в параметрах
+     * @param fields Исходный список полей
+     * @param options Параметры экспорта
+     * @return Отсортированный список полей
+     */
+    private List<String> applyFieldOrder(List<String> fields, FileWritingOptions options) {
+        log.info("Применение порядка полей: исходный список: {}", fields);
+
+        // Проверяем наличие порядка полей в дополнительных параметрах
+        String fieldsOrderJson = options.getAdditionalParams().get("fieldsOrder");
+        log.info("Порядок полей из параметров: {}", fieldsOrderJson);
+
+        if (fieldsOrderJson != null && !fieldsOrderJson.isEmpty()) {
+            try {
+                // Преобразуем JSON в List
+                List<String> orderedFields = objectMapper.readValue(
+                        fieldsOrderJson, new TypeReference<List<String>>() {});
+
+                log.info("Десериализованный порядок полей: {}", orderedFields);
+
+                if (!orderedFields.isEmpty()) {
+                    // Создаем новый список с заданным порядком
+                    List<String> sortedFields = new ArrayList<>();
+
+                    // Сначала добавляем поля в порядке из orderedFields
+                    for (String field : orderedFields) {
+                        if (fields.contains(field)) {
+                            sortedFields.add(field);
+                            log.debug("Добавлено поле по порядку: {}", field);
+                        } else {
+                            log.warn("Поле из порядка отсутствует в исходном списке: {}", field);
+                        }
+                    }
+
+                    // Затем добавляем поля, которые есть в исходном списке, но отсутствуют в orderedFields
+                    for (String field : fields) {
+                        if (!sortedFields.contains(field)) {
+                            sortedFields.add(field);
+                            log.debug("Добавлено поле, отсутствующее в порядке: {}", field);
+                        }
+                    }
+
+                    // Проверяем, отличается ли порядок от исходного
+                    boolean isDifferent = !fields.equals(sortedFields);
+                    if (isDifferent) {
+                        log.info("Порядок полей был изменен: было {} -> стало {}", fields, sortedFields);
+                    } else {
+                        log.info("Порядок полей не изменился");
+                    }
+
+                    // Заменяем исходный список отсортированным
+                    return new ArrayList<>(sortedFields); // Создаем новый список
+                } else {
+                    log.warn("Десериализованный список порядка полей пуст");
+                }
+            } catch (Exception e) {
+                log.warn("Ошибка при применении порядка полей: {}", e.getMessage(), e);
+            }
+        } else {
+            log.info("Параметр порядка полей отсутствует или пуст");
+        }
+
+        // Если порядок не задан или произошла ошибка, возвращаем исходный список
+        return new ArrayList<>(fields); // Возвращаем копию исходного списка
     }
 
     @Override

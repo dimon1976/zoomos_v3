@@ -1,9 +1,6 @@
 // src/main/java/my/java/service/file/exporter/ExportTemplateService.java
 package my.java.service.file.exporter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.Client;
@@ -23,7 +20,6 @@ import java.util.stream.Collectors;
 public class ExportTemplateService {
 
     private final ExportTemplateRepository templateRepository;
-    private final ObjectMapper objectMapper;
 
     /**
      * Получение всех шаблонов экспорта для клиента
@@ -151,8 +147,8 @@ public class ExportTemplateService {
                     return new IllegalArgumentException("Шаблон с ID " + id + " не найден");
                 });
 
-        log.debug("Найден шаблон для обновления: {}, fields.size={}, fieldsJson={}",
-                template.getName(), template.getFields().size(), template.getFieldsJson());
+        log.debug("Найден шаблон для обновления: {}, fields.size={}",
+                template.getName(), template.getFields().size());
 
         // Обновляем основные поля шаблона
         template.setName(updatedTemplate.getName());
@@ -165,30 +161,20 @@ public class ExportTemplateService {
         // Обновляем настройки экспорта
         if (updatedTemplate.getExportOptions() != null) {
             template.setExportOptions(updatedTemplate.getExportOptions());
-            log.debug("Обновлены настройки экспорта: {}", updatedTemplate.getExportOptions());
+            log.debug("Обновлены настройки экспорта");
         }
 
         // НЕ ИСПОЛЬЗУЕМ clear() и addAll() для коллекции fields, т.к. при @ElementCollection это может вызвать проблемы
         if (updatedTemplate.getFields() != null && !updatedTemplate.getFields().isEmpty()) {
-            log.debug("Обновление полей шаблона: {} -> {}, updatedTemplate.fieldsJson={}",
+            log.debug("Обновление полей шаблона: {} -> {}",
                     template.getFields().size(),
-                    updatedTemplate.getFields().size(),
-                    updatedTemplate.getFieldsJson());
+                    updatedTemplate.getFields().size());
 
             // РЕШЕНИЕ: Вместо template.getFields().clear() и template.getFields().addAll()
             // устанавливаем поля через сеттер ПОСЛЕ обнуления их через сеттер
             List<ExportTemplate.ExportField> newFields = new ArrayList<>(updatedTemplate.getFields());
-            template.setFields(new ArrayList<>()); // Сначала устанавливаем пустой список
-            template.setFields(newFields);         // Затем устанавливаем новый список
-
-            // Прямо устанавливаем значение fieldsJson
-            try {
-                String fieldsJson = objectMapper.writeValueAsString(newFields);
-                template.setFieldsJson(fieldsJson);
-                log.debug("Явно установлен fieldsJson: {}", fieldsJson);
-            } catch (Exception e) {
-                log.error("Ошибка при сериализации полей в JSON: {}", e.getMessage());
-            }
+            template.getFields().clear();
+            template.getFields().addAll(newFields);
         } else {
             log.warn("Переданный шаблон не содержит полей! Сохраняем существующие: {}",
                     template.getFields().size());
@@ -197,15 +183,9 @@ public class ExportTemplateService {
         // Обновляем время изменения
         template.setUpdatedAt(ZonedDateTime.now());
 
-        // Принудительно вызываем синхронизацию JSON полей
-        template.updateJsonFields();
-        log.debug("После updateJsonFields: fields.size={}, fieldsJson={}",
-                template.getFields().size(), template.getFieldsJson());
-
         // Выполняем saveAndFlush для немедленной записи в БД
         ExportTemplate savedTemplate = templateRepository.saveAndFlush(template);
-        log.debug("После сохранения: fields.size={}, fieldsJson={}",
-                savedTemplate.getFields().size(), savedTemplate.getFieldsJson());
+        log.debug("После сохранения: fields.size={}", savedTemplate.getFields().size());
 
         return savedTemplate;
     }
@@ -231,6 +211,7 @@ public class ExportTemplateService {
         }
 
         // Добавляем поля
+        List<ExportTemplate.ExportField> exportFields = new ArrayList<>();
         for (String field : fields) {
             ExportTemplate.ExportField exportField = new ExportTemplate.ExportField();
             exportField.setOriginalField(field);
@@ -243,8 +224,10 @@ public class ExportTemplateService {
                 exportField.setDisplayName(getDefaultDisplayName(field));
             }
 
-            template.getFields().add(exportField);
+            exportFields.add(exportField);
         }
+
+        template.setFields(exportFields);
 
         return templateRepository.save(template);
     }
@@ -273,39 +256,6 @@ public class ExportTemplateService {
                     return templateRepository.save(template);
                 })
                 .orElseThrow(() -> new IllegalArgumentException("Шаблон с ID " + templateId + " не найден"));
-    }
-
-    /**
-     * Миграция старых шаблонов в новый формат
-     */
-    @Transactional
-    public void migrateOldTemplates() {
-        List<ExportTemplate> templates = templateRepository.findAll();
-        int migratedCount = 0;
-
-        for (ExportTemplate template : templates) {
-            if (template.getExportOptions() == null || template.getExportOptions().getFileType() == null) {
-                // Шаблон требует миграции
-                try {
-                    // Пытаемся загрузить параметры из fileOptions
-                    String optionsJson = template.getFileOptions();
-                    if (optionsJson != null && !optionsJson.isEmpty()) {
-                        Map<String, String> optionsMap = objectMapper.readValue(
-                                optionsJson, new TypeReference<Map<String, String>>() {});
-
-                        FileWritingOptions options = FileWritingOptions.fromMap(optionsMap);
-                        template.setExportOptions(options);
-                        templateRepository.save(template);
-                        migratedCount++;
-                        log.info("Мигрирован шаблон ID {}: {}", template.getId(), template.getName());
-                    }
-                } catch (Exception e) {
-                    log.error("Ошибка при миграции шаблона ID {}: {}", template.getId(), e.getMessage());
-                }
-            }
-        }
-
-        log.info("Завершена миграция шаблонов. Обновлено {} из {} шаблонов", migratedCount, templates.size());
     }
 
     /**

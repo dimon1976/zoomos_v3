@@ -19,7 +19,7 @@
         .drag-handle {
             cursor: grab;
             color: #6c757d;
-            padding: 0 8px;
+            padding: 0 5px;
         }
         .drag-handle:hover {
             color: #0d6efd;
@@ -29,15 +29,6 @@
         }
         .field-row:hover {
             background-color: #f8f9fa;
-        }
-        .field-table {
-            margin-bottom: 0;
-        }
-        .field-table td {
-            vertical-align: middle;
-        }
-        .header-input-container {
-            max-width: 350px;
         }
     </style>
 </head>
@@ -60,115 +51,39 @@
                 <!-- Скрытые поля для ID и клиента -->
                 <input type="hidden" th:if="${template.id != null}" name="id" th:value="${template.id}">
                 <input type="hidden" name="client.id" th:value="${client.id}">
+                <input type="hidden" name="entityType" th:value="${template.entityType}">
 
                 <!-- Основная информация о шаблоне -->
-                <div class="row mb-4">
+                <div class="row mb-3">
                     <div class="col-md-6">
                         <label for="name" class="form-label">Название шаблона</label>
                         <input type="text" class="form-control" id="name" name="name" th:value="${template.name}" required>
                     </div>
 
                     <div class="col-md-6">
-                        <label for="entityType" class="form-label">Тип сущности</label>
-                        <input type="text" class="form-control" id="entityType" name="entityType" th:value="${template.entityType}" readonly>
+                        <label for="description" class="form-label">Описание</label>
+                        <textarea class="form-control" id="description" name="description" rows="2" th:text="${template.description}"></textarea>
                     </div>
                 </div>
 
-                <div class="mb-4">
-                    <label for="description" class="form-label">Описание</label>
-                    <textarea class="form-control" id="description" name="description" rows="2" th:text="${template.description}"></textarea>
-                </div>
-
-                <!-- Параметры файла - в виде отдельной карточки -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light">
-                        <h5 class="mb-0"><i class="fas fa-cog"></i> Параметры файла</h5>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="fileType" class="form-label">Формат файла</label>
+                        <select class="form-select" id="fileType" name="fileType" required onchange="toggleFormatSettings()">
+                            <option value="csv" th:selected="${fileFormat == 'csv' || fileFormat == null}">CSV</option>
+                            <option value="xlsx" th:selected="${fileFormat == 'xlsx'}">Excel (XLSX)</option>
+                        </select>
                     </div>
-                    <div class="card-body">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="fileType" class="form-label">Формат файла</label>
-                                <select class="form-select" id="fileType" name="fileType" required onchange="toggleFormatSettings()">
-                                    <option value="csv" th:selected="${template.fileType == 'csv' || template.fileType == null}">CSV</option>
-                                    <option value="xlsx" th:selected="${template.fileType == 'xlsx'}">Excel (XLSX)</option>
-                                </select>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label for="strategyId" class="form-label">Стратегия экспорта</label>
-                                <select class="form-select" id="strategyId" name="strategyId">
-                                    <option value="" th:selected="${template.strategyId == null || template.strategyId.isEmpty()}">
-                                        Стандартная (без обработки)
-                                    </option>
-                                    <option value="simple" th:selected="${template.strategyId == 'simple'}">
-                                        Прямой экспорт
-                                    </option>
-                                    <option value="filtered" th:selected="${template.strategyId == 'filtered'}">
-                                        Фильтрованный экспорт
-                                    </option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Параметры для разных форматов -->
-                        <div id="csvParams" class="format-params" th:style="${template.fileType != 'xlsx' ? '' : 'display: none;'}">
-                            <h6 class="border-bottom pb-2 mb-3">Настройки CSV</h6>
-                            <div class="row">
-                                <div class="col-md-4 mb-3">
-                                    <label for="delimiter" class="form-label">Разделитель:</label>
-                                    <select id="delimiter" name="delimiter" class="form-select">
-                                        <option value="," selected>Запятая (,)</option>
-                                        <option value=";">Точка с запятой (;)</option>
-                                        <option value="|">Вертикальная черта (|)</option>
-                                        <option value="&#09">Табуляция</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="quoteChar" class="form-label">Символ кавычек:</label>
-                                    <select id="quoteChar" name="quoteChar" class="form-select">
-                                        <option value="&quot;" selected>Двойные кавычки (")</option>
-                                        <option value="'">Одинарные кавычки (')</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="encoding" class="form-label">Кодировка:</label>
-                                    <select id="encoding" name="encoding" class="form-select">
-                                        <option value="UTF-8" selected>UTF-8</option>
-                                        <option value="Windows-1251">Windows-1251</option>
-                                        <option value="ISO-8859-1">ISO-8859-1</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div id="excelParams" class="format-params" th:style="${template.fileType == 'xlsx' ? '' : 'display: none;'}">
-                            <h6 class="border-bottom pb-2 mb-3">Настройки Excel</h6>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="sheetName" class="form-label">Имя листа:</label>
-                                    <input type="text" id="sheetName" name="sheetName" class="form-control" value="Данные">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <div class="form-check mt-4">
-                                        <input type="checkbox" class="form-check-input" id="autoSizeColumns"
-                                               name="autoSizeColumns" value="true" checked>
-                                        <label class="form-check-label" for="autoSizeColumns">
-                                            Автоматически подгонять ширину колонок
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-check mt-3">
-                            <input type="checkbox" class="form-check-input" id="includeHeader"
-                                   name="includeHeader" value="true" checked>
-                            <label class="form-check-label" for="includeHeader">
-                                Включить заголовки колонок
-                            </label>
-                        </div>
-
-                        <div class="form-check mt-2">
+                    <div class="col-md-4">
+                        <label for="strategyId" class="form-label">Стратегия экспорта</label>
+                        <select class="form-select" id="strategyId" name="strategyId">
+                            <option value="" th:selected="${strategyId == null || strategyId.isEmpty()}">Стандартная (без обработки)</option>
+                            <option value="simple" th:selected="${strategyId == 'simple'}">Прямой экспорт</option>
+                            <option value="filtered" th:selected="${strategyId == 'filtered'}">Фильтрованный экспорт</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check mt-4">
                             <input class="form-check-input" type="checkbox" id="isDefault" name="isDefault" th:checked="${template.default}">
                             <label class="form-check-label" for="isDefault">
                                 Установить как шаблон по умолчанию
@@ -177,28 +92,99 @@
                     </div>
                 </div>
 
-                <!-- Поля шаблона -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-list"></i> Поля шаблона</h5>
+                <!-- Параметры CSV -->
+                <div id="csvParams" class="card mb-3" th:style="${fileFormat != 'xlsx' ? '' : 'display: none;'}">
+                    <div class="card-header bg-light">
+                        <h5><i class="fas fa-cog"></i> Параметры CSV</h5>
                     </div>
                     <div class="card-body">
-                        <!-- Существующие поля шаблона -->
-                        <div id="selectedFieldsSection" th:if="${template.id != null && template.fields != null && !template.fields.isEmpty()}" class="mb-4">
-                            <h6 class="border-bottom pb-2 mb-3">Выбранные поля шаблона</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="delimiter" class="form-label">Разделитель:</label>
+                                <select id="delimiter" name="delimiter" class="form-select">
+                                    <option value="," th:selected="${delimiter == null || delimiter == ','}">Запятая (,)</option>
+                                    <option value=";" th:selected="${delimiter == ';'}">Точка с запятой (;)</option>
+                                    <option value="|" th:selected="${delimiter == '|'}">Вертикальная черта (|)</option>
+                                    <option value="&#09" th:selected="${delimiter == '	'}">Табуляция</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quoteChar" class="form-label">Символ кавычек:</label>
+                                <select id="quoteChar" name="quoteChar" class="form-select">
+                                    <option value="&quot;" th:selected="${quoteChar == null || #strings.toString(quoteChar) == '&quot;'}">Двойные кавычки (")</option>
+                                    <option value="'" th:selected="${#strings.toString(quoteChar) == ''''}">Одинарные кавычки (')</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="encoding" class="form-label">Кодировка:</label>
+                                <select id="encoding" name="encoding" class="form-select">
+                                    <option value="UTF-8" th:selected="${encoding == null || encoding == 'UTF-8'}">UTF-8</option>
+                                    <option value="Windows-1251" th:selected="${encoding == 'windows-1251'}">Windows-1251</option>
+                                    <option value="ISO-8859-1" th:selected="${encoding == 'ISO-8859-1'}">ISO-8859-1</option>
+                                    <option value="UTF-16" th:selected="${encoding == 'UTF-16'}">UTF-16</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Параметры Excel -->
+                <div id="excelParams" class="card mb-3" th:style="${fileFormat == 'xlsx' ? '' : 'display: none;'}">
+                    <div class="card-header bg-light">
+                        <h5><i class="fas fa-cog"></i> Параметры Excel</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="sheetName" class="form-label">Имя листа:</label>
+                                <input type="text" id="sheetName" name="sheetName" class="form-control" th:value="${sheetName != null ? sheetName : 'Данные'}">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check mt-4">
+                                    <input type="checkbox" class="form-check-input" id="autoSizeColumns" name="autoSizeColumns" value="true" th:checked="${autoSizeColumns == null || autoSizeColumns == true}">
+                                    <label class="form-check-label" for="autoSizeColumns">
+                                        Автоматически подгонять ширину колонок
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Общие параметры -->
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" id="includeHeader" name="includeHeader" value="true" th:checked="${includeHeader == null || includeHeader == true}">
+                    <label class="form-check-label" for="includeHeader">
+                        Включить заголовки колонок
+                    </label>
+                </div>
+
+                <!-- Поля шаблона -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-list"></i> Поля шаблона</h5>
+                        <small class="text-muted">Перетащите поля для изменения порядка</small>
+                    </div>
+                    <div class="card-body">
+                        <!-- Существующие поля шаблона (отображаем в таблице) -->
+                        <div th:if="${template.id != null && template.fields != null && !template.fields.isEmpty()}"
+                             class="mb-4">
+
+                            <!-- Добавляем скрытое поле для хранения порядка полей -->
+                            <input type="hidden" id="fieldsOrder" name="fieldsOrder" value="">
+                            <!-- Обновляем таблицу полей, добавляя иконку для перетаскивания -->
                             <div class="table-responsive">
-                                <table class="table table-hover field-table">
+                                <table class="table table-hover" id="fieldsTable">
                                     <thead>
                                     <tr>
-                                        <th style="width: 40px">#</th>
+                                        <th style="width: 50px;">#</th>
                                         <th>Оригинальное поле</th>
                                         <th>Заголовок в экспорте</th>
-                                        <th style="width: 80px">Действия</th>
+                                        <th style="width: 100px;">Действия</th>
                                     </tr>
                                     </thead>
                                     <tbody id="selectedFieldsList">
-                                    <!-- Здесь будут поля шаблона, добавленные через JavaScript -->
-                                    <tr th:each="field, stat : ${template.fields}" class="field-row" th:data-field="${field.originalField}">
+                                    <tr th:each="field, stat : ${template.fields}" class="field-row">
                                         <td>
                                             <i class="fas fa-grip-vertical drag-handle"></i>
                                             <span th:text="${stat.count}">1</span>
@@ -206,19 +192,16 @@
                                                    th:value="${field.originalField}">
                                         </td>
                                         <td th:text="${field.originalField}">field.name</td>
-                                        <td class="header-input-container">
+                                        <td>
                                             <input type="text" class="form-control"
                                                    th:name="'fields[' + ${stat.index} + '].displayName'"
+                                                   th:id="'header_' + ${field.originalField.replace('.', '_')}"
                                                    th:value="${field.displayName}">
                                         </td>
                                         <td>
-                                            <form th:action="@{/clients/{clientId}/export/templates/{id}/remove-field(clientId=${client.id},id=${template.id})}"
-                                                  method="post" style="display: inline;">
-                                                <input type="hidden" name="fieldIndex" th:value="${stat.index}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </form>
+                                            <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn">
+                                                <i class="fas fa-times"></i>
+                                            </button>
                                         </td>
                                     </tr>
                                     </tbody>
@@ -226,79 +209,49 @@
                             </div>
                         </div>
 
-                        <!-- Выбор доступных полей -->
-                        <div class="mb-3 d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">Доступные поля</h6>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllFields()">
-                                    <i class="fas fa-check-square me-1"></i>Выбрать все
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="deselectAllFields()">
-                                    <i class="fas fa-square me-1"></i>Снять все
-                                </button>
-                            </div>
+                        <div th:if="${template.fields == null || template.fields.isEmpty()}" class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> Нет выбранных полей. Пожалуйста, выберите поля ниже.
                         </div>
 
-                        <!-- Табы для полей разных сущностей -->
-                        <ul class="nav nav-tabs" id="fieldsTab" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="main-tab" data-bs-toggle="tab" data-bs-target="#main-fields"
-                                        type="button" role="tab" aria-controls="main-fields" aria-selected="true">
-                                    <span th:text="${template.entityType}">Основная сущность</span>
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation" th:each="entry, entryStat : ${relatedFields}" th:if="${entry != null}">
-                                <button class="nav-link" th:id="${entry.key + '-tab'}" data-bs-toggle="tab"
-                                        th:data-bs-target="'#' + ${entry.key + '-fields'}" type="button" role="tab"
-                                        th:aria-controls="${entry.key + '-fields'}" aria-selected="false">
-                                    <span th:text="${entry.key}">Связанная сущность</span>
-                                </button>
-                            </li>
-                        </ul>
+                        <!-- Выбор доступных полей (сначала основная сущность) -->
+                        <div th:if="${entityFields != null}" class="mt-4">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-table"></i> Доступные поля:
+                                <span th:text="${template.entityType}">Основная сущность</span>
+                            </h6>
 
-                        <div class="tab-content p-3 border border-top-0 rounded-bottom" id="fieldsTabContent">
-                            <!-- Поля основной сущности -->
-                            <div class="tab-pane fade show active" id="main-fields" role="tabpanel" aria-labelledby="main-tab">
-                                <div class="row" th:if="${entityFields != null}">
-                                    <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-3">
-                                        <!-- Создаем переменную, которая будет содержать информацию о том, выбрано ли поле -->
-                                        <div th:with="isFieldSelected=${template.fields != null &&
-                                             #lists.contains(template.fields.![originalField], field.key)}">
-                                            <div class="form-check">
-                                                <input type="checkbox" class="form-check-input field-checkbox"
-                                                       th:id="${'field_main_' + stat.index}"
-                                                       th:data-field="${field.key}"
-                                                       th:data-display="${field.value.displayName}"
-                                                       th:value="${field.key}"
-                                                       th:checked="${isFieldSelected}">
-                                                <label class="form-check-label"
-                                                       th:for="${'field_main_' + stat.index}"
-                                                       th:text="${field.value.displayName}"></label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="d-flex justify-content-end mb-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary me-2" id="selectAllBtn">
+                                    <i class="fas fa-check-square"></i> Выбрать все
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllBtn">
+                                    <i class="fas fa-square"></i> Снять все
+                                </button>
                             </div>
 
-                            <!-- Поля связанных сущностей -->
-                            <div th:each="entry : ${relatedFields}" th:if="${entry != null}"
-                                 th:id="${entry.key + '-fields'}" class="tab-pane fade" role="tabpanel"
-                                 th:aria-labelledby="${entry.key + '-tab'}">
-                                <div class="row">
-                                    <div th:each="field, stat : ${entry.value}" class="col-md-6 mb-3">
-                                        <!-- Создаем переменную, которая будет содержать информацию о том, выбрано ли поле -->
-                                        <div th:with="isFieldSelected=${template.fields != null &&
-                                             #lists.contains(template.fields.![originalField], field.key)}">
-                                            <div class="form-check">
-                                                <input type="checkbox" class="form-check-input field-checkbox"
-                                                       th:id="${'field_' + entry.key + '_' + stat.index}"
+                            <div class="row">
+                                <div th:each="field, stat : ${entityFields}" class="col-md-6 mb-2">
+                                    <!-- Создаем переменную, которая будет содержать информацию о том, выбрано ли поле -->
+                                    <div th:with="isFieldSelected=${template.fields != null &&
+                                         #lists.contains(template.fields.![originalField], field.key)}">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input field-checkbox"
+                                                   th:id="${'field_main_' + stat.index}"
+                                                   th:data-field="${field.key}"
+                                                   th:data-display="${field.value.displayName}"
+                                                   th:checked="${isFieldSelected}">
+                                            <label class="form-check-label"
+                                                   th:for="${'field_main_' + stat.index}"
+                                                   th:text="${field.value.displayName}"></label>
+                                        </div>
+                                        <!-- Поле для заголовка (только для новых полей) -->
+                                        <div th:if="${!isFieldSelected}" class="ms-4 mt-1">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">Заголовок</span>
+                                                <input type="text" class="form-control form-control-sm"
+                                                       th:id="'new_header_' + ${field.key.replace('.', '_')}"
                                                        th:data-field="${field.key}"
-                                                       th:data-display="${field.value.displayName}"
-                                                       th:value="${field.key}"
-                                                       th:checked="${isFieldSelected}">
-                                                <label class="form-check-label"
-                                                       th:for="${'field_' + entry.key + '_' + stat.index}"
-                                                       th:text="${field.value.displayName}"></label>
+                                                       th:value="${field.value.displayName}">
                                             </div>
                                         </div>
                                     </div>
@@ -306,24 +259,55 @@
                             </div>
                         </div>
 
-                        <!-- Сообщение, если нет полей для выбора -->
-                        <div th:if="${entityFields == null || entityFields.isEmpty()}" class="alert alert-warning mt-3">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Не удалось загрузить поля для типа сущности. Пожалуйста, попробуйте создать шаблон через форму экспорта.
+                        <!-- Поля связанных сущностей -->
+                        <div th:if="${relatedFields != null}" th:each="entityEntry : ${relatedFields}" class="mt-4">
+                            <h6 class="border-bottom pb-2 mb-3">
+                                <i class="fas fa-link"></i> Связанная сущность:
+                                <span th:text="${entityEntry.key}">Related Entity</span>
+                            </h6>
+
+                            <div class="row">
+                                <div th:each="field, stat : ${entityEntry.value}" class="col-md-6 mb-2">
+                                    <!-- Создаем переменную, которая будет содержать информацию о том, выбрано ли поле -->
+                                    <div th:with="isFieldSelected=${template.fields != null &&
+                                         #lists.contains(template.fields.![originalField], field.key)}">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input field-checkbox"
+                                                   th:id="${'field_' + entityEntry.key + '_' + stat.index}"
+                                                   th:data-field="${field.key}"
+                                                   th:data-display="${field.value.displayName}"
+                                                   th:checked="${isFieldSelected}">
+                                            <label class="form-check-label"
+                                                   th:for="${'field_' + entityEntry.key + '_' + stat.index}"
+                                                   th:text="${field.value.displayName}"></label>
+                                        </div>
+                                        <!-- Поле для заголовка (только для новых полей) -->
+                                        <div th:if="${!isFieldSelected}" class="ms-4 mt-1">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">Заголовок</span>
+                                                <input type="text" class="form-control form-control-sm"
+                                                       th:id="'new_header_' + ${field.key.replace('.', '_')}"
+                                                       th:data-field="${field.key}"
+                                                       th:value="${field.value.displayName}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Кнопки действий -->
-                <div class="d-flex justify-content-between mb-3">
+                <div class="d-flex justify-content-between">
                     <div>
                         <button type="submit" class="btn btn-primary" id="submitButton">
-                            <i class="fas fa-save me-1"></i>Сохранить шаблон
+                            <i class="fas fa-save"></i> Сохранить шаблон
                         </button>
                     </div>
 
                     <a th:href="@{/clients/{id}/export/templates(id=${client.id})}" class="btn btn-secondary">
-                        <i class="fas fa-times me-1"></i>Отмена
+                        <i class="fas fa-times"></i> Отмена
                     </a>
                 </div>
             </form>
@@ -331,315 +315,138 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
 <script th:inline="javascript">
-    // Глобальные переменные
-    let fieldsCounter = 0;
-    let sortableInstance = null;
-
-    // Инициализация после загрузки страницы
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Инициализация страницы редактирования шаблона');
-
-        // Подсчет существующих полей
-        const existingFields = document.querySelectorAll('#selectedFieldsList tr');
-        fieldsCounter = existingFields.length;
-
-        // Настройка drag-and-drop для существующих полей
-        initSortable();
-
-        // Обработчики событий
-        const form = document.getElementById('templateForm');
-        if (form) {
-            form.addEventListener('submit', function(event) {
-                event.preventDefault();
-                prepareFormSubmit();
-                this.submit();
-            });
-        }
-
-        // Обработчик изменения флажков полей
-        const checkboxes = document.querySelectorAll('.field-checkbox');
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
-                if (this.checked) {
-                    // Если поле выбрано, добавляем его в список выбранных
-                    addFieldToSelectedList(this.value, this.getAttribute('data-display'));
-                } else {
-                    // Если поле снято, удаляем его из списка выбранных
-                    removeFieldFromSelectedList(this.value);
-                }
-            });
-        });
-
-        // Инициализация форматов файла
-        toggleFormatSettings();
-        document.getElementById('fileType').addEventListener('change', toggleFormatSettings);
-
-        // Инициализация параметров из файла
-        initFileOptions();
-    });
-
-    // Инициализация Sortable для drag-and-drop
-    function initSortable() {
-        const selectedFieldsList = document.getElementById('selectedFieldsList');
-        if (!selectedFieldsList) return;
-
-        if (typeof Sortable !== 'undefined') {
-            if (sortableInstance) {
-                sortableInstance.destroy();
-            }
-
-            sortableInstance = new Sortable(selectedFieldsList, {
+        // Инициализация Sortable для таблицы полей
+        const fieldsList = document.getElementById('selectedFieldsList');
+        if (fieldsList) {
+            new Sortable(fieldsList, {
                 handle: '.drag-handle',
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 onEnd: function() {
-                    // После перетаскивания обновляем индексы полей
                     updateFieldIndices();
                 }
             });
-        } else {
-            console.warn('Библиотека Sortable не найдена, загружаем...');
-
-            // Если библиотека не загружена, загружаем её
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js';
-            script.onload = function() {
-                console.log('Библиотека Sortable успешно загружена');
-                initSortable();
-            };
-            document.head.appendChild(script);
         }
-    }
 
-    // Обновление индексов полей после перетаскивания
+        // Обработчик для кнопок удаления полей
+        document.addEventListener('click', function(event) {
+            // Проверяем, был ли клик по кнопке удаления
+            if (event.target.closest('.delete-row-btn')) {
+                event.preventDefault(); // Предотвращаем действие ссылки по умолчанию
+
+                // Находим кнопку и родительскую строку
+                const button = event.target.closest('.delete-row-btn');
+                const row = button.closest('tr');
+
+                if (row && confirm('Удалить это поле из шаблона?')) {
+                    // Удаляем строку
+                    row.remove();
+
+                    // Обновляем индексы оставшихся полей
+                    updateFieldIndices();
+                }
+            }
+        });
+
+        // Обработчик отправки формы
+        const form = document.getElementById('templateForm');
+        if (form) {
+            form.addEventListener('submit', function(event) {
+                // Обновляем порядок полей перед отправкой
+                updateFieldIndices();
+            });
+        }
+
+        // Обновление индексов полей и порядка
+        updateFieldIndices();
+    });
+
+    // Функция обновления индексов полей и порядка полей
     function updateFieldIndices() {
         const rows = document.querySelectorAll('#selectedFieldsList tr');
 
+        // Создаем массив для хранения порядка полей
+        const fieldOrder = [];
+
         rows.forEach((row, index) => {
-            // Обновляем номер поля
-            const numberCell = row.querySelector('td:first-child span');
-            if (numberCell) {
-                numberCell.textContent = index + 1;
+            // Обновляем номер
+            const numSpan = row.querySelector('td:first-child span');
+            if (numSpan) {
+                numSpan.textContent = (index + 1).toString();
             }
 
             // Обновляем имена полей формы
-            const inputs = row.querySelectorAll('input[name^="fields["]');
-            inputs.forEach(input => {
-                const name = input.name;
-                const newName = name.replace(/fields\[\d+\]/, `fields[${index}]`);
-                input.name = newName;
+            row.querySelectorAll('input').forEach(input => {
+                if (input.name && input.name.startsWith('fields[')) {
+                    const oldName = input.name;
+                    input.name = input.name.replace(/fields\[\d+\]/, `fields[${index}]`);
+
+                    // Если это поле originalField, добавляем его в порядок полей
+                    if (oldName.endsWith('.originalField')) {
+                        fieldOrder.push(input.value);
+                    }
+                }
             });
         });
-    }
 
-    // Переключение настроек формата файла
-    function toggleFormatSettings() {
-        const fileType = document.getElementById('fileType').value;
-
-        // Скрываем все блоки параметров
-        document.querySelectorAll('.format-params').forEach(element => {
-            element.style.display = 'none';
-        });
-
-        // Показываем блок для выбранного формата
-        if (fileType === 'csv') {
-            document.getElementById('csvParams').style.display = 'block';
-        } else if (fileType === 'xlsx') {
-            document.getElementById('excelParams').style.display = 'block';
+        // Сохраняем порядок полей в скрытом поле
+        const fieldOrderInput = document.getElementById('fieldsOrder');
+        if (fieldOrderInput) {
+            fieldOrderInput.value = JSON.stringify(fieldOrder);
+            console.log("Порядок полей обновлен:", fieldOrderInput.value);
         }
     }
 
-    // Инициализация параметров файла из сохраненных настроек
-    function initFileOptions() {
-        const fileOptions = /*[[${template.fileOptionsAsMap}]]*/ {};
-
-        if (fileOptions) {
-            // Применяем параметры из шаблона
-            if (fileOptions.delimiter) document.getElementById('delimiter').value = fileOptions.delimiter;
-            if (fileOptions.quoteChar) document.getElementById('quoteChar').value = fileOptions.quoteChar;
-            if (fileOptions.encoding) document.getElementById('encoding').value = fileOptions.encoding;
-            if (fileOptions.sheetName) document.getElementById('sheetName').value = fileOptions.sheetName;
-
-            if (fileOptions.autoSizeColumns !== undefined) {
-                document.getElementById('autoSizeColumns').checked =
-                    fileOptions.autoSizeColumns === true || fileOptions.autoSizeColumns === "true";
-            }
-
-            if (fileOptions.includeHeader !== undefined) {
-                document.getElementById('includeHeader').checked =
-                    fileOptions.includeHeader === true || fileOptions.includeHeader === "true";
-            }
+    // Функция добавления нового поля (вызывается при выборе поля в чекбоксах)
+    function addNewField(fieldName, displayName) {
+        // Проверяем, есть ли уже такое поле в таблице
+        const existingField = document.querySelector(`input[value="${fieldName}"][name$="].originalField"]`);
+        if (existingField) {
+            return; // Поле уже добавлено
         }
-    }
 
-    // Выбрать все поля
-    function selectAllFields() {
-        const activeTabId = document.querySelector('.tab-pane.active').id;
-        const checkboxes = document.querySelectorAll(`#${activeTabId} .field-checkbox:not(:checked)`);
-
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = true;
-            // Добавляем в список выбранных
-            addFieldToSelectedList(checkbox.value, checkbox.getAttribute('data-display'));
-        });
-    }
-
-    // Снять выбор со всех полей
-    function deselectAllFields() {
-        const activeTabId = document.querySelector('.tab-pane.active').id;
-        const checkboxes = document.querySelectorAll(`#${activeTabId} .field-checkbox:checked`);
-
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = false;
-            // Удаляем из списка выбранных
-            removeFieldFromSelectedList(checkbox.value);
-        });
-    }
-
-    // Добавить поле в список выбранных полей
-    function addFieldToSelectedList(fieldName, displayName) {
-        // Проверяем, есть ли уже такое поле в списке выбранных
-        if (document.querySelector(`#selectedFieldsList tr[data-field="${fieldName}"]`)) {
+        // Находим таблицу и контейнер для строк
+        const tableBody = document.getElementById('selectedFieldsList');
+        if (!tableBody) {
             return;
         }
 
-        // Создаем или инициализируем section для выбранных полей
-        let selectedSection = document.getElementById('selectedFieldsSection');
-        let selectedList = document.getElementById('selectedFieldsList');
+        // Подсчитываем количество уже существующих полей
+        const fieldsCount = tableBody.querySelectorAll('tr').length;
 
-        if (!selectedSection) {
-            // Если секции нет, создаем её
-            selectedSection = document.createElement('div');
-            selectedSection.id = 'selectedFieldsSection';
-            selectedSection.className = 'mb-4';
-            selectedSection.innerHTML = `
-                <h6 class="border-bottom pb-2 mb-3">Выбранные поля шаблона</h6>
-                <div class="table-responsive">
-                    <table class="table table-hover field-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 40px">#</th>
-                                <th>Оригинальное поле</th>
-                                <th>Заголовок в экспорте</th>
-                                <th style="width: 80px">Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="selectedFieldsList">
-                        </tbody>
-                    </table>
-                </div>
-            `;
-
-            const fieldsCard = document.querySelector('.card-body .card:last-of-type .card-body');
-            fieldsCard.insertBefore(selectedSection, fieldsCard.firstChild);
-            selectedList = document.getElementById('selectedFieldsList');
-
-            // Инициализируем Sortable для нового списка
-            initSortable();
-        }
-
-        // Создаем строку для нового поля
+        // Создаем новую строку
         const row = document.createElement('tr');
         row.className = 'field-row';
-        row.dataset.field = fieldName;
 
-        // Вычисляем отображаемое имя, если оно не передано
-        if (!displayName) {
-            displayName = getDefaultDisplayName(fieldName);
-        }
-
-        // Формируем HTML строки
+        // Заполняем строку содержимым
         row.innerHTML = `
             <td>
                 <i class="fas fa-grip-vertical drag-handle"></i>
-                <span>${selectedList.children.length + 1}</span>
-                <input type="hidden" name="fields[${fieldsCounter}].originalField" value="${fieldName}">
+                <span>${fieldsCount + 1}</span>
+                <input type="hidden" name="fields[${fieldsCount}].originalField" value="${fieldName}">
             </td>
             <td>${fieldName}</td>
-            <td class="header-input-container">
-                <input type="text" class="form-control" name="fields[${fieldsCounter}].displayName" value="${displayName}">
+            <td>
+                <input type="text" class="form-control"
+                       name="fields[${fieldsCount}].displayName"
+                       id="header_${fieldName.replace('.', '_')}"
+                       value="${displayName || getDefaultDisplayName(fieldName)}">
             </td>
             <td>
-                <button type="button" class="btn btn-sm btn-outline-danger remove-field-btn" onclick="removeField(this)">
+                <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn">
                     <i class="fas fa-times"></i>
                 </button>
             </td>
         `;
 
-        // Добавляем строку в список
-        selectedList.appendChild(row);
+        // Добавляем строку в таблицу
+        tableBody.appendChild(row);
 
-        // Увеличиваем счетчик полей
-        fieldsCounter++;
-    }
-
-    // Удалить поле из списка выбранных
-    function removeFieldFromSelectedList(fieldName) {
-        const row = document.querySelector(`#selectedFieldsList tr[data-field="${fieldName}"]`);
-        if (row) {
-            row.remove();
-            updateFieldIndices();
-        }
-    }
-
-    // Удаление поля по кнопке
-    function removeField(button) {
-        const row = button.closest('tr');
-        if (row) {
-            const fieldName = row.dataset.field;
-
-            // Снимаем флажок с соответствующего чекбокса
-            const checkbox = document.querySelector(`.field-checkbox[value="${fieldName}"]`);
-            if (checkbox) {
-                checkbox.checked = false;
-            }
-
-            // Удаляем строку
-            row.remove();
-            updateFieldIndices();
-        }
-    }
-
-    // Подготовка формы к отправке
-    function prepareFormSubmit() {
-        // Проверка наличия полей
-        const selectedFields = document.querySelectorAll('#selectedFieldsList tr');
-        if (selectedFields.length === 0) {
-            alert('Пожалуйста, выберите хотя бы одно поле для шаблона');
-            event.preventDefault();
-            return false;
-        }
-
-        // Добавляем скрытые поля для параметров файла в формате JSON
-        const fileOptionsInput = document.createElement('input');
-        fileOptionsInput.type = 'hidden';
-        fileOptionsInput.name = 'fileOptions';
-
-        const fileOptions = {
-            format: document.getElementById('fileType').value,
-            strategyId: document.getElementById('strategyId').value
-        };
-
-        // Добавляем параметры в зависимости от формата
-        if (fileOptions.format === 'csv') {
-            fileOptions.delimiter = document.getElementById('delimiter').value;
-            fileOptions.quoteChar = document.getElementById('quoteChar').value;
-            fileOptions.encoding = document.getElementById('encoding').value;
-        } else if (fileOptions.format === 'xlsx') {
-            fileOptions.sheetName = document.getElementById('sheetName').value;
-            fileOptions.autoSizeColumns = document.getElementById('autoSizeColumns').checked;
-        }
-
-        fileOptions.includeHeader = document.getElementById('includeHeader').checked;
-
-        // Преобразуем в JSON
-        fileOptionsInput.value = JSON.stringify(fileOptions);
-
-        // Добавляем в форму
-        document.getElementById('templateForm').appendChild(fileOptionsInput);
-
-        return true;
+        // Обновляем индексы полей
+        updateFieldIndices();
     }
 
     // Получение отображаемого имени поля по умолчанию
@@ -649,10 +456,29 @@
         const baseName = dotIndex > 0 ? field.substring(dotIndex + 1) : field;
 
         // Преобразуем camelCase в нормальный текст
-        return baseName.replace(/([A-Z])/g, ' $1')
+        return baseName
+            .replace(/([A-Z])/g, ' $1')
             .replace(/^./, str => str.toUpperCase())
             .trim();
     }
+
+    // Обработчики для чекбоксов полей
+    document.querySelectorAll('.field-checkbox').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                // Если поле выбрано, добавляем его в таблицу
+                addNewField(this.getAttribute('data-field'), this.getAttribute('data-display'));
+            } else {
+                // Если поле снято, удаляем его из таблицы
+                const field = this.getAttribute('data-field');
+                const row = document.querySelector(`#selectedFieldsList tr input[value="${field}"][name$="].originalField"]`).closest('tr');
+                if (row) {
+                    row.remove();
+                    updateFieldIndices();
+                }
+            }
+        });
+    });
 </script>
 </body>
 </html>

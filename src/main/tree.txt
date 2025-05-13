@@ -1,5 +1,5 @@
-Структура папок
-Серийный номер тома: 2ACC-0DF3
+пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
+пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ: 2ACC-0DF3
 E:.
 |   tree.txt
 |   
@@ -143,9 +143,9 @@ E:.
     +---db
     |   \---migration
     |           V1__Create_Initial_Schema.sql
-    |           V2__Fix_Client_Id_Type.sql
-    |           V3__Create_File_Processing_Schema.sql
-    |           V4__Add_Entity_Indexes.sql
+    |           V2__Additional_Tables.sql
+    |           V3__Add_Foreign_Keys.sql
+    |           V4__Add_Constraints.sql
     |           V5__AddColumnFieldMappings.sql
     |           V6__Update_file_operations.sql
     |           V7__Add_Import_Operation_Id.sql

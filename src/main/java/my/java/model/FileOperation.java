@@ -143,6 +143,8 @@ public class FileOperation {
         private int progress;
         private ZonedDateTime startedAt;
         private ZonedDateTime completedAt;
+
+        @Enumerated(EnumType.STRING)
         private OperationStatus status;
     }
 

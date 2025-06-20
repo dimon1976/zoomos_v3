@@ -3,7 +3,7 @@ package my.java.model.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import my.java.service.file.transformer.ValueTransformerFactory;
+import my.java.util.transformer.ValueTransformerFactory;
 
 import java.util.HashMap;
 import java.util.Map;

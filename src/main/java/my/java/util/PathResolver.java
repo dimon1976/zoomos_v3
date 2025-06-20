@@ -1,3 +1,4 @@
+// src/main/java/my/java/util/PathResolver.java
 package my.java.util;
 
 import lombok.extern.slf4j.Slf4j;
@@ -5,315 +6,294 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 /**
- * Утилитный класс для работы с путями файлов.
- * Предоставляет методы для сохранения и управления файлами в различных директориях.
+ * Утилита для работы с путями файлов
  */
 @Component
 @Slf4j
 public class PathResolver {
 
-    private static final String FILE_EXT_SEPARATOR = ".";
-    private static final String PATH_SEPARATOR = "/";
-    private static final int BYTES_IN_KB = 1024;
-    private static final int BYTES_IN_MB = 1024 * 1024;
-    private static final int BYTES_IN_GB = 1024 * 1024 * 1024;
+    @Value("${application.upload.dir:data/upload}")
+    private String uploadDir;
 
-    @Value("${app.file.temp-dir:./temp-files}")
-    private String tempFileDir;
+    @Value("${application.export.dir:data/upload/exports}")
+    private String exportDir;
 
-    @Value("${app.file.upload-dir:./uploads}")
-    private String uploadFileDir;
+    @Value("${application.import.dir:data/upload/imports}")
+    private String importDir;
 
-    /**
-     * Получает путь к директории временных файлов.
-     *
-     * @return путь к директории временных файлов
-     */
-    public Path getTempDirectory() {
-        Path tempDir = Paths.get(tempFileDir);
-        ensureDirectoryExists(tempDir);
-        return tempDir;
-    }
+    @Value("${application.temp.dir:data/temp}")
+    private String tempDir;
 
     /**
-     * Получает путь к директории загрузок.
-     *
-     * @return путь к директории загрузок
+     * Инициализация директорий при запуске
      */
-    public Path getUploadDirectory() {
-        Path uploadDir = Paths.get(uploadFileDir);
-        ensureDirectoryExists(uploadDir);
-        return uploadDir;
-    }
-
-    /**
-     * Создает директорию, если она не существует.
-     *
-     * @param directory путь к директории
-     * @throws RuntimeException если не удалось создать директорию
-     */
-    public void ensureDirectoryExists(Path directory) {
+    public void init() {
         try {
-            if (!Files.exists(directory)) {
-                Files.createDirectories(directory);
-                log.info("Создана директория: {}", directory);
-            }
+            Path tempDirPath = getAbsoluteTempDir();
+            Path uploadDirPath = getAbsoluteUploadDir();
+            Path exportDirPath = getAbsoluteExportDir();
+            Path importDirPath = getAbsoluteImportDir();
+
+            Files.createDirectories(tempDirPath);
+            Files.createDirectories(uploadDirPath);
+            Files.createDirectories(exportDirPath);
+            Files.createDirectories(importDirPath);
+
+            log.info("Инициализированы директории для файлов:");
+            log.info("Временная директория: {}", tempDirPath);
+            log.info("Директория загрузок: {}", uploadDirPath);
+            log.info("Директория экспорта: {}", exportDirPath);
+            log.info("Директория импорта: {}", importDirPath);
         } catch (IOException e) {
-            log.error("Ошибка при создании директории {}: {}", directory, e.getMessage());
-            throw new RuntimeException("Не удалось создать директорию: " + directory, e);
+            log.error("Не удалось создать директории для файлов: {}", e.getMessage(), e);
         }
     }
 
     /**
-     * Сохраняет файл во временную директорию.
-     *
-     * @param file файл для сохранения
-     * @param prefix префикс для имени файла
-     * @return путь к сохраненному файлу
-     * @throws IOException если произошла ошибка при сохранении файла
+     * Сохраняет загруженный файл во временную директорию
      */
     public Path saveToTempFile(MultipartFile file, String prefix) throws IOException {
-        Path tempDir = getTempDirectory();
-        return saveFile(file, tempDir, prefix);
-    }
+        // Создаем временную директорию, если не существует
+        Path tempDirPath = getAbsoluteTempDir();
+        Files.createDirectories(tempDirPath);
 
-    /**
-     * Сохраняет файл в директорию загрузок.
-     *
-     * @param file файл для сохранения
-     * @param prefix префикс для имени файла
-     * @return путь к сохраненному файлу
-     * @throws IOException если произошла ошибка при сохранении файла
-     */
-    public Path saveToUploadDirectory(MultipartFile file, String prefix) throws IOException {
-        Path uploadDir = getUploadDirectory();
-        return saveFile(file, uploadDir, prefix);
-    }
+        // Генерируем уникальное имя файла
+        String originalFilename = file.getOriginalFilename();
+        String filename = prefix + "_" + UUID.randomUUID() +
+                (originalFilename != null ? getFileExtension(originalFilename) : "");
 
-    /**
-     * Сохраняет файл в указанную директорию.
-     *
-     * @param file файл для сохранения
-     * @param directory директория для сохранения
-     * @param prefix префикс для имени файла
-     * @return путь к сохраненному файлу
-     * @throws IOException если произошла ошибка при сохранении файла
-     */
-    private Path saveFile(MultipartFile file, Path directory, String prefix) throws IOException {
-        String originalFilename = getOriginalFilename(file);
-        String extension = getFileExtension(originalFilename);
-        String fileName = generateUniqueFileName(prefix, extension);
-
-        Path filePath = directory.resolve(fileName);
+        Path tempFile = tempDirPath.resolve(filename);
 
         // Сохраняем файл
-        Files.write(filePath, file.getBytes());
-
-        log.debug("Файл сохранен в: {}", filePath);
-        return filePath;
+        Files.copy(file.getInputStream(), tempFile, StandardCopyOption.REPLACE_EXISTING);
+        log.debug("Сохранен временный файл: {}", tempFile.toAbsolutePath());
+        return tempFile;
     }
 
     /**
-     * Получает оригинальное имя файла или имя по умолчанию, если оно отсутствует.
-     *
-     * @param file загруженный файл
-     * @return оригинальное имя файла или имя по умолчанию
+     * Создает пустой временный файл
      */
-    private String getOriginalFilename(MultipartFile file) {
-        String originalFilename = file.getOriginalFilename();
-        return originalFilename != null ? originalFilename : "file.tmp";
+    public Path createTempFile(String prefix, String suffix) throws IOException {
+        // Создаем временную директорию, если не существует
+        Path tempDirPath = getAbsoluteTempDir();
+        Files.createDirectories(tempDirPath);
+
+        // Генерируем уникальное имя файла
+        String filename = prefix + "_" + UUID.randomUUID() + suffix;
+        Path tempFile = tempDirPath.resolve(filename);
+
+        // Создаем пустой файл
+        Files.createFile(tempFile);
+        log.debug("Создан пустой временный файл: {}", tempFile.toAbsolutePath());
+
+        return tempFile;
     }
 
     /**
-     * Генерирует уникальное имя файла с указанным префиксом и расширением.
-     *
-     * @param prefix префикс для имени файла
-     * @param extension расширение файла
-     * @return уникальное имя файла
+     * Создает пустой временный файл с датой в имени
      */
-    private String generateUniqueFileName(String prefix, String extension) {
-        return prefix + "_" + UUID.randomUUID().toString() + FILE_EXT_SEPARATOR + extension;
+    public Path createTempFileWithDate(String prefix, String suffix) throws IOException {
+        // Создаем временную директорию, если не существует
+        Path tempDirPath = getAbsoluteTempDir();
+        Files.createDirectories(tempDirPath);
+
+        // Генерируем уникальное имя файла с датой
+        String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String filename = prefix + "_" + date + "_" + UUID.randomUUID() + suffix;
+        Path tempFile = tempDirPath.resolve(filename);
+
+        // Создаем пустой файл
+        Files.createFile(tempFile);
+        log.debug("Создан пустой временный файл с датой: {}", tempFile.toAbsolutePath());
+
+        return tempFile;
     }
 
     /**
-     * Копирует файл из временной директории в директорию загрузок.
-     *
-     * @param tempFilePath путь к временному файлу
-     * @param prefix префикс для имени файла
-     * @return путь к сохраненному файлу
-     * @throws IOException если произошла ошибка при копировании файла
+     * Перемещает файл из временной директории в директорию экспорта
      */
-    public Path moveFromTempToUpload(Path tempFilePath, String prefix) throws IOException {
-        Path uploadDir = getUploadDirectory();
-        String extension = getFileExtension(tempFilePath.toString());
-        String fileName = generateUniqueFileName(prefix, extension);
+    public Path moveFromTempToExport(Path tempFilePath, String prefix) throws IOException {
+        // Создаем директорию для экспорта, если не существует
+        Path exportDirPath = getAbsoluteExportDir();
+        Files.createDirectories(exportDirPath);
 
-        Path targetPath = uploadDir.resolve(fileName);
+        // Проверяем существование исходного файла
+        if (!Files.exists(tempFilePath)) {
+            throw new IOException("Временный файл не существует: " + tempFilePath.toAbsolutePath());
+        }
 
-        // Копируем файл
-        Files.copy(tempFilePath, targetPath);
+        // Генерируем уникальное имя файла
+        String filename = prefix + "_" + UUID.randomUUID() +
+                getFileExtension(tempFilePath.getFileName().toString());
 
-        // Удаляем временный файл
-        deleteFileWithLogging(tempFilePath);
+        Path targetPath = exportDirPath.resolve(filename);
 
-        log.debug("Файл перемещен из временной директории в директорию загрузок: {} -> {}", tempFilePath, targetPath);
+        // Перемещаем файл
+        Files.move(tempFilePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        log.info("Файл перемещен из временной директории в директорию экспорта: {} -> {}",
+                tempFilePath.toAbsolutePath(), targetPath.toAbsolutePath());
+
         return targetPath;
     }
 
     /**
-     * Удаляет файл с логированием результата.
-     *
-     * @param filePath путь к файлу
-     * @return true, если файл успешно удален
+     * Перемещает файл из временной директории в директорию импорта
      */
-    private boolean deleteFileWithLogging(Path filePath) {
+    public Path moveFromTempToImport(Path tempFilePath, String prefix) throws IOException {
+        // Создаем директорию для импорта, если не существует
+        Path importDirPath = getAbsoluteImportDir();
+        Files.createDirectories(importDirPath);
+
+        // Проверяем существование исходного файла
+        if (!Files.exists(tempFilePath)) {
+            throw new IOException("Временный файл не существует: " + tempFilePath.toAbsolutePath());
+        }
+
+        // Генерируем уникальное имя файла
+        String filename = prefix + "_" + UUID.randomUUID() +
+                getFileExtension(tempFilePath.getFileName().toString());
+
+        Path targetPath = importDirPath.resolve(filename);
+
+        // Перемещаем файл
+        Files.move(tempFilePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        log.info("Файл перемещен из временной директории в директорию импорта: {} -> {}",
+                tempFilePath.toAbsolutePath(), targetPath.toAbsolutePath());
+
+        return targetPath;
+    }
+
+    /**
+     * Перемещает файл из временной директории в директорию загрузок
+     * @deprecated Используйте moveFromTempToExport или moveFromTempToImport
+     */
+    @Deprecated
+    public Path moveFromTempToUpload(Path tempFilePath, String prefix) throws IOException {
+        // Для обратной совместимости перенаправляем на метод moveFromTempToExport
+        log.warn("Использование устаревшего метода moveFromTempToUpload. Используйте moveFromTempToExport");
+        return moveFromTempToExport(tempFilePath, prefix);
+    }
+
+    /**
+     * Копирует файл из директории экспорта во временную директорию
+     */
+    public Path copyFromExportToTemp(Path exportFilePath) throws IOException {
+        // Создаем временную директорию, если не существует
+        Path tempDirPath = getAbsoluteTempDir();
+        Files.createDirectories(tempDirPath);
+
+        // Проверяем существование исходного файла
+        if (!Files.exists(exportFilePath)) {
+            throw new IOException("Файл экспорта не существует: " + exportFilePath.toAbsolutePath());
+        }
+
+        // Генерируем уникальное имя файла
+        String filename = "copy_" + UUID.randomUUID() +
+                getFileExtension(exportFilePath.getFileName().toString());
+
+        Path targetPath = tempDirPath.resolve(filename);
+
+        // Копируем файл
+        Files.copy(exportFilePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        log.debug("Файл скопирован из директории экспорта во временную директорию: {} -> {}",
+                exportFilePath.toAbsolutePath(), targetPath.toAbsolutePath());
+
+        return targetPath;
+    }
+
+    /**
+     * Получает абсолютный путь ко временной директории
+     */
+    public Path getAbsoluteTempDir() {
+        return getAbsolutePath(tempDir);
+    }
+
+    /**
+     * Получает абсолютный путь к директории загрузок
+     */
+    public Path getAbsoluteUploadDir() {
+        return getAbsolutePath(uploadDir);
+    }
+
+    /**
+     * Получает абсолютный путь к директории экспорта
+     */
+    public Path getAbsoluteExportDir() {
+        return getAbsolutePath(exportDir);
+    }
+
+    /**
+     * Получает абсолютный путь к директории импорта
+     */
+    public Path getAbsoluteImportDir() {
+        return getAbsolutePath(importDir);
+    }
+
+    /**
+     * Получает абсолютный путь из относительного
+     */
+    public Path getAbsolutePath(String path) {
+        File file = new File(path);
+        if (!file.isAbsolute()) {
+            file = new File(System.getProperty("user.dir"), path);
+        }
+        return file.toPath();
+    }
+
+    /**
+     * Удаляет файл
+     */
+    public void deleteFile(Path filePath) {
         try {
-            boolean deleted = Files.deleteIfExists(filePath);
-            if (deleted) {
-                log.debug("Файл удален: {}", filePath);
-            } else {
-                log.warn("Файл не найден для удаления: {}", filePath);
-            }
-            return deleted;
+            Files.deleteIfExists(filePath);
+            log.debug("Удален файл: {}", filePath.toAbsolutePath());
         } catch (IOException e) {
-            log.error("Ошибка при удалении файла {}: {}", filePath, e.getMessage());
-            return false;
+            log.warn("Не удалось удалить файл {}: {}", filePath, e.getMessage());
         }
     }
 
     /**
-     * Удаляет файл.
-     *
-     * @param filePath путь к файлу
-     * @return true, если файл успешно удален
-     */
-    public boolean deleteFile(Path filePath) {
-        return deleteFileWithLogging(filePath);
-    }
-
-    /**
-     * Получает размер файла.
-     *
-     * @param filePath путь к файлу
-     * @return размер файла в байтах или -1, если файл не существует
+     * Получает размер файла
      */
     public long getFileSize(Path filePath) {
         try {
             return Files.size(filePath);
         } catch (IOException e) {
-            log.error("Ошибка при получении размера файла {}: {}", filePath, e.getMessage());
-            return -1;
+            log.warn("Не удалось получить размер файла {}: {}", filePath, e.getMessage());
+            return 0;
         }
     }
 
     /**
-     * Получает расширение файла из имени файла.
-     *
-     * @param filename имя файла
-     * @return расширение файла или пустая строка, если расширение отсутствует
+     * Проверяет существование файла
      */
-    public String getFileExtension(String filename) {
-        int lastDotIndex = filename.lastIndexOf(FILE_EXT_SEPARATOR);
-        if (lastDotIndex > 0) {
-            return filename.substring(lastDotIndex + 1);
-        }
-        return "";
+    public boolean fileExists(Path filePath) {
+        return Files.exists(filePath);
     }
 
     /**
-     * Создает абсолютный путь из относительного.
-     *
-     * @param relativePath относительный путь
-     * @return абсолютный путь или null, если входной путь null или пустой
+     * Проверяет доступность директории для записи
      */
-    public Path resolveRelativePath(String relativePath) {
-        if (relativePath == null || relativePath.isEmpty()) {
-            return null;
-        }
-
-        Path path = Paths.get(relativePath);
-        if (path.isAbsolute()) {
-            return path;
-        }
-
-        // Проверяем различные варианты путей
-        if (isPathInDir(relativePath, "temp-files")) {
-            return resolvePathInTempDir(relativePath);
-        } else if (isPathInDir(relativePath, "uploads")) {
-            return resolvePathInUploadDir(relativePath);
-        }
-
-        // Пробуем найти в обеих директориях
-        Path tempPath = getTempDirectory().resolve(relativePath);
-        if (Files.exists(tempPath)) {
-            return tempPath;
-        }
-
-        Path uploadPath = getUploadDirectory().resolve(relativePath);
-        if (Files.exists(uploadPath)) {
-            return uploadPath;
-        }
-
-        // Если не нашли, возвращаем исходный путь
-        return path;
+    public boolean isDirectoryWritable(Path dirPath) {
+        return Files.isWritable(dirPath);
     }
 
     /**
-     * Проверяет, начинается ли путь с указанной директории.
-     *
-     * @param path путь для проверки
-     * @param dirName имя директории
-     * @return true, если путь начинается с указанной директории
+     * Получает расширение файла
      */
-    private boolean isPathInDir(String path, String dirName) {
-        return path.startsWith(dirName + PATH_SEPARATOR) ||
-                path.startsWith(dirName + "\\");
-    }
-
-    /**
-     * Разрешает путь во временной директории.
-     *
-     * @param path относительный путь
-     * @return абсолютный путь во временной директории
-     */
-    private Path resolvePathInTempDir(String path) {
-        String subPath = path.substring(path.indexOf(PATH_SEPARATOR) + 1);
-        return getTempDirectory().resolve(subPath);
-    }
-
-    /**
-     * Разрешает путь в директории загрузок.
-     *
-     * @param path относительный путь
-     * @return абсолютный путь в директории загрузок
-     */
-    private Path resolvePathInUploadDir(String path) {
-        String subPath = path.substring(path.indexOf(PATH_SEPARATOR) + 1);
-        return getUploadDirectory().resolve(subPath);
-    }
-
-    /**
-     * Форматирует размер файла в читаемый вид.
-     *
-     * @param size размер файла в байтах
-     * @return форматированный размер файла
-     */
-    public String formatFileSize(long size) {
-        if (size < BYTES_IN_KB) {
-            return size + " B";
-        } else if (size < BYTES_IN_MB) {
-            return String.format("%.2f KB", size / (double)BYTES_IN_KB);
-        } else if (size < BYTES_IN_GB) {
-            return String.format("%.2f MB", size / (double)BYTES_IN_MB);
-        } else {
-            return String.format("%.2f GB", size / (double)BYTES_IN_GB);
-        }
+    private String getFileExtension(String filename) {
+        int lastDotIndex = filename.lastIndexOf('.');
+        return lastDotIndex > 0 ? filename.substring(lastDotIndex) : "";
     }
 }

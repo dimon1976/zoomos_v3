@@ -1,4 +1,4 @@
-package my.java.service.file.transformer;
+package my.java.util.transformer;
 
 /**
  * Интерфейс для трансформации значений из строк в нужный тип

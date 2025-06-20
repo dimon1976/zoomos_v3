@@ -34,6 +34,11 @@ build/
 
 ### Application specific ###
 /logs/
+/data/
 /uploads/
 /temp/
-/application-dev.properties
+/temp-files/
+temp-files/
+**/temp-files/**
+/temp-files/**
+src/main/resources/application-verbose.properties

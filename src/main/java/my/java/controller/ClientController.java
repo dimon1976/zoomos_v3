@@ -22,7 +22,7 @@ public class ClientController {
     private final ClientService clientService;
 
     /**
-     * Отображение списка всех клиентов
+     * Отображение списка всех клиентов.
      */
     @GetMapping
     public String getAllClients(Model model, HttpServletRequest request) {

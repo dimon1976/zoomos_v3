@@ -1,5 +1,7 @@
 package my.java.model.entity;
 
+import my.java.util.transformer.ValueTransformerFactory;
+
 import java.util.Map;
 
 /**
@@ -30,4 +32,11 @@ public interface ImportableEntity {
      * @return null, если валидация прошла успешно, иначе - сообщение об ошибке
      */
     String validate();
+
+    /**
+     * Устанавливает фабрику трансформеров для преобразования строковых значений.
+     *
+     * @param transformerFactory фабрика трансформеров
+     */
+    void setTransformerFactory(ValueTransformerFactory transformerFactory);
 }

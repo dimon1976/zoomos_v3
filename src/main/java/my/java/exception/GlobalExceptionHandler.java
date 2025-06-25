@@ -132,7 +132,7 @@ public class GlobalExceptionHandler {
 
         logError("Превышен размер файла", ex);
         setErrorAttributes(model,
-                "Превышен максимальный размер файла. Максимальный размер: 10MB.", request);
+                "Превышен максимальный размер файла. Максимальный размер: 1000MB.", request);
 
         return FILE_ERROR_VIEW;
     }

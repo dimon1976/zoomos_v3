@@ -1,5 +1,7 @@
 package my.java.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileImportDto;
@@ -7,12 +9,13 @@ import my.java.exception.FileOperationException;
 import my.java.model.Client;
 import my.java.model.FieldMappingTemplate;
 import my.java.model.FileOperation;
-import my.java.repository.FileOperationRepository;
 import my.java.service.client.ClientService;
 import my.java.service.file.detector.CsvParameterDetector;
 import my.java.service.file.importer.CsvImportService;
 import my.java.service.mapping.FieldMappingService;
 import my.java.service.notification.ImportProgressNotifier;
+import my.java.repository.FileOperationRepository;
+import my.java.util.PathResolver;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +23,8 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
@@ -38,6 +43,7 @@ public class FileImportController {
     private final CsvImportService importService;
     private final FileOperationRepository operationRepository;
     private final ImportProgressNotifier progressNotifier;
+    private final PathResolver pathResolver;
 
     /**
      * Страница загрузки файла
@@ -68,7 +74,8 @@ public class FileImportController {
     public String analyzeFile(@PathVariable Long clientId,
                               @RequestParam("file") MultipartFile file,
                               Model model,
-                              RedirectAttributes redirectAttributes) {
+                              RedirectAttributes redirectAttributes,
+                              HttpSession session) {
         log.debug("POST request to analyze file for client: {}", clientId);
 
         if (file.isEmpty()) {
@@ -93,15 +100,17 @@ public class FileImportController {
                     .hasHeader(params.isHasHeader())
                     .build();
 
+            // Сохраняем файл во временную директорию
+            Path tempFile = pathResolver.saveToTempFile(file, "analyze");
+            session.setAttribute("uploadedFilePath", tempFile.toString());
+            session.setAttribute("uploadedFileName", file.getOriginalFilename());
+
             model.addAttribute("client", client);
             model.addAttribute("importDto", importDto);
             model.addAttribute("detectedParams", params);
             model.addAttribute("fileName", file.getOriginalFilename());
             model.addAttribute("fileSize", file.getSize());
             model.addAttribute("entityTypes", Arrays.asList("Product", "Competitor", "Region"));
-
-            // Сохраняем файл в сессии для последующего импорта
-            model.addAttribute("uploadedFile", file);
 
             return "import/configure";
 
@@ -119,18 +128,30 @@ public class FileImportController {
     @PostMapping("/mapping")
     public String configureMappings(@PathVariable Long clientId,
                                     @ModelAttribute FileImportDto importDto,
-                                    @RequestParam("file") MultipartFile file,
+                                    HttpSession session,
                                     Model model,
                                     RedirectAttributes redirectAttributes) {
         log.debug("POST request to configure mappings for client: {}", clientId);
 
         try {
+            // Получаем путь к файлу из сессии
+            String filePath = (String) session.getAttribute("uploadedFilePath");
+            String fileName = (String) session.getAttribute("uploadedFileName");
+
+            if (filePath == null) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Файл не найден в сессии");
+                return "redirect:/clients/" + clientId + "/import";
+            }
+
             // Загружаем клиента
             Client client = clientService.findClientEntityById(clientId)
                     .orElseThrow(() -> new FileOperationException("Клиент не найден"));
 
             // Получаем заголовки из файла
-            CsvParameterDetector.CsvParameters params = parameterDetector.detect(file.getInputStream());
+            Path path = Paths.get(filePath);
+            CsvParameterDetector.CsvParameters params = parameterDetector.detect(
+                    java.nio.file.Files.newInputStream(path)
+            );
 
             // Получаем доступные шаблоны
             List<FieldMappingTemplate> templates = mappingService
@@ -145,7 +166,7 @@ public class FileImportController {
             model.addAttribute("templates", templates);
             model.addAttribute("autoTemplate", autoTemplate);
             model.addAttribute("csvHeaders", params.getSampleHeaders());
-            model.addAttribute("fileName", file.getOriginalFilename());
+            model.addAttribute("fileName", fileName);
 
             return "import/mapping";
 
@@ -163,11 +184,23 @@ public class FileImportController {
     @PostMapping("/start")
     public String startImport(@PathVariable Long clientId,
                               @ModelAttribute FileImportDto importDto,
-                              @RequestParam("file") MultipartFile file,
+                              HttpSession session,
                               RedirectAttributes redirectAttributes) {
         log.debug("POST request to start import for client: {}", clientId);
 
         try {
+            // Получаем путь к файлу из сессии
+            String filePath = (String) session.getAttribute("uploadedFilePath");
+            String fileName = (String) session.getAttribute("uploadedFileName");
+
+            if (filePath == null) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Файл не найден в сессии");
+                return "redirect:/clients/" + clientId + "/import";
+            }
+
+            Path path = Paths.get(filePath);
+            long fileSize = java.nio.file.Files.size(path);
+
             // Создаем запись операции
             Client client = clientService.findClientEntityById(clientId)
                     .orElseThrow(() -> new FileOperationException("Клиент не найден"));
@@ -175,21 +208,25 @@ public class FileImportController {
             FileOperation operation = FileOperation.builder()
                     .client(client)
                     .operationType(FileOperation.OperationType.IMPORT)
-                    .fileName(file.getOriginalFilename())
+                    .fileName(fileName)
                     .fileType("CSV")
-                    .fileSize(file.getSize())
+                    .fileSize(fileSize)
                     .status(FileOperation.OperationStatus.PENDING)
+                    .sourceFilePath(filePath)
                     .build();
 
             operation = operationRepository.save(operation);
 
-            // Запускаем асинхронный импорт
-            importDto.setFile(file);
+            // Запускаем асинхронный импорт напрямую с путем к файлу
             importDto.setClientId(clientId);
-            importService.importCsvAsync(importDto, operation);
+            importService.importCsvFromPath(path, importDto, operation);
 
             // Уведомляем о начале
             progressNotifier.notifyStart(operation.getId());
+
+            // Очищаем сессию
+            session.removeAttribute("uploadedFilePath");
+            session.removeAttribute("uploadedFileName");
 
             redirectAttributes.addFlashAttribute("successMessage",
                     "Импорт файла запущен. Вы можете отслеживать прогресс на странице операции.");

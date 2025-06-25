@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Настройка импорта - ' + ${client.name},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Настройка параметров импорта',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Настройка импорта</title>
+    <style>
+        .param-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f8f9fa;
+        }
+        .param-card.detected {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .preview-table {
+            max-height: 400px;
+            overflow: auto;
+        }
+        .preview-table table {
+            font-size: 0.875rem;
+        }
+        .preview-table th {
+            position: sticky;
+            top: 0;
+            background-color: #fff;
+            z-index: 10;
+        }
+        .encoding-select {
+            max-width: 300px;
+        }
+        .delimiter-option {
+            margin-right: 20px;
+        }
+        .file-info-badge {
+            font-size: 0.875rem;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад
+    </a>
+</div>
+
+<section>
+    <!-- Информация о файле -->
+    <div class="alert alert-info d-flex align-items-center mb-4">
+        <i class="fas fa-file-csv me-3 fs-4"></i>
+        <div>
+            <strong>Файл:</strong> <span th:text="${fileName}">file.csv</span>
+            <span class="badge bg-secondary file-info-badge" th:text="${#numbers.formatDecimal(fileSize / 1048576.0, 1, 2) + ' МБ'}">0 МБ</span>
+            <span class="badge bg-primary file-info-badge" th:text="${detectedParams?.columnCount ?: 0} + ' колонок'">0 колонок</span>
+        </div>
+    </div>
+
+    <!-- Форма настройки параметров -->
+    <form th:action="@{/clients/{id}/import/mapping(id=${client.id})}" method="post"
+          enctype="multipart/form-data" id="configureForm">
+
+        <!-- Скрытые поля -->
+        <input type="hidden" th:field="${importDto.clientId}">
+
+        <!-- Автоматически определенные параметры -->
+        <div class="param-card detected">
+            <h5 class="mb-3">
+                <i class="fas fa-magic me-2"></i>Автоматически определенные параметры
+            </h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <p class="mb-1"><strong>Кодировка:</strong></p>
+                    <p class="text-success" th:text="${detectedParams?.encoding?.name() ?: 'UTF-8'}">UTF-8</p>
+                </div>
+                <div class="col-md-4">
+                    <p class="mb-1"><strong>Разделитель:</strong></p>
+                    <p class="text-success">
+                        <span th:if="${detectedParams != null}" th:switch="${detectedParams.delimiter}">
+                            <span th:case="','">Запятая (,)</span>
+                            <span th:case="';'">Точка с запятой (;)</span>
+                            <span th:case="${#strings.toString('	')}">Табуляция</span>
+                            <span th:case="'|'">Вертикальная черта (|)</span>
+                            <span th:case="*" th:text="${detectedParams.delimiter}"></span>
+                        </span>
+                        <span th:unless="${detectedParams != null}">Не определен</span>
+                    </p>
+                </div>
+                <div class="col-md-4">
+                    <p class="mb-1"><strong>Заголовки:</strong></p>
+                    <p class="text-success" th:text="${detectedParams?.hasHeader ? 'Есть' : 'Отсутствуют'}">Есть</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Настройка параметров -->
+        <div class="param-card">
+            <h5 class="mb-3">
+                <i class="fas fa-cog me-2"></i>Настройка параметров импорта
+            </h5>
+
+            <div class="row mb-3">
+                <!-- Тип сущности -->
+                <div class="col-md-4">
+                    <label for="entityType" class="form-label">Тип данных для импорта</label>
+                    <select class="form-select" id="entityType" th:field="${importDto.entityType}" required>
+                        <option value="">-- Выберите тип --</option>
+                        <option value="Product">Товары</option>
+                        <option value="Competitor">Данные конкурентов</option>
+                        <option value="Region">Региональные данные</option>
+                    </select>
+                </div>
+
+                <!-- Кодировка -->
+                <div class="col-md-4">
+                    <label for="encoding" class="form-label">Кодировка файла</label>
+                    <select class="form-select encoding-select" id="encoding" th:field="${importDto.encoding}">
+                        <option value="UTF-8">UTF-8</option>
+                        <option value="windows-1251">Windows-1251 (Кириллица)</option>
+                        <option value="ISO-8859-1">ISO-8859-1 (Latin-1)</option>
+                        <option value="US-ASCII">US-ASCII</option>
+                    </select>
+                </div>
+
+                <!-- Размер пакета -->
+                <div class="col-md-4">
+                    <label for="batchSize" class="form-label">Размер пакета</label>
+                    <input type="number" class="form-control" id="batchSize"
+                           th:field="${importDto.batchSize}"
+                           min="10" max="1000" value="100">
+                    <small class="text-muted">Количество записей в одном пакете</small>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <!-- Разделитель -->
+                <div class="col-md-6">
+                    <label class="form-label">Разделитель полей</label>
+                    <div>
+                        <div class="form-check form-check-inline delimiter-option">
+                            <input class="form-check-input" type="radio" name="delimiter"
+                                   id="delimiterComma" value=","
+                                   th:checked="${importDto.delimiter == ','}">
+                            <label class="form-check-label" for="delimiterComma">
+                                Запятая (,)
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline delimiter-option">
+                            <input class="form-check-input" type="radio" name="delimiter"
+                                   id="delimiterSemicolon" value=";"
+                                   th:checked="${importDto.delimiter == ';'}">
+                            <label class="form-check-label" for="delimiterSemicolon">
+                                Точка с запятой (;)
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline delimiter-option">
+                            <input class="form-check-input" type="radio" name="delimiter"
+                                   id="delimiterTab" value="	"
+                                   th:checked="${importDto.delimiter == '	'}">
+                            <label class="form-check-label" for="delimiterTab">
+                                Табуляция
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline delimiter-option">
+                            <input class="form-check-input" type="radio" name="delimiter"
+                                   id="delimiterPipe" value="|"
+                                   th:checked="${importDto.delimiter == '|'}">
+                            <label class="form-check-label" for="delimiterPipe">
+                                Верт. черта (|)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Символ экранирования -->
+                <div class="col-md-6">
+                    <label class="form-label">Символ экранирования</label>
+                    <div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="quoteChar"
+                                   id="quoteDouble" value='"'
+                                   th:checked="${importDto.quoteChar == '&quot;'}">
+                            <label class="form-check-label" for="quoteDouble">
+                                Двойные кавычки (")
+                            </label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="quoteChar"
+                                   id="quoteSingle" value="'"
+                                   th:checked="${importDto.quoteChar == ''''}">
+                            <label class="form-check-label" for="quoteSingle">
+                                Одинарные кавычки (')
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Дополнительные опции -->
+                <div class="col-md-6">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="hasHeader"
+                               th:field="${importDto.hasHeader}">
+                        <label class="form-check-label" for="hasHeader">
+                            Первая строка содержит заголовки
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="skipEmptyLines"
+                               th:field="${importDto.skipEmptyLines}" checked>
+                        <label class="form-check-label" for="skipEmptyLines">
+                            Пропускать пустые строки
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="trimValues"
+                               th:field="${importDto.trimValues}" checked>
+                        <label class="form-check-label" for="trimValues">
+                            Обрезать пробелы в значениях
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Предпросмотр данных -->
+        <div class="param-card">
+            <h5 class="mb-3">
+                <i class="fas fa-eye me-2"></i>Предпросмотр данных
+            </h5>
+
+            <div class="preview-table">
+                <table class="table table-sm table-bordered">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th th:if="${detectedParams?.sampleHeaders != null}"
+                            th:each="header : ${detectedParams.sampleHeaders}"
+                            th:text="${header}">Колонка</th>
+                        <th th:unless="${detectedParams?.sampleHeaders != null}">Нет данных</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td th:if="${detectedParams?.sampleHeaders != null}"
+                            th:each="header : ${detectedParams.sampleHeaders}">
+                            <span class="text-muted">Пример данных</span>
+                        </td>
+                        <td th:unless="${detectedParams?.sampleHeaders != null}">
+                            <span class="text-muted">Нет данных</span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="alert alert-warning mt-3" th:if="${detectedParams?.hasHeader == false}">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Внимание!</strong> Заголовки не обнаружены. Будут использованы автоматические имена колонок.
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary" id="continueBtn">
+                <i class="fas fa-arrow-right me-2"></i>Продолжить настройку маппинга
+            </button>
+            <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-times me-2"></i>Отмена
+            </a>
+        </div>
+    </form>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('configureForm');
+        const entityTypeSelect = document.getElementById('entityType');
+        const continueBtn = document.getElementById('continueBtn');
+
+        // Проверка выбора типа сущности
+        entityTypeSelect.addEventListener('change', function() {
+            if (this.value) {
+                continueBtn.disabled = false;
+            } else {
+                continueBtn.disabled = true;
+            }
+        });
+
+        // Начальная проверка
+        if (!entityTypeSelect.value) {
+            continueBtn.disabled = true;
+        }
+
+        // Обработка отправки формы
+        form.addEventListener('submit', function(e) {
+            if (!entityTypeSelect.value) {
+                e.preventDefault();
+                alert('Пожалуйста, выберите тип данных для импорта');
+                entityTypeSelect.focus();
+            }
+        });
+    });
+</script>
+</body>
+</html>

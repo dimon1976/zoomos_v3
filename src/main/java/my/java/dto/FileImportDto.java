@@ -20,7 +20,6 @@ import java.util.Map;
 @AllArgsConstructor
 public class FileImportDto {
 
-    private MultipartFile file;
     private Long clientId;
     private Long mappingTemplateId;
     private String encoding;

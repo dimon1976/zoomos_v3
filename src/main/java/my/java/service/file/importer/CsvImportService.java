@@ -50,21 +50,68 @@ public class CsvImportService {
     @Value("${import.batch.size:100}")
     private int defaultBatchSize;
 
+//    /**
+//     * Запускает асинхронный импорт CSV файла
+//     */
+//    @Async("fileProcessingExecutor")
+//    @Transactional
+//    public void importCsvAsync(FileImportDto importDto, FileOperation operation) {
+//        log.info("Начало асинхронного импорта файла: {}", importDto.getFile().getOriginalFilename());
+//
+//        Path tempFile = null;
+//        try {
+//            // Сохраняем файл во временную директорию
+//            tempFile = pathResolver.saveToTempFile(importDto.getFile(), "import");
+//
+//            // Обновляем статус операции
+//            operation.setSourceFilePath(tempFile.toString());
+//            operation.markAsProcessing();
+//            fileOperationRepository.save(operation);
+//
+//            // Загружаем шаблон маппинга
+//            FieldMappingTemplate template = mappingService
+//                    .getTemplateWithRules(importDto.getMappingTemplateId())
+//                    .orElseThrow(() -> new FileOperationException("Шаблон маппинга не найден"));
+//
+//            // Импортируем данные
+//            ImportResultDto result = processCsvImport(
+//                    tempFile,
+//                    importDto,
+//                    template,
+//                    operation
+//            );
+//
+//            // Обновляем операцию с результатами
+//            updateOperationWithResults(operation, result);
+//
+//            // Перемещаем файл в директорию импорта
+//            Path importedFile = pathResolver.moveFromTempToImport(tempFile, "imported");
+//            operation.setResultFilePath(importedFile.toString());
+//
+//        } catch (Exception e) {
+//            log.error("Ошибка при импорте файла: {}", e.getMessage(), e);
+//            operation.markAsFailed(e.getMessage());
+//            progressNotifier.notifyError(operation.getId(), e.getMessage());
+//        } finally {
+//            fileOperationRepository.save(operation);
+//            // Очищаем временный файл если он остался
+//            if (tempFile != null && pathResolver.fileExists(tempFile)) {
+//                pathResolver.deleteFile(tempFile);
+//            }
+//        }
+//    }
+
     /**
-     * Запускает асинхронный импорт CSV файла
+     * Запускает асинхронный импорт CSV файла из пути
      */
     @Async("fileProcessingExecutor")
     @Transactional
-    public void importCsvAsync(FileImportDto importDto, FileOperation operation) {
-        log.info("Начало асинхронного импорта файла: {}", importDto.getFile().getOriginalFilename());
+    public void importCsvFromPath(Path filePath, FileImportDto importDto, FileOperation operation) {
+        log.info("Начало асинхронного импорта файла из пути: {}", filePath);
 
-        Path tempFile = null;
         try {
-            // Сохраняем файл во временную директорию
-            tempFile = pathResolver.saveToTempFile(importDto.getFile(), "import");
-
             // Обновляем статус операции
-            operation.setSourceFilePath(tempFile.toString());
+            operation.setSourceFilePath(filePath.toString());
             operation.markAsProcessing();
             fileOperationRepository.save(operation);
 
@@ -75,7 +122,7 @@ public class CsvImportService {
 
             // Импортируем данные
             ImportResultDto result = processCsvImport(
-                    tempFile,
+                    filePath,
                     importDto,
                     template,
                     operation
@@ -85,7 +132,7 @@ public class CsvImportService {
             updateOperationWithResults(operation, result);
 
             // Перемещаем файл в директорию импорта
-            Path importedFile = pathResolver.moveFromTempToImport(tempFile, "imported");
+            Path importedFile = pathResolver.moveFromTempToImport(filePath, "imported");
             operation.setResultFilePath(importedFile.toString());
 
         } catch (Exception e) {
@@ -94,10 +141,6 @@ public class CsvImportService {
             progressNotifier.notifyError(operation.getId(), e.getMessage());
         } finally {
             fileOperationRepository.save(operation);
-            // Очищаем временный файл если он остался
-            if (tempFile != null && pathResolver.fileExists(tempFile)) {
-                pathResolver.deleteFile(tempFile);
-            }
         }
     }
 

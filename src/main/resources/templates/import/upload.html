@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Импорт файла - ' + ${client.name},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Импорт файла',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title>Импорт файла</title>
+    <style>
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+            background-color: #e9ecef;
+        }
+        .upload-icon {
+            font-size: 3rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+        .file-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            display: none;
+        }
+        .requirements {
+            background-color: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Назад к клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Информация о клиенте -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        Импорт данных для клиента: <strong th:text="${client.name}">Клиент</strong>
+    </div>
+
+    <!-- Требования к файлу -->
+    <div class="requirements">
+        <h5 class="mb-3">Требования к файлу:</h5>
+        <ul class="mb-0">
+            <li>Формат файла: CSV (разделители: запятая, точка с запятой, табуляция)</li>
+            <li>Кодировка: UTF-8, Windows-1251 или другие (определяется автоматически)</li>
+            <li>Максимальный размер файла: 1000 МБ</li>
+            <li>Первая строка должна содержать заголовки колонок (опционально)</li>
+        </ul>
+    </div>
+
+    <!-- Форма загрузки -->
+    <form th:action="@{/clients/{id}/import/analyze(id=${client.id})}"
+          method="post" enctype="multipart/form-data" id="uploadForm">
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+            </div>
+            <h4>Выберите файл для загрузки</h4>
+            <p class="text-muted mb-3">Перетащите файл сюда или нажмите для выбора</p>
+
+            <input type="file" name="file" id="fileInput" class="d-none"
+                   accept=".csv,.txt" required>
+
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                <i class="fas fa-folder-open me-2"></i>Выбрать файл
+            </button>
+        </div>
+
+        <!-- Информация о выбранном файле -->
+        <div class="file-info" id="fileInfo">
+            <h6>Выбранный файл:</h6>
+            <p class="mb-1"><strong>Имя:</strong> <span id="fileName"></span></p>
+            <p class="mb-1"><strong>Размер:</strong> <span id="fileSize"></span></p>
+            <p class="mb-0"><strong>Тип:</strong> <span id="fileType"></span></p>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="mt-4">
+            <button type="submit" class="btn btn-success" id="analyzeBtn" disabled>
+                <i class="fas fa-search me-2"></i>Анализировать файл
+            </button>
+            <button type="reset" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-times me-2"></i>Отмена
+            </button>
+        </div>
+    </form>
+
+    <!-- Подсказки -->
+    <div class="mt-4">
+        <h5>Примеры поддерживаемых форматов:</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <h6>CSV с заголовками:</h6>
+                <pre class="bg-light p-2"><code>ID товара;Модель;Цена
+123;Товар 1;1000
+456;Товар 2;2000</code></pre>
+            </div>
+            <div class="col-md-6">
+                <h6>CSV без заголовков:</h6>
+                <pre class="bg-light p-2"><code>123;Товар 1;1000
+456;Товар 2;2000
+789;Товар 3;3000</code></pre>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInfo = document.getElementById('fileInfo');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+
+        // Обработка выбора файла
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                displayFileInfo(file);
+                analyzeBtn.disabled = false;
+            } else {
+                fileInfo.style.display = 'none';
+                analyzeBtn.disabled = true;
+            }
+        });
+
+        // Обработка перетаскивания файлов
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#007bff';
+            this.style.backgroundColor = '#e9ecef';
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#ccc';
+            this.style.backgroundColor = '#f8f9fa';
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#ccc';
+            this.style.backgroundColor = '#f8f9fa';
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                displayFileInfo(files[0]);
+                analyzeBtn.disabled = false;
+            }
+        });
+
+        // Отображение информации о файле
+        function displayFileInfo(file) {
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('fileType').textContent = file.type || 'Неизвестно';
+            fileInfo.style.display = 'block';
+        }
+
+        // Форматирование размера файла
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Байт';
+            const k = 1024;
+            const sizes = ['Байт', 'КБ', 'МБ', 'ГБ'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Обработка сброса формы
+        document.getElementById('uploadForm').addEventListener('reset', function() {
+            fileInfo.style.display = 'none';
+            analyzeBtn.disabled = true;
+        });
+    });
+</script>
+</body>

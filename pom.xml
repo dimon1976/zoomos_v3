@@ -20,9 +20,9 @@
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <apache.poi.version>5.2.3</apache.poi.version>
+        <apache.poi.version>5.4.0</apache.poi.version>
         <opencsv.version>5.8</opencsv.version>
-        <juniversalchardet.version>2.4.0</juniversalchardet.version>
+        <juniversalchardet.version>2.5.0</juniversalchardet.version>
     </properties>
 
     <dependencies>

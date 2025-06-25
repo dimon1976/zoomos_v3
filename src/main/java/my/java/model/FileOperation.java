@@ -87,6 +87,22 @@ public class FileOperation {
     @Column(name = "file_hash")
     private String fileHash;
 
+    // Транзиентные поля для отображения
+    @Transient
+    private String formattedStartedAt;
+
+    @Transient
+    private String formattedCompletedAt;
+
+    @Transient
+    private String statusClass;
+
+    @Transient
+    private String statusDisplay;
+
+    @Transient
+    private String operationTypeDisplay;
+
     // Enum для типа операции
     public enum OperationType {
         IMPORT, EXPORT, PROCESS

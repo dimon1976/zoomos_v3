@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.exception.FileOperationException;
 import my.java.model.FieldMappingRule;
 import my.java.model.FieldMappingTemplate;
-import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.*;
 import my.java.repository.FieldMappingTemplateRepository;
 import my.java.util.transformer.ValueTransformerFactory;
 import org.springframework.stereotype.Service;
@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Сервис для работы с шаблонами маппинга полей
@@ -37,14 +38,14 @@ public class FieldMappingService {
         Map<String, String> fieldMappings = entity.getFieldMappings();
 
         // Создаем шаблон
-        FieldMappingTemplate template = FieldMappingTemplate.builder()
-                .name("Автоматический шаблон " + entityType + " " + new Date())
-                .description("Автоматически созданный шаблон")
-                .entityType(entityType)
-                .fileFormat("CSV")
-                .isActive(true)
-                .isDefault(false)
-                .build();
+        FieldMappingTemplate template = new FieldMappingTemplate();
+        template.setName("Автоматический шаблон " + entityType + " " + new Date());
+        template.setDescription("Автоматически созданный шаблон");
+        template.setEntityType(entityType);
+        template.setFileFormat("CSV");
+        template.setIsActive(true);
+        template.setIsDefault(false);
+        template.setRules(new ArrayList<>()); // Инициализируем список правил
 
         // Создаем правила маппинга
         int orderIndex = 0;
@@ -205,9 +206,20 @@ public class FieldMappingService {
      */
     private ImportableEntity createEntityInstance(String entityType) {
         try {
-            String className = "my.java.model.entity." + entityType;
-            Class<?> clazz = Class.forName(className);
-            return (ImportableEntity) clazz.getDeclaredConstructor().newInstance();
+            switch (entityType) {
+                case "Product":
+                    return new Product();
+                case "Competitor":
+                    return new Competitor();
+                case "Region":
+                    return new Region();
+                case "Combined":
+                    return new CombinedImport();
+                default:
+                    String className = "my.java.model.entity." + entityType;
+                    Class<?> clazz = Class.forName(className);
+                    return (ImportableEntity) clazz.getDeclaredConstructor().newInstance();
+            }
         } catch (Exception e) {
             throw new IllegalArgumentException("Неизвестный тип сущности: " + entityType);
         }

@@ -81,7 +81,7 @@
             <div class="row">
                 <div class="col-md-4">
                     <p class="mb-1"><strong>Кодировка:</strong></p>
-                    <p class="text-success" th:text="${detectedParams?.encoding?.name() ?: 'UTF-8'}">UTF-8</p>
+                    <p class="text-success" th:text="${detectedParams.encodingName}">UTF-8</p>
                 </div>
                 <div class="col-md-4">
                     <p class="mb-1"><strong>Разделитель:</strong></p>
@@ -118,7 +118,9 @@
                         <option value="Product">Товары</option>
                         <option value="Competitor">Данные конкурентов</option>
                         <option value="Region">Региональные данные</option>
+                        <option value="Combined">Комбинированный импорт (Товары + Регионы + Конкуренты)</option>
                     </select>
+                    <small class="text-muted">При комбинированном импорте данные разных типов должны быть в одном файле</small>
                 </div>
 
                 <!-- Кодировка -->

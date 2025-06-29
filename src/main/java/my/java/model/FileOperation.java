@@ -87,6 +87,12 @@ public class FileOperation {
     @Column(name = "file_hash")
     private String fileHash;
 
+    @Column(name = "mapping_template_id")
+    private Long mappingTemplateId;
+
+    @Column(name = "import_entity_type")
+    private String importEntityType;
+
     // Транзиентные поля для отображения
     @Transient
     private String formattedStartedAt;

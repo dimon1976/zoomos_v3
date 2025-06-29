@@ -167,38 +167,70 @@
                                     th:name="'mapping[' + ${header} + ']'"
                                     th:id="'field_' + ${iter.index}">
                                 <option value="">-- Не импортировать --</option>
-                                <optgroup th:label="${importDto.entityType == 'Product' ? 'Основные поля товара' : 'Основные поля'}">
-                                    <option value="productId"
-                                            th:if="${importDto.entityType == 'Product'}"
-                                            th:selected="${autoTemplate.findRuleByCsvHeader(header)?.entityField == 'productId'}">
-                                        ID товара
-                                    </option>
-                                    <option value="productName"
-                                            th:if="${importDto.entityType == 'Product'}"
-                                            th:selected="${autoTemplate.findRuleByCsvHeader(header)?.entityField == 'productName'}">
-                                        Название товара
-                                    </option>
-                                    <option value="productBrand"
-                                            th:if="${importDto.entityType == 'Product'}"
-                                            th:selected="${autoTemplate.findRuleByCsvHeader(header)?.entityField == 'productBrand'}">
-                                        Бренд
-                                    </option>
-                                    <option value="productPrice"
-                                            th:if="${importDto.entityType == 'Product'}"
-                                            th:selected="${autoTemplate.findRuleByCsvHeader(header)?.entityField == 'productPrice'}">
-                                        Цена
-                                    </option>
-                                    <!-- Добавить остальные поля для каждого типа сущности -->
+
+                                <!-- Поля для Product -->
+                                <optgroup th:if="${importDto.entityType == 'Product'}" label="Основные поля товара">
+                                    <option value="productId">ID товара</option>
+                                    <option value="productName">Название товара</option>
+                                    <option value="productBrand">Бренд</option>
+                                    <option value="productBar">Штрихкод</option>
+                                    <option value="productDescription">Описание</option>
+                                    <option value="productUrl">Ссылка</option>
+                                    <option value="productCategory1">Категория 1</option>
+                                    <option value="productCategory2">Категория 2</option>
+                                    <option value="productCategory3">Категория 3</option>
+                                    <option value="productPrice">Цена</option>
+                                    <option value="productAnalog">Аналог</option>
                                 </optgroup>
-                                <optgroup label="Дополнительные поля">
-                                    <option value="productAdditional1"
-                                            th:if="${importDto.entityType == 'Product'}">
-                                        Дополнительное поле 1
-                                    </option>
-                                    <option value="productAdditional2"
-                                            th:if="${importDto.entityType == 'Product'}">
-                                        Дополнительное поле 2
-                                    </option>
+                                <optgroup th:if="${importDto.entityType == 'Product'}" label="Дополнительные поля товара">
+                                    <option value="productAdditional1">Дополнительное поле 1</option>
+                                    <option value="productAdditional2">Дополнительное поле 2</option>
+                                    <option value="productAdditional3">Дополнительное поле 3</option>
+                                    <option value="productAdditional4">Дополнительное поле 4</option>
+                                    <option value="productAdditional5">Дополнительное поле 5</option>
+                                </optgroup>
+
+                                <!-- Поля для Region -->
+                                <optgroup th:if="${importDto.entityType == 'Region'}" label="Поля региона">
+                                    <option value="region">Город</option>
+                                    <option value="regionAddress">Адрес</option>
+                                </optgroup>
+
+                                <!-- Поля для Competitor -->
+                                <optgroup th:if="${importDto.entityType == 'Competitor'}" label="Основные поля конкурента">
+                                    <option value="competitorName">Название сайта</option>
+                                    <option value="competitorPrice">Цена конкурента</option>
+                                    <option value="competitorPromotionalPrice">Акционная цена</option>
+                                    <option value="competitorTime">Время</option>
+                                    <option value="competitorDate">Дата</option>
+                                    <option value="competitorStockStatus">Статус наличия</option>
+                                    <option value="competitorAdditionalPrice">Дополнительная цена</option>
+                                    <option value="competitorCommentary">Комментарий</option>
+                                    <option value="competitorProductName">Название товара у конкурента</option>
+                                    <option value="competitorUrl">Ссылка на товар</option>
+                                    <option value="competitorWebCacheUrl">Ссылка на скриншот</option>
+                                </optgroup>
+                                <optgroup th:if="${importDto.entityType == 'Competitor'}" label="Дополнительные поля конкурента">
+                                    <option value="competitorAdditional">Дополнительное поле</option>
+                                    <option value="competitorAdditional2">Дополнительное поле 2</option>
+                                </optgroup>
+
+                                <!-- Поля для Combined -->
+                                <optgroup th:if="${importDto.entityType == 'Combined'}" label="Поля товара">
+                                    <option value="productId">ID товара</option>
+                                    <option value="productName">Название товара</option>
+                                    <option value="productBrand">Бренд</option>
+                                    <option value="productPrice">Цена</option>
+                                    <option value="productCategory1">Категория</option>
+                                </optgroup>
+                                <optgroup th:if="${importDto.entityType == 'Combined'}" label="Поля региона">
+                                    <option value="region">Город</option>
+                                    <option value="regionAddress">Адрес</option>
+                                </optgroup>
+                                <optgroup th:if="${importDto.entityType == 'Combined'}" label="Поля конкурента">
+                                    <option value="competitorName">Сайт конкурента</option>
+                                    <option value="competitorPrice">Цена конкурента</option>
+                                    <option value="competitorStockStatus">Статус наличия</option>
                                 </optgroup>
                             </select>
                         </td>
@@ -385,13 +417,57 @@
 
         // Обработка отправки формы
         mappingForm.addEventListener('submit', function(e) {
-            if (!validateMapping()) {
-                e.preventDefault();
-                alert('Пожалуйста, исправьте ошибки маппинга перед началом импорта');
-            } else {
-                startImportBtn.disabled = true;
-                startImportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Запуск импорта...';
+            e.preventDefault();
+
+            // Собираем маппинг
+            const mappingData = {};
+            document.querySelectorAll('.field-select').forEach((select, index) => {
+                const csvHeader = document.querySelectorAll('.csv-header')[index].textContent;
+                if (select.value) {
+                    mappingData[csvHeader] = select.value;
+                }
+            });
+
+            // Создаем скрытое поле для передачи маппинга
+            const mappingInput = document.createElement('input');
+            mappingInput.type = 'hidden';
+            mappingInput.name = 'mappingData';
+            mappingInput.value = JSON.stringify(mappingData);
+            this.appendChild(mappingInput);
+
+            // Проверяем, что хотя бы одно поле замаплено
+            if (Object.keys(mappingData).length === 0) {
+                alert('Пожалуйста, выберите хотя бы одно поле для импорта');
+                this.removeChild(mappingInput);
+                return;
             }
+
+            // Проверяем обязательные поля в зависимости от типа
+            const entityType = document.querySelector('[name="entityType"]').value;
+            let missingRequired = false;
+
+            if (entityType === 'Product' && !Object.values(mappingData).includes('productName')) {
+                alert('Для импорта товаров обязательно поле "Название товара"');
+                this.removeChild(mappingInput);
+                return;
+            }
+
+            if (entityType === 'Region' && !Object.values(mappingData).includes('region')) {
+                alert('Для импорта регионов обязательно поле "Город"');
+                this.removeChild(mappingInput);
+                return;
+            }
+
+            if (entityType === 'Competitor' && !Object.values(mappingData).includes('competitorName')) {
+                alert('Для импорта конкурентов обязательно поле "Название сайта"');
+                this.removeChild(mappingInput);
+                return;
+            }
+
+            // Если всё в порядке, отправляем форму
+            startImportBtn.disabled = true;
+            startImportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Запуск импорта...';
+            this.submit();
         });
 
         // Сохранение шаблона
@@ -436,7 +512,7 @@
             })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.templateId) {
+                    if (data.success) {
                         alert('Шаблон успешно сохранен!');
                         // Закрыть модальное окно
                         bootstrap.Modal.getInstance(document.getElementById('saveTemplateModal')).hide();
@@ -444,11 +520,13 @@
                         const option = new Option(templateName, data.templateId);
                         templateSelect.add(option);
                         templateSelect.value = data.templateId;
+                        document.getElementById('mappingTemplateId').value = data.templateId;
                     } else {
                         alert('Ошибка сохранения шаблона: ' + (data.error || 'Неизвестная ошибка'));
                     }
                 })
                 .catch(error => {
+                    console.error('Ошибка:', error);
                     alert('Ошибка сохранения шаблона: ' + error.message);
                 });
         });

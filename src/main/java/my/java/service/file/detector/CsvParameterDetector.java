@@ -35,6 +35,11 @@ public class CsvParameterDetector {
         private boolean hasHeader;
         private int columnCount;
         private List<String> sampleHeaders;
+
+
+        public String getEncodingName() {
+            return encoding != null ? encoding.name() : "UTF-8";
+        }
     }
 
     /**

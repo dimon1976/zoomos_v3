@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FileImportDto;
 import my.java.exception.FileOperationException;
 import my.java.model.Client;
+import my.java.model.FieldMappingRule;
 import my.java.model.FieldMappingTemplate;
 import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
@@ -15,6 +16,7 @@ import my.java.service.file.importer.CsvImportService;
 import my.java.service.mapping.FieldMappingService;
 import my.java.service.notification.ImportProgressNotifier;
 import my.java.repository.FileOperationRepository;
+import my.java.repository.FieldMappingTemplateRepository;
 import my.java.util.PathResolver;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -22,11 +24,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 /**
  * Контроллер для импорта файлов
@@ -44,6 +48,7 @@ public class FileImportController {
     private final FileOperationRepository operationRepository;
     private final ImportProgressNotifier progressNotifier;
     private final PathResolver pathResolver;
+    private final FieldMappingTemplateRepository templateRepository;
 
     /**
      * Страница загрузки файла
@@ -246,17 +251,59 @@ public class FileImportController {
      */
     @PostMapping("/mapping/save")
     @ResponseBody
-    public String saveMappingTemplate(@PathVariable Long clientId,
-                                      @RequestBody FieldMappingTemplate template) {
+    public Map<String, Object> saveMappingTemplate(@PathVariable Long clientId,
+                                                   @RequestBody Map<String, Object> templateData) {
         log.debug("POST request to save mapping template for client: {}", clientId);
 
+        Map<String, Object> response = new HashMap<>();
+
         try {
-            // Здесь логика сохранения шаблона
-            // Возвращаем ID сохраненного шаблона
-            return "{\"templateId\": 1}";
+            // Извлекаем данные из запроса
+            String name = (String) templateData.get("name");
+            String description = (String) templateData.get("description");
+            String entityType = (String) templateData.get("entityType");
+            Boolean isDefault = (Boolean) templateData.get("isDefault");
+            List<Map<String, Object>> rules = (List<Map<String, Object>>) templateData.get("rules");
+
+            // Создаем шаблон
+            FieldMappingTemplate template = new FieldMappingTemplate();
+            template.setName(name);
+            template.setDescription(description);
+            template.setEntityType(entityType);
+            template.setIsDefault(isDefault != null ? isDefault : false);
+            template.setIsActive(true);
+            template.setFileFormat("CSV");
+            template.setRules(new ArrayList<>());
+
+            // Устанавливаем клиента
+            Client client = clientService.findClientEntityById(clientId)
+                    .orElseThrow(() -> new FileOperationException("Клиент не найден"));
+            template.setClient(client);
+
+            // Добавляем правила
+            for (Map<String, Object> ruleData : rules) {
+                FieldMappingRule rule = new FieldMappingRule();
+                rule.setCsvHeader((String) ruleData.get("csvHeader"));
+                rule.setEntityField((String) ruleData.get("entityField"));
+                rule.setOrderIndex((Integer) ruleData.get("orderIndex"));
+                rule.setIsActive(true);
+                rule.setIsRequired(false);
+                template.addRule(rule);
+            }
+
+            // Сохраняем шаблон
+            template = templateRepository.save(template);
+
+            response.put("success", true);
+            response.put("templateId", template.getId());
+            response.put("message", "Шаблон успешно сохранен");
+
         } catch (Exception e) {
-            log.error("Ошибка сохранения шаблона: {}", e.getMessage());
-            return "{\"error\": \"" + e.getMessage() + "\"}";
+            log.error("Ошибка сохранения шаблона: {}", e.getMessage(), e);
+            response.put("success", false);
+            response.put("error", e.getMessage());
         }
+
+        return response;
     }
 }

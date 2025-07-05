@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        title=${mapping.id != null ? 'Редактирование шаблона - ' + client.name : 'Новый шаблон - ' + client.name},
+        content=~{::section},
+        scripts=~{::script},
+        styles=~{::style},
+        pageTitle=${mapping.id != null ? 'Редактирование шаблона' : 'Создание шаблона маппинга'},
+        pageActions=~{::.page-actions}
+      )}">
+<head>
+    <title th:text="${mapping.id != null ? 'Редактирование шаблона' : 'Новый шаблон'}">Шаблон маппинга</title>
+    <style>
+        .required-field::after {
+            content: "*";
+            color: red;
+            margin-left: 3px;
+        }
+        .mapping-details-table {
+            margin-top: 20px;
+        }
+        .mapping-row {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .entity-group {
+            border-left: 3px solid #007bff;
+            padding-left: 15px;
+            margin-bottom: 20px;
+        }
+        .entity-group.product {
+            border-color: #28a745;
+        }
+        .entity-group.competitor {
+            border-color: #17a2b8;
+        }
+        .entity-group.region {
+            border-color: #ffc107;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/mappings(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К списку шаблонов
+    </a>
+</div>
+
+<section>
+    <form th:action="${mapping.id != null ? '/clients/' + client.id + '/mappings/' + mapping.id + '/edit' : '/clients/' + client.id + '/mappings/create'}"
+          th:object="${mapping}" method="post" class="needs-validation" novalidate>
+
+        <!-- Основная информация -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Основная информация</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Название шаблона -->
+                    <div class="col-md-6">
+                        <label for="name" class="form-label required-field">Название шаблона</label>
+                        <input type="text" class="form-control" id="name" th:field="*{name}"
+                               th:classappend="${#fields.hasErrors('name')} ? 'is-invalid'" required>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">
+                            Пожалуйста, введите название шаблона.
+                        </div>
+                    </div>
+
+                    <!-- Активность -->
+                    <div class="col-md-6">
+                        <label class="form-label">Статус</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="isActive" th:field="*{isActive}">
+                            <label class="form-check-label" for="isActive">
+                                Шаблон активен
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Описание -->
+                    <div class="col-12">
+                        <label for="description" class="form-label">Описание</label>
+                        <textarea class="form-control" id="description" th:field="*{description}" rows="2"></textarea>
+                    </div>
+
+                    <!-- Тип импорта -->
+                    <div class="col-md-6">
+                        <label for="importType" class="form-label required-field">Тип импорта</label>
+                        <select class="form-select" id="importType" th:field="*{importType}"
+                                onchange="updateEntityType()" required>
+                            <option value="COMBINED">Составной (несколько сущностей)</option>
+                            <option value="SINGLE">Отдельная сущность</option>
+                        </select>
+                    </div>
+
+                    <!-- Тип сущности -->
+                    <div class="col-md-6">
+                        <label for="entityType" class="form-label required-field">Тип сущности</label>
+                        <select class="form-select" id="entityType" th:field="*{entityType}"
+                                onchange="updateAvailableFields()" required>
+                            <option value="COMBINED" th:selected="${mapping.entityType == 'COMBINED'}">Составные данные</option>
+                            <option value="PRODUCT" th:disabled="${mapping.importType == 'COMBINED'}">Товары</option>
+                            <option value="COMPETITOR" th:disabled="${mapping.importType == 'COMBINED'}">Конкуренты</option>
+                            <option value="REGION" th:disabled="${mapping.importType == 'COMBINED'}">Регионы</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Параметры файла -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Параметры файла</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Кодировка -->
+                    <div class="col-md-4">
+                        <label for="fileEncoding" class="form-label">Кодировка</label>
+                        <select class="form-select" id="fileEncoding" th:field="*{fileEncoding}">
+                            <option value="UTF-8">UTF-8</option>
+                            <option value="Windows-1251">Windows-1251</option>
+                            <option value="ISO-8859-1">ISO-8859-1</option>
+                        </select>
+                    </div>
+
+                    <!-- Разделитель CSV -->
+                    <div class="col-md-4">
+                        <label for="csvDelimiter" class="form-label">Разделитель CSV</label>
+                        <select class="form-select" id="csvDelimiter" th:field="*{csvDelimiter}">
+                            <option value=",">,  (запятая)</option>
+                            <option value=";">; (точка с запятой)</option>
+                            <option value="	">Tab (табуляция)</option>
+                            <option value="|">| (вертикальная черта)</option>
+                        </select>
+                    </div>
+
+                    <!-- Символ кавычек -->
+                    <div class="col-md-4">
+                        <label for="csvQuoteChar" class="form-label">Символ кавычек</label>
+                        <select class="form-select" id="csvQuoteChar" th:field="*{csvQuoteChar}">
+                            <option value='"'>" (двойные кавычки)</option>
+                            <option value="'">' (одинарные кавычки)</option>
+                        </select>
+                    </div>
+
+                    <!-- Стратегия дубликатов -->
+                    <div class="col-md-6">
+                        <label for="duplicateStrategy" class="form-label">Обработка дубликатов</label>
+                        <select class="form-select" id="duplicateStrategy" th:field="*{duplicateStrategy}">
+                            <option value="SKIP">Пропускать дубликаты</option>
+                            <option value="OVERRIDE">Перезаписывать существующие</option>
+                            <option value="ERROR">Останавливаться с ошибкой</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Сопоставление полей -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Сопоставление полей</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Укажите соответствие между заголовками CSV файла и полями в базе данных.</p>
+
+                <!-- Кнопка добавления нового маппинга -->
+                <button type="button" class="btn btn-sm btn-success mb-3" onclick="addMappingRow()">
+                    <i class="fas fa-plus me-1"></i>Добавить поле
+                </button>
+
+                <!-- Таблица маппинга -->
+                <div id="mappingDetailsContainer">
+                    <table class="table table-sm">
+                        <thead>
+                        <tr>
+                            <th width="30%">Заголовок CSV</th>
+                            <th width="25%" th:if="${mapping.importType == 'COMBINED'}">Сущность</th>
+                            <th width="30%">Поле в БД</th>
+                            <th width="10%">Обязательное</th>
+                            <th width="5%"></th>
+                        </tr>
+                        </thead>
+                        <tbody id="mappingDetailsTable">
+                        <!-- Существующие детали маппинга -->
+                        <tr th:each="detail, stat : ${mapping.details}" class="mapping-detail-row">
+                            <td>
+                                <input type="text" class="form-control form-control-sm"
+                                       name="detailSourceField"
+                                       th:value="${detail.sourceField}" required>
+                            </td>
+                            <td th:if="${mapping.importType == 'COMBINED'}">
+                                <select class="form-select form-select-sm"
+                                        name="detailTargetEntity"
+                                        onchange="updateTargetFieldOptions(this)">
+                                    <option value="">-- Выберите --</option>
+                                    <option value="PRODUCT" th:selected="${detail.targetEntity == 'PRODUCT'}">Товар</option>
+                                    <option value="COMPETITOR" th:selected="${detail.targetEntity == 'COMPETITOR'}">Конкурент</option>
+                                    <option value="REGION" th:selected="${detail.targetEntity == 'REGION'}">Регион</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm target-field-select"
+                                        name="detailTargetField" required>
+                                    <option value="">-- Сначала выберите сущность --</option>
+                                    <option th:value="${detail.targetField}"
+                                            th:text="${detail.targetField}"
+                                            th:selected="${true}"></option>
+                                </select>
+                            </td>
+                            <td class="text-center">
+                                <input type="checkbox" class="form-check-input"
+                                       th:name="'detailRequired'"
+                                       th:value="${stat.index}"
+                                       th:checked="${detail.required}">
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        onclick="removeMappingRow(this)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Подсказка по доступным полям -->
+                <div class="mt-3 alert alert-info">
+                    <h6>Доступные поля для маппинга:</h6>
+                    <div id="availableFieldsInfo">
+                        <div th:each="entry : ${availableFields}" class="entity-group"
+                             th:classappend="${#strings.toLowerCase(entry.key)}">
+                            <h6 th:text="${entry.key == 'PRODUCT' ? 'Товар' : (entry.key == 'COMPETITOR' ? 'Конкурент' : 'Регион')}"></h6>
+                            <small>
+                                <span th:each="field, iterStat : ${entry.value}" class="me-2">
+                                    <strong th:text="${field.key}">Заголовок</strong> →
+                                    <code th:text="${field.value}">поле</code>
+                                    <span th:unless="${iterStat.last}">,</span>
+                                </span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i>
+                <span th:text="${mapping.id != null ? 'Сохранить изменения' : 'Создать шаблон'}">Сохранить</span>
+            </button>
+            <a th:href="@{/clients/{id}/mappings(id=${client.id})}" class="btn btn-secondary ms-2">
+                <i class="fas fa-times me-1"></i>Отмена
+            </a>
+        </div>
+    </form>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    var availableFields = /*[[${availableFields}]]*/ {};
+    var importType = /*[[${mapping.importType}]]*/ 'COMBINED';
+
+    function updateEntityType() {
+        var importTypeSelect = document.getElementById('importType');
+        var entityTypeSelect = document.getElementById('entityType');
+
+        if (importTypeSelect.value === 'COMBINED') {
+            entityTypeSelect.value = 'COMBINED';
+            // Отключаем другие опции
+            Array.from(entityTypeSelect.options).forEach(option => {
+                option.disabled = option.value !== 'COMBINED';
+            });
+        } else {
+            // Включаем все опции кроме COMBINED
+            Array.from(entityTypeSelect.options).forEach(option => {
+                option.disabled = option.value === 'COMBINED';
+            });
+            if (entityTypeSelect.value === 'COMBINED') {
+                entityTypeSelect.value = 'PRODUCT';
+            }
+        }
+
+        updateAvailableFields();
+    }
+
+    function updateAvailableFields() {
+        // Обновляем отображение доступных полей
+        var entityType = document.getElementById('entityType').value;
+
+        // Здесь можно добавить AJAX запрос для обновления списка полей
+        // Пока просто обновляем UI
+    }
+
+    function addMappingRow() {
+        var tbody = document.getElementById('mappingDetailsTable');
+        var rowCount = tbody.rows.length;
+        var importType = document.getElementById('importType').value;
+
+        var row = tbody.insertRow();
+        row.className = 'mapping-detail-row';
+
+        // Заголовок CSV
+        var cell1 = row.insertCell(0);
+        cell1.innerHTML = '<input type="text" class="form-control form-control-sm" name="detailSourceField" required>';
+
+        // Сущность (только для составного типа)
+        if (importType === 'COMBINED') {
+            var cell2 = row.insertCell(1);
+            cell2.innerHTML = `
+                <select class="form-select form-select-sm" name="detailTargetEntity" onchange="updateTargetFieldOptions(this)">
+                    <option value="">-- Выберите --</option>
+                    <option value="PRODUCT">Товар</option>
+                    <option value="COMPETITOR">Конкурент</option>
+                    <option value="REGION">Регион</option>
+                </select>
+            `;
+        }
+
+        // Поле в БД
+        var cellField = row.insertCell(importType === 'COMBINED' ? 2 : 1);
+        cellField.innerHTML = `
+            <select class="form-select form-select-sm target-field-select" name="detailTargetField" required>
+                <option value="">-- Сначала выберите сущность --</option>
+            </select>
+        `;
+
+        // Обязательное
+        var cellRequired = row.insertCell(importType === 'COMBINED' ? 3 : 2);
+        cellRequired.className = 'text-center';
+        cellRequired.innerHTML = '<input type="checkbox" class="form-check-input" name="detailRequired" value="' + rowCount + '">';
+
+        // Удалить
+        var cellDelete = row.insertCell(importType === 'COMBINED' ? 4 : 3);
+        cellDelete.innerHTML = '<button type="button" class="btn btn-sm btn-danger" onclick="removeMappingRow(this)"><i class="fas fa-trash"></i></button>';
+    }
+
+    function removeMappingRow(button) {
+        var row = button.closest('tr');
+        row.remove();
+    }
+
+    function updateTargetFieldOptions(entitySelect) {
+        var row = entitySelect.closest('tr');
+        var targetFieldSelect = row.querySelector('.target-field-select');
+        var entityType = entitySelect.value;
+
+        // Очищаем текущие опции
+        targetFieldSelect.innerHTML = '<option value="">-- Выберите поле --</option>';
+
+        if (entityType && availableFields[entityType]) {
+            var fields = availableFields[entityType];
+            for (var header in fields) {
+                var option = document.createElement('option');
+                option.value = fields[header];
+                option.text = header + ' (' + fields[header] + ')';
+                targetFieldSelect.add(option);
+            }
+        }
+    }
+
+    // Инициализация при загрузке
+    document.addEventListener('DOMContentLoaded', function() {
+        updateEntityType();
+
+        // Для существующих строк восстанавливаем опции
+        document.querySelectorAll('.mapping-detail-row').forEach(function(row) {
+            var entitySelect = row.querySelector('select[name="detailTargetEntity"]');
+            if (entitySelect && entitySelect.value) {
+                updateTargetFieldOptions(entitySelect);
+            }
+        });
+    });
+    /*]]>*/
+</script>
+</body>
+</html>

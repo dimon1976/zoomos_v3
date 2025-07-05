@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Шаблоны маппинга - ' + ${client.name},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Шаблоны маппинга полей',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="'Шаблоны маппинга - ' + ${client.name}">Шаблоны маппинга</title>
+    <style>
+        .mapping-card {
+            transition: transform 0.2s;
+        }
+        .mapping-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .entity-type-badge {
+            font-size: 0.85rem;
+        }
+        .import-type-combined {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .import-type-single {
+            background-color: #6c757d;
+            color: white;
+        }
+        .status-active {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-inactive {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}/mappings/create(id=${client.id})}" class="btn btn-primary">
+        <i class="fas fa-plus me-1"></i>Новый шаблон
+    </a>
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary ms-2">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <!-- Информация о клиенте -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-user me-2"></i>
+                <span th:text="${client.name}">Клиент</span>
+            </h5>
+        </div>
+    </div>
+
+    <!-- Список шаблонов -->
+    <div th:if="${#lists.isEmpty(mappings)}" class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        У этого клиента пока нет шаблонов маппинга. Создайте первый шаблон для импорта данных.
+    </div>
+
+    <div th:unless="${#lists.isEmpty(mappings)}" class="row">
+        <div th:each="mapping : ${mappings}" class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 mapping-card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0" th:text="${mapping.name}">Название шаблона</h6>
+                        <span class="badge"
+                              th:classappend="${mapping.isActive ? 'status-active' : 'status-inactive'}"
+                              th:text="${mapping.isActive ? 'Активен' : 'Неактивен'}">Статус</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="card-text small text-muted"
+                       th:text="${mapping.description ?: 'Без описания'}">Описание</p>
+
+                    <div class="mb-2">
+                        <span class="badge entity-type-badge"
+                              th:classappend="${mapping.importType == 'COMBINED' ? 'import-type-combined' : 'import-type-single'}"
+                              th:text="${mapping.importTypeDisplay}">Тип импорта</span>
+                        <span class="badge entity-type-badge bg-secondary ms-1"
+                              th:text="${mapping.entityTypeDisplay}">Тип сущности</span>
+                    </div>
+
+                    <div class="small text-muted">
+                        <div><strong>Полей:</strong> <span th:text="${mapping.detailsCount ?: 0}">0</span></div>
+                        <div><strong>Кодировка:</strong> <span th:text="${mapping.fileEncoding}">UTF-8</span></div>
+                        <div><strong>Разделитель:</strong> <span th:text="${mapping.csvDelimiter}">,</span></div>
+                        <div><strong>Дубликаты:</strong> <span th:text="${mapping.duplicateStrategyDisplay}">Пропускать</span></div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <div class="btn-group w-100">
+                        <a th:href="@{/clients/{clientId}/mappings/{id}/edit(clientId=${client.id},id=${mapping.id})}"
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-edit me-1"></i>Изменить
+                        </a>
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                data-bs-toggle="modal"
+                                th:data-bs-target="'#deleteModal' + ${mapping.id}">
+                            <i class="fas fa-trash me-1"></i>Удалить
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Модальное окно подтверждения удаления -->
+            <div class="modal fade" th:id="'deleteModal' + ${mapping.id}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Подтверждение удаления</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Вы уверены, что хотите удалить шаблон
+                                <strong th:text="${mapping.name}">Название</strong>?</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                            <form th:action="@{/clients/{clientId}/mappings/{id}/delete(clientId=${client.id},id=${mapping.id})}"
+                                  method="post" class="d-inline">
+                                <button type="submit" class="btn btn-danger">Удалить</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    // Инициализация tooltips и других компонентов при необходимости
+</script>
+</body>
+</html>

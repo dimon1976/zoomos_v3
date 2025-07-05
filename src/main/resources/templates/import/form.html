@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/main :: html(
+        'Импорт файла - ' + ${client.name},
+        ~{::section},
+        ~{::script},
+        ~{::style},
+        'Импорт файла',
+        ~{::.page-actions}
+      )}">
+<head>
+    <title th:text="'Импорт файла - ' + ${client.name}">Импорт файла</title>
+    <style>
+        .import-form-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        .template-info {
+            background-color: #f8f9fa;
+            border-left: 3px solid #17a2b8;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        .no-template-warning {
+            background-color: #fff3cd;
+            border-left: 3px solid #ffc107;
+            padding: 15px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<!-- Действия страницы -->
+<div class="page-actions">
+    <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>К клиенту
+    </a>
+</div>
+
+<section>
+    <div class="import-form-container">
+        <!-- Информация о клиенте -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-user me-2"></i>
+                    Импорт данных для клиента: <span th:text="${client.name}">Клиент</span>
+                </h5>
+            </div>
+        </div>
+
+        <!-- Форма импорта -->
+        <form th:action="@{/clients/{id}/import(id=${client.id})}" method="post"
+              enctype="multipart/form-data" class="needs-validation" novalidate>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Параметры импорта</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Шаг 1: Выбор файла -->
+                    <div class="mb-4">
+                        <label for="file" class="form-label fw-bold">
+                            <i class="fas fa-file-upload me-1"></i>1. Выберите файл для импорта
+                        </label>
+                        <div class="file-input-wrapper">
+                            <input type="file" class="form-control" id="file" name="file"
+                                   accept=".csv,.xlsx,.xls" required onchange="updateFileName(this)">
+                            <label for="file" class="btn btn-outline-primary">
+                                <i class="fas fa-folder-open me-1"></i>Выбрать файл
+                            </label>
+                            <span id="fileName" class="ms-2 text-muted">Файл не выбран</span>
+                        </div>
+                        <div class="form-text">Поддерживаются файлы формата CSV и XLSX</div>
+                    </div>
+
+                    <!-- Шаг 2: Тип загрузки -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-database me-1"></i>2. Выберите тип загрузки
+                        </label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="importType"
+                                       id="importTypeCombined" value="COMBINED" checked
+                                       onchange="updateAvailableMappings()">
+                                <label class="form-check-label" for="importTypeCombined">
+                                    Составной (товары + конкуренты + регионы)
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="importType"
+                                       id="importTypeSingle" value="SINGLE"
+                                       onchange="updateAvailableMappings()">
+                                <label class="form-check-label" for="importTypeSingle">
+                                    Отдельная сущность
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Шаг 3: Выбор шаблона -->
+                    <div class="mb-4">
+                        <label for="mappingId" class="form-label fw-bold">
+                            <i class="fas fa-map me-1"></i>3. Выберите шаблон сопоставления полей
+                        </label>
+
+                        <div th:if="${#lists.isEmpty(mappings)}" class="no-template-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            У вас пока нет шаблонов маппинга.
+                            <a th:href="@{/clients/{id}/mappings/create(id=${client.id})}" class="fw-bold">
+                                Создайте первый шаблон
+                            </a> для импорта данных.
+                        </div>
+
+                        <div th:unless="${#lists.isEmpty(mappings)}">
+                            <select class="form-select" id="mappingId" name="mappingId"
+                                    onchange="showMappingInfo(this)">
+                                <option value="">-- Выберите шаблон или создайте новый --</option>
+                                <optgroup label="Доступные шаблоны" id="mappingOptions">
+                                    <option th:each="mapping : ${mappings}"
+                                            th:value="${mapping.id}"
+                                            th:text="${mapping.name + ' (' + mapping.detailsCount + ' полей)'}"
+                                            th:data-description="${mapping.description}"
+                                            th:data-encoding="${mapping.fileEncoding}"
+                                            th:data-delimiter="${mapping.csvDelimiter}"
+                                            th:data-strategy="${mapping.duplicateStrategyDisplay}">
+                                    </option>
+                                </optgroup>
+                            </select>
+
+                            <!-- Информация о выбранном шаблоне -->
+                            <div id="templateInfo" class="template-info" style="display: none;">
+                                <h6>Информация о шаблоне:</h6>
+                                <div id="templateDescription"></div>
+                                <small class="text-muted">
+                                    <div>Кодировка: <span id="templateEncoding"></span></div>
+                                    <div>Разделитель: <span id="templateDelimiter"></span></div>
+                                    <div>Дубликаты: <span id="templateStrategy"></span></div>
+                                </small>
+                            </div>
+
+                            <div class="mt-2">
+                                <a th:href="@{/clients/{id}/mappings/create(id=${client.id})}"
+                                   class="btn btn-sm btn-outline-success">
+                                    <i class="fas fa-plus me-1"></i>Создать новый шаблон
+                                </a>
+                                <a th:href="@{/clients/{id}/mappings(id=${client.id})}"
+                                   class="btn btn-sm btn-outline-secondary ms-2">
+                                    <i class="fas fa-cog me-1"></i>Управление шаблонами
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Кнопки действий -->
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-file-import me-1"></i>Импортировать
+                        </button>
+                        <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary">
+                            <i class="fas fa-times me-1"></i>Отмена
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <!-- Информация о процессе импорта -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title">Как работает импорт:</h6>
+                <ol>
+                    <li>Выберите файл CSV или XLSX с данными</li>
+                    <li>Укажите тип загрузки (составной или отдельная сущность)</li>
+                    <li>Выберите подходящий шаблон сопоставления полей</li>
+                    <li>Нажмите "Импортировать" для начала обработки</li>
+                    <li>Файл будет обработан в фоновом режиме</li>
+                </ol>
+                <p class="text-muted mb-0">
+                    <i class="fas fa-info-circle me-1"></i>
+                    После начала импорта вы будете перенаправлены на страницу статуса операции.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    var clientId = /*[[${client.id}]]*/ 0;
+    var allMappings = /*[[${mappings}]]*/ [];
+
+    function updateFileName(input) {
+        var fileName = input.files[0] ? input.files[0].name : 'Файл не выбран';
+        document.getElementById('fileName').textContent = fileName;
+    }
+
+    function updateAvailableMappings() {
+        var importType = document.querySelector('input[name="importType"]:checked').value;
+        var mappingSelect = document.getElementById('mappingId');
+        var optGroup = document.getElementById('mappingOptions');
+
+        // Очищаем текущие опции
+        optGroup.innerHTML = '';
+
+        // Фильтруем шаблоны по типу импорта
+        var filteredMappings = allMappings.filter(function(mapping) {
+            return mapping.importType === importType;
+        });
+
+        if (filteredMappings.length === 0) {
+            optGroup.innerHTML = '<option value="" disabled>Нет доступных шаблонов для этого типа</option>';
+        } else {
+            filteredMappings.forEach(function(mapping) {
+                var option = document.createElement('option');
+                option.value = mapping.id;
+                option.textContent = mapping.name + ' (' + mapping.detailsCount + ' полей)';
+                option.setAttribute('data-description', mapping.description || '');
+                option.setAttribute('data-encoding', mapping.fileEncoding);
+                option.setAttribute('data-delimiter', mapping.csvDelimiter);
+                option.setAttribute('data-strategy', mapping.duplicateStrategyDisplay);
+                optGroup.appendChild(option);
+            });
+        }
+
+        // Сбрасываем выбор
+        mappingSelect.value = '';
+        document.getElementById('templateInfo').style.display = 'none';
+    }
+
+    function showMappingInfo(select) {
+        var selectedOption = select.options[select.selectedIndex];
+        var infoDiv = document.getElementById('templateInfo');
+
+        if (select.value && selectedOption.dataset) {
+            document.getElementById('templateDescription').textContent =
+                selectedOption.dataset.description || 'Без описания';
+            document.getElementById('templateEncoding').textContent =
+                selectedOption.dataset.encoding;
+            document.getElementById('templateDelimiter').textContent =
+                selectedOption.dataset.delimiter;
+            document.getElementById('templateStrategy').textContent =
+                selectedOption.dataset.strategy;
+
+            infoDiv.style.display = 'block';
+        } else {
+            infoDiv.style.display = 'none';
+        }
+    }
+
+    // Валидация формы
+    document.addEventListener('DOMContentLoaded', function() {
+        var forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach(function(form) {
+            form.addEventListener('submit', function(event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    });
+    /*]]>*/
+</script>
+</body>
+</html>

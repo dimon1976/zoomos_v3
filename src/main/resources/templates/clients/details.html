@@ -114,11 +114,14 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Импорт данных из файла</h5>
-                    <p class="card-text">Загрузите файл CSV или Excel для импорта данных.</p>
+                    <p class="card-text">Загрузите файлы CSV или Excel для импорта данных.</p>
 
                     <div class="d-grid gap-2 d-md-flex justify-content-md-start">
                         <a th:href="@{/clients/{id}/import(id=${client.id})}" class="btn btn-primary">
                             <i class="fas fa-file-import me-1"></i>Импортировать файл
+                        </a>
+                        <a th:href="@{/clients/{id}/mappings(id=${client.id})}" class="btn btn-outline-primary">
+                            <i class="fas fa-cog me-1"></i>Управление шаблонами
                         </a>
                     </div>
                 </div>

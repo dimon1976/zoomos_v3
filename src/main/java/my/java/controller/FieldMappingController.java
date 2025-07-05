@@ -172,8 +172,14 @@ public class FieldMappingController {
                                 RedirectAttributes redirectAttributes,
                                 Model model) {
         log.debug("POST request to update mapping: {}", mappingId);
+        log.debug("Received sourceFields: {}", sourceFields);
+        log.debug("Received targetFields: {}", targetFields);
+        log.debug("Received targetEntities: {}", targetEntities);
+        log.debug("Received requiredFields: {}", requiredFields);
+        log.debug("MappingDto before update: {}", mappingDto);
 
         if (result.hasErrors()) {
+            log.debug("Validation errors found: {}", result.getAllErrors());
             ClientDto client = clientService.getClientById(clientId).orElse(null);
             model.addAttribute("client", client);
             model.addAttribute("availableFields",
@@ -183,7 +189,16 @@ public class FieldMappingController {
 
         try {
             // Формируем детали маппинга
-            mappingDto.setDetails(buildMappingDetails(sourceFields, targetFields, targetEntities, requiredFields));
+            List<FieldMappingDetailDto> details = buildMappingDetails(sourceFields, targetFields, targetEntities, requiredFields);
+            log.debug("Built mapping details: {} items", details.size());
+            for (int i = 0; i < details.size(); i++) {
+                log.debug("Detail {}: source={}, target={}, entity={}",
+                        i, details.get(i).getSourceField(),
+                        details.get(i).getTargetField(),
+                        details.get(i).getTargetEntity());
+            }
+
+            mappingDto.setDetails(details);
 
             FieldMappingDto updatedMapping = fieldMappingService.updateMapping(mappingId, mappingDto);
             redirectAttributes.addFlashAttribute("successMessage",
@@ -191,7 +206,7 @@ public class FieldMappingController {
             return "redirect:/clients/" + clientId + "/mappings";
 
         } catch (Exception e) {
-            log.error("Error updating mapping: {}", e.getMessage());
+            log.error("Error updating mapping: {}", e.getMessage(), e);
             result.rejectValue("name", "error.mapping", e.getMessage());
 
             ClientDto client = clientService.getClientById(clientId).orElse(null);
@@ -243,12 +258,19 @@ public class FieldMappingController {
                                                             List<String> targetFields,
                                                             List<String> targetEntities,
                                                             List<String> requiredFields) {
+        log.debug("Building mapping details from form data");
+        log.debug("sourceFields size: {}", sourceFields != null ? sourceFields.size() : 0);
+        log.debug("targetFields size: {}", targetFields != null ? targetFields.size() : 0);
+        log.debug("targetEntities size: {}", targetEntities != null ? targetEntities.size() : 0);
+
         List<FieldMappingDetailDto> details = new ArrayList<>();
 
         if (sourceFields != null && targetFields != null) {
             for (int i = 0; i < sourceFields.size() && i < targetFields.size(); i++) {
                 String sourceField = sourceFields.get(i);
                 String targetField = targetFields.get(i);
+
+                log.debug("Processing row {}: source='{}', target='{}'", i, sourceField, targetField);
 
                 if (sourceField != null && !sourceField.trim().isEmpty() &&
                         targetField != null && !targetField.trim().isEmpty()) {
@@ -261,16 +283,33 @@ public class FieldMappingController {
                     // Устанавливаем целевую сущность
                     if (targetEntities != null && i < targetEntities.size()) {
                         detail.setTargetEntity(targetEntities.get(i));
+                        log.debug("Set target entity: {}", targetEntities.get(i));
                     }
 
                     // Проверяем, обязательное ли поле
-                    detail.setRequired(requiredFields != null && requiredFields.contains(String.valueOf(i)));
+                    boolean isRequired = false;
+                    if (requiredFields != null) {
+                        // Ищем индекс в списке requiredFields
+                        for (String reqIndex : requiredFields) {
+                            if (reqIndex.equals(String.valueOf(i))) {
+                                isRequired = true;
+                                break;
+                            }
+                        }
+                    }
+                    detail.setRequired(isRequired);
 
                     details.add(detail);
+                    log.debug("Added detail: {}", detail);
+                } else {
+                    log.debug("Skipping empty row {}", i);
                 }
             }
+        } else {
+            log.warn("sourceFields or targetFields is null!");
         }
 
+        log.debug("Built {} mapping details", details.size());
         return details;
     }
 }

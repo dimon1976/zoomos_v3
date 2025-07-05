@@ -39,6 +39,32 @@
         .entity-group.region {
             border-color: #ffc107;
         }
+        /* Увеличиваем размеры формы */
+        .form-control, .form-select {
+            font-size: 1rem;
+            padding: 0.5rem 0.75rem;
+        }
+        .form-control-sm, .form-select-sm {
+            font-size: 0.95rem;
+            padding: 0.4rem 0.6rem;
+        }
+        .card {
+            margin-bottom: 2rem;
+        }
+        .card-header {
+            padding: 1rem 1.25rem;
+        }
+        .card-body {
+            padding: 1.5rem;
+        }
+        .table th {
+            font-weight: 600;
+            background-color: #f8f9fa;
+            padding: 0.75rem;
+        }
+        .table td {
+            padding: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -196,7 +222,7 @@
                                        th:value="${detail.sourceField}" required>
                             </td>
                             <td th:if="${mapping.importType == 'COMBINED'}">
-                                <select class="form-select form-select-sm"
+                                <select class="form-select form-select-sm detail-target-entity"
                                         name="detailTargetEntity"
                                         onchange="updateTargetFieldOptions(this)">
                                     <option value="">-- Выберите --</option>
@@ -215,8 +241,8 @@
                                 </select>
                             </td>
                             <td class="text-center">
-                                <input type="checkbox" class="form-check-input"
-                                       th:name="'detailRequired'"
+                                <input type="checkbox" class="form-check-input detail-required-checkbox"
+                                       name="detailRequired"
                                        th:value="${stat.index}"
                                        th:checked="${detail.required}">
                             </td>
@@ -253,7 +279,7 @@
 
         <!-- Кнопки действий -->
         <div class="mt-4">
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" onclick="return validateMappingForm()">
                 <i class="fas fa-save me-1"></i>
                 <span th:text="${mapping.id != null ? 'Сохранить изменения' : 'Создать шаблон'}">Сохранить</span>
             </button>
@@ -302,7 +328,7 @@
 
     function addMappingRow() {
         var tbody = document.getElementById('mappingDetailsTable');
-        var rowCount = tbody.rows.length;
+        var rowCount = tbody.querySelectorAll('.mapping-detail-row').length;
         var importType = document.getElementById('importType').value;
 
         var row = tbody.insertRow();
@@ -316,7 +342,7 @@
         if (importType === 'COMBINED') {
             var cell2 = row.insertCell(1);
             cell2.innerHTML = `
-                <select class="form-select form-select-sm" name="detailTargetEntity" onchange="updateTargetFieldOptions(this)">
+                <select class="form-select form-select-sm detail-target-entity" name="detailTargetEntity" onchange="updateTargetFieldOptions(this)">
                     <option value="">-- Выберите --</option>
                     <option value="PRODUCT">Товар</option>
                     <option value="COMPETITOR">Конкурент</option>
@@ -336,22 +362,30 @@
         // Обязательное
         var cellRequired = row.insertCell(importType === 'COMBINED' ? 3 : 2);
         cellRequired.className = 'text-center';
-        cellRequired.innerHTML = '<input type="checkbox" class="form-check-input" name="detailRequired" value="' + rowCount + '">';
+        cellRequired.innerHTML = '<input type="checkbox" class="form-check-input detail-required-checkbox" name="detailRequired" value="' + rowCount + '">';
 
         // Удалить
         var cellDelete = row.insertCell(importType === 'COMBINED' ? 4 : 3);
         cellDelete.innerHTML = '<button type="button" class="btn btn-sm btn-danger" onclick="removeMappingRow(this)"><i class="fas fa-trash"></i></button>';
+
+        // Обновляем индексы
+        updateRequiredCheckboxIndexes();
     }
 
     function removeMappingRow(button) {
         var row = button.closest('tr');
         row.remove();
+        // Обновляем индексы после удаления
+        updateRequiredCheckboxIndexes();
     }
 
     function updateTargetFieldOptions(entitySelect) {
         var row = entitySelect.closest('tr');
         var targetFieldSelect = row.querySelector('.target-field-select');
         var entityType = entitySelect.value;
+
+        // Сохраняем текущее значение
+        var currentValue = targetFieldSelect.value;
 
         // Очищаем текущие опции
         targetFieldSelect.innerHTML = '<option value="">-- Выберите поле --</option>';
@@ -364,6 +398,11 @@
                 option.text = header + ' (' + fields[header] + ')';
                 targetFieldSelect.add(option);
             }
+
+            // Восстанавливаем значение если оно было
+            if (currentValue) {
+                targetFieldSelect.value = currentValue;
+            }
         }
     }
 
@@ -373,12 +412,68 @@
 
         // Для существующих строк восстанавливаем опции
         document.querySelectorAll('.mapping-detail-row').forEach(function(row) {
-            var entitySelect = row.querySelector('select[name="detailTargetEntity"]');
+            var entitySelect = row.querySelector('.detail-target-entity, select[name="detailTargetEntity"]');
             if (entitySelect && entitySelect.value) {
                 updateTargetFieldOptions(entitySelect);
+                // Восстанавливаем выбранное значение
+                var targetFieldSelect = row.querySelector('.target-field-select');
+                var savedValue = targetFieldSelect.querySelector('option:last-child').value;
+                if (savedValue) {
+                    // Ждем немного, чтобы опции загрузились
+                    setTimeout(function() {
+                        targetFieldSelect.value = savedValue;
+                    }, 100);
+                }
             }
         });
+
+        // Исправляем индексы для чекбоксов
+        updateRequiredCheckboxIndexes();
     });
+
+    function updateRequiredCheckboxIndexes() {
+        // Обновляем значения чекбоксов в соответствии с индексом строки
+        document.querySelectorAll('.mapping-detail-row').forEach(function(row, index) {
+            var checkbox = row.querySelector('input[name="detailRequired"]');
+            if (checkbox) {
+                checkbox.value = index;
+            }
+        });
+    }
+    function validateMappingForm() {
+        var rows = document.querySelectorAll('.mapping-detail-row');
+        var hasValidRow = false;
+        var errors = [];
+
+        rows.forEach(function(row, index) {
+            var sourceField = row.querySelector('input[name="detailSourceField"]');
+            var targetField = row.querySelector('select[name="detailTargetField"]');
+            var targetEntity = row.querySelector('select[name="detailTargetEntity"]');
+
+            if (sourceField && sourceField.value.trim()) {
+                // Если указан источник, должны быть заполнены и остальные поля
+                if (!targetField || !targetField.value) {
+                    errors.push('Строка ' + (index + 1) + ': не выбрано поле в БД');
+                } else if (targetEntity && !targetEntity.value) {
+                    errors.push('Строка ' + (index + 1) + ': не выбрана сущность');
+                } else {
+                    hasValidRow = true;
+                }
+            }
+        });
+
+        if (!hasValidRow) {
+            alert('Необходимо заполнить хотя бы одно сопоставление полей');
+            return false;
+        }
+
+        if (errors.length > 0) {
+            alert('Обнаружены ошибки:\n' + errors.join('\n'));
+            return false;
+        }
+
+        return true;
+    }
     /*]]>*/
 </script>
 </body>

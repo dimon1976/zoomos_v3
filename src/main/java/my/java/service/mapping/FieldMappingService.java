@@ -119,9 +119,12 @@ public class FieldMappingService {
     @Transactional
     public FieldMappingDto updateMapping(Long id, FieldMappingDto dto) {
         log.debug("Updating field mapping with id: {}", id);
+        log.debug("DTO details count: {}", dto.getDetails() != null ? dto.getDetails().size() : 0);
 
         FieldMapping mapping = fieldMappingRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new EntityNotFoundException("Шаблон с ID " + id + " не найден"));
+
+        log.debug("Current mapping details count: {}", mapping.getDetails().size());
 
         // Проверка уникальности имени при изменении
         if (!mapping.getName().equalsIgnoreCase(dto.getName()) &&
@@ -133,16 +136,24 @@ public class FieldMappingService {
         updateEntityFromDto(mapping, dto);
 
         // Обновляем детали
+        log.debug("Clearing existing details");
         mapping.getDetails().clear();
+
         if (dto.getDetails() != null) {
+            log.debug("Adding {} new details", dto.getDetails().size());
             dto.getDetails().forEach(detailDto -> {
                 FieldMappingDetail detail = mapDetailToEntity(detailDto);
                 mapping.addDetail(detail);
+                log.debug("Added detail: source={}, target={}, entity={}",
+                        detail.getSourceField(), detail.getTargetField(), detail.getTargetEntity());
             });
+        } else {
+            log.warn("DTO details is null!");
         }
 
+        log.debug("Saving mapping with {} details", mapping.getDetails().size());
         FieldMapping updatedMapping = fieldMappingRepository.save(mapping);
-        log.info("Updated field mapping with id: {}", id);
+        log.info("Updated field mapping with id: {}, details count: {}", id, updatedMapping.getDetails().size());
 
         return mapToDto(updatedMapping);
     }

@@ -54,25 +54,32 @@ public class Competitor implements ImportableEntity {
     @JoinColumn(name = "product_id")
     private Product product;
 
-    // Статическая карта сопоставления заголовков файла с полями сущности
-    private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
+    // =====================================================================================
+    // ВНИМАНИЕ! ЭТО НЕ ЗАГОЛОВКИ CSV ФАЙЛОВ!
+    //
+    // Это человекочитаемые названия для отображения в интерфейсе при создании маппингов.
+    // Пользователь видит эти названия и сопоставляет их с реальными заголовками CSV.
+    //
+    // Реальные заголовки CSV приходят через FieldMappingDetail.sourceField!
+    // =====================================================================================
+    private static final Map<String, String> UI_DISPLAY_NAMES_TO_ENTITY_FIELDS = new HashMap<>();
 
     static {
-        // Инициализация маппинга заголовков и полей
-        FIELD_MAPPINGS.put("Сайт", "competitorName");
-        FIELD_MAPPINGS.put("Цена конкурента", "competitorPrice");
-        FIELD_MAPPINGS.put("Акционная цена", "competitorPromotionalPrice");
-        FIELD_MAPPINGS.put("Время", "competitorTime");
-        FIELD_MAPPINGS.put("Дата", "competitorDate");
-        FIELD_MAPPINGS.put("Дата:Время", "competitorLocalDateTime");
-        FIELD_MAPPINGS.put("Статус", "competitorStockStatus");
-        FIELD_MAPPINGS.put("Дополнительная цена конкурента", "competitorAdditionalPrice");
-        FIELD_MAPPINGS.put("Комментарий", "competitorCommentary");
-        FIELD_MAPPINGS.put("Наименование товара конкурента", "competitorProductName");
-        FIELD_MAPPINGS.put("Дополнительное поле", "competitorAdditional");
-        FIELD_MAPPINGS.put("Дополнительное поле 2", "competitorAdditional2");
-        FIELD_MAPPINGS.put("Ссылка", "competitorUrl");
-        FIELD_MAPPINGS.put("Скриншот", "competitorWebCacheUrl");
+        // "Как показать пользователю в UI" -> "имя поля в Java сущности"
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Сайт", "competitorName");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Цена конкурента", "competitorPrice");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Акционная цена", "competitorPromotionalPrice");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Время", "competitorTime");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дата", "competitorDate");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дата:Время", "competitorLocalDateTime");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Статус", "competitorStockStatus");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительная цена конкурента", "competitorAdditionalPrice");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Комментарий", "competitorCommentary");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Наименование товара конкурента", "competitorProductName");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле", "competitorAdditional");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 2", "competitorAdditional2");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Ссылка", "competitorUrl");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Скриншот", "competitorWebCacheUrl");
     }
 
     // Транзитивные поля, не сохраняемые в БД
@@ -112,10 +119,10 @@ public class Competitor implements ImportableEntity {
             }
 
             // Получаем имя поля из маппинга
-            String fieldName = FIELD_MAPPINGS.get(header);
+            String fieldName = UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.get(header);
             if (fieldName == null) {
                 // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
+                for (Map.Entry<String, String> mapping : UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.entrySet()) {
                     if (mapping.getKey().equalsIgnoreCase(header)) {
                         fieldName = mapping.getValue();
                         break;
@@ -203,7 +210,7 @@ public class Competitor implements ImportableEntity {
      */
     @Override
     public Map<String, String> getFieldMappings() {
-        return new HashMap<>(FIELD_MAPPINGS);
+        return new HashMap<>(UI_DISPLAY_NAMES_TO_ENTITY_FIELDS);
     }
 
     /**

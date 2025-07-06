@@ -60,27 +60,34 @@ public class Product implements ImportableEntity {
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Competitor> competitorList = new ArrayList<>();
 
-    // Статическая карта сопоставления заголовков файла с полями сущности
-    private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
+    // =====================================================================================
+    // ВНИМАНИЕ! ЭТО НЕ ЗАГОЛОВКИ CSV ФАЙЛОВ!
+    //
+    // Это человекочитаемые названия для отображения в интерфейсе при создании маппингов.
+    // Пользователь видит эти названия и сопоставляет их с реальными заголовками CSV.
+    //
+    // Реальные заголовки CSV приходят через FieldMappingDetail.sourceField!
+    // =====================================================================================
+    private static final Map<String, String> UI_DISPLAY_NAMES_TO_ENTITY_FIELDS = new HashMap<>();
 
     static {
-        // Инициализация маппинга заголовков и полей
-        FIELD_MAPPINGS.put("ID товара", "productId");
-        FIELD_MAPPINGS.put("Модель", "productName");
-        FIELD_MAPPINGS.put("Бренд", "productBrand");
-        FIELD_MAPPINGS.put("Штрихкод", "productBar");
-        FIELD_MAPPINGS.put("Описание", "productDescription");
-        FIELD_MAPPINGS.put("Ссылка", "productUrl");
-        FIELD_MAPPINGS.put("Категория товара 1", "productCategory1");
-        FIELD_MAPPINGS.put("Категория товара 2", "productCategory2");
-        FIELD_MAPPINGS.put("Категория товара 3", "productCategory3");
-        FIELD_MAPPINGS.put("Цена", "productPrice");
-        FIELD_MAPPINGS.put("Аналог", "productAnalog");
-        FIELD_MAPPINGS.put("Дополнительное поле 1", "productAdditional1");
-        FIELD_MAPPINGS.put("Дополнительное поле 2", "productAdditional2");
-        FIELD_MAPPINGS.put("Дополнительное поле 3", "productAdditional3");
-        FIELD_MAPPINGS.put("Дополнительное поле 4", "productAdditional4");
-        FIELD_MAPPINGS.put("Дополнительное поле 5", "productAdditional5");
+        // "Как показать пользователю в UI" -> "имя поля в Java сущности"
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("ID товара", "productId");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Модель", "productName");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Бренд", "productBrand");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Штрихкод", "productBar");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Описание", "productDescription");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Ссылка", "productUrl");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория товара 1", "productCategory1");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория товара 2", "productCategory2");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Категория товара 3", "productCategory3");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Цена", "productPrice");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Аналог", "productAnalog");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 1", "productAdditional1");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 2", "productAdditional2");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 3", "productAdditional3");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 4", "productAdditional4");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Дополнительное поле 5", "productAdditional5");
     }
 
     // Транзитивные поля, не сохраняемые в БД
@@ -120,10 +127,10 @@ public class Product implements ImportableEntity {
             }
 
             // Получаем имя поля из маппинга
-            String fieldName = FIELD_MAPPINGS.get(header);
+            String fieldName = UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.get(header);
             if (fieldName == null) {
                 // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
+                for (Map.Entry<String, String> mapping : UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.entrySet()) {
                     if (mapping.getKey().equalsIgnoreCase(header)) {
                         fieldName = mapping.getValue();
                         break;
@@ -217,7 +224,7 @@ public class Product implements ImportableEntity {
      */
     @Override
     public Map<String, String> getFieldMappings() {
-        return new HashMap<>(FIELD_MAPPINGS);
+        return new HashMap<>(UI_DISPLAY_NAMES_TO_ENTITY_FIELDS);
     }
 
     /**

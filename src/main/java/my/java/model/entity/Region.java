@@ -31,13 +31,20 @@ public class Region implements ImportableEntity {
     @JoinColumn(name = "product_id")
     private Product product;
 
-    // Статическая карта сопоставления заголовков файла с полями сущности
-    private static final Map<String, String> FIELD_MAPPINGS = new HashMap<>();
+    // =====================================================================================
+    // ВНИМАНИЕ! ЭТО НЕ ЗАГОЛОВКИ CSV ФАЙЛОВ!
+    //
+    // Это человекочитаемые названия для отображения в интерфейсе при создании маппингов.
+    // Пользователь видит эти названия и сопоставляет их с реальными заголовками CSV.
+    //
+    // Реальные заголовки CSV приходят через FieldMappingDetail.sourceField!
+    // =====================================================================================
+    private static final Map<String, String> UI_DISPLAY_NAMES_TO_ENTITY_FIELDS = new HashMap<>();
 
     static {
-        // Инициализация маппинга заголовков и полей
-        FIELD_MAPPINGS.put("Город", "region");
-        FIELD_MAPPINGS.put("Адрес", "regionAddress");
+        // "Как показать пользователю в UI" -> "имя поля в Java сущности"
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Город", "region");
+        UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.put("Адрес", "regionAddress");
     }
 
     // Транзитивные поля, не сохраняемые в БД
@@ -73,10 +80,10 @@ public class Region implements ImportableEntity {
             }
 
             // Получаем имя поля из маппинга
-            String fieldName = FIELD_MAPPINGS.get(header);
+            String fieldName = UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.get(header);
             if (fieldName == null) {
                 // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : FIELD_MAPPINGS.entrySet()) {
+                for (Map.Entry<String, String> mapping : UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.entrySet()) {
                     if (mapping.getKey().equalsIgnoreCase(header)) {
                         fieldName = mapping.getValue();
                         break;
@@ -128,7 +135,7 @@ public class Region implements ImportableEntity {
      */
     @Override
     public Map<String, String> getFieldMappings() {
-        return new HashMap<>(FIELD_MAPPINGS);
+        return new HashMap<>(UI_DISPLAY_NAMES_TO_ENTITY_FIELDS);
     }
 
     /**

@@ -1,6 +1,8 @@
+// src/main/java/my/java/config/AsyncConfig.java
 package my.java.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
@@ -17,23 +19,26 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Slf4j
 public class AsyncConfig {
 
+    @Value("${application.async.core-pool-size:2}")
+    private int corePoolSize;
+
+    @Value("${application.async.max-pool-size:4}")
+    private int maxPoolSize;
+
+    @Value("${application.async.queue-capacity:10}")
+    private int queueCapacity;
+
     /**
      * Создает пул потоков для асинхронной обработки файлов
-     *
-     * @return настроенный TaskExecutor
      */
     @Bean(name = "fileProcessingExecutor")
     public TaskExecutor fileProcessingExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
 
-        // Базовый размер пула (сколько потоков создается сразу)
-        executor.setCorePoolSize(2);
-
-        // Максимальный размер пула (сколько потоков может быть в пике)
-        executor.setMaxPoolSize(4);
-
-        // Размер очереди задач
-        executor.setQueueCapacity(10);
+        // Настройки пула из конфигурации
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(queueCapacity);
 
         // Префикс для имен потоков
         executor.setThreadNamePrefix("file-proc-");
@@ -47,6 +52,10 @@ public class AsyncConfig {
         // Время ожидания завершения задач при завершении приложения (в секундах)
         executor.setAwaitTerminationSeconds(60);
 
+        // Позволяем потокам умирать при бездействии
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(60);
+
         executor.initialize();
 
         log.info("Initialized file processing thread pool: coreSize={}, maxSize={}, queueCapacity={}",
@@ -57,8 +66,6 @@ public class AsyncConfig {
 
     /**
      * Создает пул потоков для операций с меньшим приоритетом (например, для сбора статистики)
-     *
-     * @return настроенный TaskExecutor
      */
     @Bean(name = "statsExecutor")
     public TaskExecutor statsExecutor() {
@@ -68,8 +75,30 @@ public class AsyncConfig {
         executor.setQueueCapacity(20);
         executor.setThreadNamePrefix("stats-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardOldestPolicy());
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(300); // 5 минут для статистики
         executor.initialize();
 
+        log.info("Initialized stats thread pool");
+        return executor;
+    }
+
+    /**
+     * Создает пул потоков для уведомлений и легких операций
+     */
+    @Bean(name = "notificationExecutor")
+    public TaskExecutor notificationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("notify-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(120);
+        executor.initialize();
+
+        log.info("Initialized notification thread pool");
         return executor;
     }
 }

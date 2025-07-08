@@ -1,20 +1,20 @@
+// src/main/java/my/java/controller/ImportController.java
 package my.java.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FieldMappingDto;
+import my.java.exception.FileOperationException;
 import my.java.model.FileOperation;
 import my.java.service.client.ClientService;
+import my.java.service.file.importer.ImportOrchestratorService;
 import my.java.service.mapping.FieldMappingService;
-import my.java.service.file.analyzer.CsvFileAnalyzer;
-import my.java.util.PathResolver;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -28,8 +28,7 @@ public class ImportController {
 
     private final ClientService clientService;
     private final FieldMappingService fieldMappingService;
-    private final CsvFileAnalyzer csvFileAnalyzer;
-    private final PathResolver pathResolver;
+    private final ImportOrchestratorService importOrchestratorService;
 
     /**
      * Показать форму импорта
@@ -67,70 +66,36 @@ public class ImportController {
                                RedirectAttributes redirectAttributes) {
         log.debug("POST request to import file for client: {}", clientId);
 
-        // Проверка файла
-        if (file.isEmpty()) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите файл для загрузки");
-            return "redirect:/clients/" + clientId + "/import";
-        }
-
-        // Проверка формата файла
-        String filename = file.getOriginalFilename();
-        if (filename == null || (!filename.toLowerCase().endsWith(".csv") && !filename.toLowerCase().endsWith(".xlsx"))) {
-            redirectAttributes.addFlashAttribute("errorMessage",
-                    "Поддерживаются только файлы формата CSV и XLSX");
-            return "redirect:/clients/" + clientId + "/import";
-        }
-
         try {
-            // Сохраняем файл во временную директорию
-            Path tempFile = pathResolver.saveToTempFile(file, "import_" + clientId);
-
-            // Если выбран шаблон, используем его параметры
-            if (mappingId != null) {
-                FieldMappingDto mapping = fieldMappingService.getMappingById(mappingId)
-                        .orElseThrow(() -> new IllegalArgumentException("Шаблон не найден"));
-
-                // TODO: Здесь будет вызов сервиса импорта с применением шаблона
-                log.info("Starting import with mapping: {}", mapping.getName());
-
-                // Временная заглушка - создаем операцию
-                FileOperation operation = FileOperation.builder()
-                        .operationType(FileOperation.OperationType.IMPORT)
-                        .fileName(filename)
-                        .fileType(filename.toLowerCase().endsWith(".csv") ? "CSV" : "XLSX")
-                        .status(FileOperation.OperationStatus.PENDING)
-                        .fieldMappingId(mappingId)
-                        .sourceFilePath(tempFile.toString())
-                        .fileSize(file.getSize())
-                        .build();
-
-                // TODO: Сохранить операцию и запустить асинхронную обработку
-
-                redirectAttributes.addFlashAttribute("successMessage",
-                        "Файл загружен и поставлен в очередь на обработку");
-                return "redirect:/clients/" + clientId;
-
-            } else {
-                // Если шаблон не выбран, анализируем файл и предлагаем создать новый
-                if (filename.toLowerCase().endsWith(".csv")) {
-                    var analysisResult = csvFileAnalyzer.analyzeFile(tempFile);
-
-                    redirectAttributes.addFlashAttribute("infoMessage",
-                            "Файл проанализирован. Создайте шаблон маппинга для импорта данных.");
-                    redirectAttributes.addFlashAttribute("analysisResult", analysisResult);
-
-                    return "redirect:/clients/" + clientId + "/mappings/create";
-                } else {
-                    redirectAttributes.addFlashAttribute("errorMessage",
-                            "Для файлов Excel необходимо сначала создать шаблон маппинга");
-                    return "redirect:/clients/" + clientId + "/mappings/create";
-                }
+            // Валидация основных параметров
+            if (file.isEmpty()) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите файл для загрузки");
+                return "redirect:/clients/" + clientId + "/import";
             }
 
+            if (mappingId == null) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Пожалуйста, выберите шаблон маппинга");
+                return "redirect:/clients/" + clientId + "/import";
+            }
+
+            // Запускаем импорт через оркестратор
+            FileOperation operation = importOrchestratorService.startImport(clientId, file, mappingId);
+
+            redirectAttributes.addFlashAttribute("successMessage",
+                    "Файл загружен и поставлен в очередь на обработку. Операция #" + operation.getId());
+
+            // Перенаправляем на страницу статуса операции
+            return "redirect:/operations/" + operation.getId() + "/status";
+
+        } catch (FileOperationException e) {
+            log.error("File operation error during import: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+            return "redirect:/clients/" + clientId + "/import";
+
         } catch (Exception e) {
-            log.error("Error during file import", e);
+            log.error("Unexpected error during file import", e);
             redirectAttributes.addFlashAttribute("errorMessage",
-                    "Ошибка при импорте файла: " + e.getMessage());
+                    "Произошла неожиданная ошибка: " + e.getMessage());
             return "redirect:/clients/" + clientId + "/import";
         }
     }
@@ -146,5 +111,34 @@ public class ImportController {
 
         String entityType = "COMBINED".equals(importType) ? "COMBINED" : null;
         return fieldMappingService.getActiveMappingsForClient(clientId, entityType);
+    }
+
+    /**
+     * Отмена импорта (если возможно)
+     */
+    @PostMapping("/operations/{operationId}/cancel")
+    public String cancelImport(@PathVariable Long clientId,
+                               @PathVariable Long operationId,
+                               RedirectAttributes redirectAttributes) {
+        log.debug("POST request to cancel import operation: {}", operationId);
+
+        try {
+            boolean cancelled = importOrchestratorService.cancelOperation(operationId);
+
+            if (cancelled) {
+                redirectAttributes.addFlashAttribute("successMessage",
+                        "Операция импорта отменена");
+            } else {
+                redirectAttributes.addFlashAttribute("warningMessage",
+                        "Нельзя отменить операцию, которая уже выполняется");
+            }
+
+        } catch (Exception e) {
+            log.error("Error cancelling operation: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage",
+                    "Ошибка при отмене операции: " + e.getMessage());
+        }
+
+        return "redirect:/clients/" + clientId;
     }
 }

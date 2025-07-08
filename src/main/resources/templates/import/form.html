@@ -36,6 +36,21 @@
             padding: 15px;
             margin-top: 10px;
         }
+        .file-size-info {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+        .progress-preview {
+            display: none;
+            margin-top: 15px;
+        }
+        #selectedFileInfo {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -60,7 +75,8 @@
 
         <!-- Форма импорта -->
         <form th:action="@{/clients/{id}/import(id=${client.id})}" method="post"
-              enctype="multipart/form-data" class="needs-validation" novalidate>
+              enctype="multipart/form-data" class="needs-validation" novalidate
+              onsubmit="return validateAndSubmit()">
 
             <div class="card">
                 <div class="card-header">
@@ -72,15 +88,24 @@
                         <label for="file" class="form-label fw-bold">
                             <i class="fas fa-file-upload me-1"></i>1. Выберите файл для импорта
                         </label>
-                        <div class="file-input-wrapper">
-                            <input type="file" class="form-control" id="file" name="file"
-                                   accept=".csv,.xlsx,.xls" required onchange="updateFileName(this)">
-                            <label for="file" class="btn btn-outline-primary">
-                                <i class="fas fa-folder-open me-1"></i>Выбрать файл
-                            </label>
-                            <span id="fileName" class="ms-2 text-muted">Файл не выбран</span>
+                        <input type="file" class="form-control" id="file" name="file"
+                               accept=".csv,.xlsx,.xls" required onchange="handleFileSelect(this)">
+
+                        <!-- Информация о выбранном файле -->
+                        <div id="selectedFileInfo">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Файл:</strong> <span id="fileNameDisplay"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Размер:</strong> <span id="fileSizeDisplay"></span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-text">Поддерживаются файлы формата CSV и XLSX</div>
+
+                        <div class="form-text file-size-info">
+                            Поддерживаются файлы формата CSV и XLSX. Максимальный размер: 600 МБ
+                        </div>
                     </div>
 
                     <!-- Шаг 2: Тип загрузки -->
@@ -89,20 +114,22 @@
                             <i class="fas fa-database me-1"></i>2. Выберите тип загрузки
                         </label>
                         <div>
-                            <div class="form-check form-check-inline">
+                            <div class="form-check">
                                 <input class="form-check-input" type="radio" name="importType"
                                        id="importTypeCombined" value="COMBINED" checked
                                        onchange="updateAvailableMappings()">
                                 <label class="form-check-label" for="importTypeCombined">
-                                    Составной (товары + конкуренты + регионы)
+                                    <strong>Составной импорт</strong><br>
+                                    <small class="text-muted">Товары + конкуренты + регионы в одном файле</small>
                                 </label>
                             </div>
-                            <div class="form-check form-check-inline">
+                            <div class="form-check mt-2">
                                 <input class="form-check-input" type="radio" name="importType"
                                        id="importTypeSingle" value="SINGLE"
                                        onchange="updateAvailableMappings()">
                                 <label class="form-check-label" for="importTypeSingle">
-                                    Отдельная сущность
+                                    <strong>Отдельная сущность</strong><br>
+                                    <small class="text-muted">Только товары, конкуренты или регионы</small>
                                 </label>
                             </div>
                         </div>
@@ -123,9 +150,9 @@
                         </div>
 
                         <div th:unless="${#lists.isEmpty(mappings)}">
-                            <select class="form-select" id="mappingId" name="mappingId"
+                            <select class="form-select" id="mappingId" name="mappingId" required
                                     onchange="showMappingInfo(this)">
-                                <option value="">-- Выберите шаблон или создайте новый --</option>
+                                <option value="">-- Выберите шаблон --</option>
                                 <optgroup label="Доступные шаблоны" id="mappingOptions">
                                     <option th:each="mapping : ${mappings}"
                                             th:value="${mapping.id}"
@@ -133,20 +160,26 @@
                                             th:data-description="${mapping.description}"
                                             th:data-encoding="${mapping.fileEncoding}"
                                             th:data-delimiter="${mapping.csvDelimiter}"
-                                            th:data-strategy="${mapping.duplicateStrategyDisplay}">
+                                            th:data-strategy="${mapping.duplicateStrategyDisplay}"
+                                            th:data-entity-type="${mapping.entityType}">
                                     </option>
                                 </optgroup>
                             </select>
 
                             <!-- Информация о выбранном шаблоне -->
                             <div id="templateInfo" class="template-info" style="display: none;">
-                                <h6>Информация о шаблоне:</h6>
-                                <div id="templateDescription"></div>
-                                <small class="text-muted">
-                                    <div>Кодировка: <span id="templateEncoding"></span></div>
-                                    <div>Разделитель: <span id="templateDelimiter"></span></div>
-                                    <div>Дубликаты: <span id="templateStrategy"></span></div>
-                                </small>
+                                <h6><i class="fas fa-info-circle me-1"></i>Информация о шаблоне:</h6>
+                                <div id="templateDescription" class="mb-2"></div>
+                                <div class="row small text-muted">
+                                    <div class="col-md-6">
+                                        <div><strong>Кодировка:</strong> <span id="templateEncoding"></span></div>
+                                        <div><strong>Разделитель:</strong> <span id="templateDelimiter"></span></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div><strong>Дубликаты:</strong> <span id="templateStrategy"></span></div>
+                                        <div><strong>Тип:</strong> <span id="templateEntityType"></span></div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mt-2">
@@ -162,9 +195,21 @@
                         </div>
                     </div>
 
+                    <!-- Индикатор загрузки -->
+                    <div class="progress-preview">
+                        <div class="alert alert-info">
+                            <i class="fas fa-spinner fa-spin me-2"></i>
+                            Загрузка файла и запуск обработки...
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                    </div>
+
                     <!-- Кнопки действий -->
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
                             <i class="fas fa-file-import me-1"></i>Импортировать
                         </button>
                         <a th:href="@{/clients/{id}(id=${client.id})}" class="btn btn-secondary">
@@ -178,18 +223,22 @@
         <!-- Информация о процессе импорта -->
         <div class="card mt-4">
             <div class="card-body">
-                <h6 class="card-title">Как работает импорт:</h6>
-                <ol>
-                    <li>Выберите файл CSV или XLSX с данными</li>
+                <h6 class="card-title">
+                    <i class="fas fa-question-circle me-1"></i>Как работает импорт:
+                </h6>
+                <ol class="mb-3">
+                    <li>Выберите файл CSV или XLSX с данными (до 600 МБ)</li>
                     <li>Укажите тип загрузки (составной или отдельная сущность)</li>
                     <li>Выберите подходящий шаблон сопоставления полей</li>
                     <li>Нажмите "Импортировать" для начала обработки</li>
                     <li>Файл будет обработан в фоновом режиме</li>
                 </ol>
-                <p class="text-muted mb-0">
-                    <i class="fas fa-info-circle me-1"></i>
-                    После начала импорта вы будете перенаправлены на страницу статуса операции.
-                </p>
+
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>
+                    <strong>Совет:</strong> Большие файлы (300-600 МБ) обрабатываются пакетами по 1000 записей
+                    для оптимальной производительности. Вы можете следить за прогрессом на странице статуса операции.
+                </div>
             </div>
         </div>
     </div>
@@ -200,15 +249,46 @@
     var clientId = /*[[${client.id}]]*/ 0;
     var allMappings = /*[[${mappings}]]*/ [];
 
-    function updateFileName(input) {
-        var fileName = input.files[0] ? input.files[0].name : 'Файл не выбран';
-        document.getElementById('fileName').textContent = fileName;
+    function handleFileSelect(input) {
+        var fileInfo = document.getElementById('selectedFileInfo');
+        var fileNameDisplay = document.getElementById('fileNameDisplay');
+        var fileSizeDisplay = document.getElementById('fileSizeDisplay');
+
+        if (input.files && input.files[0]) {
+            var file = input.files[0];
+            var fileSize = formatFileSize(file.size);
+
+            fileNameDisplay.textContent = file.name;
+            fileSizeDisplay.textContent = fileSize;
+            fileInfo.style.display = 'block';
+
+            // Проверяем размер файла
+            if (file.size > 600 * 1024 * 1024) {
+                alert('Размер файла превышает 600 МБ. Пожалуйста, выберите файл меньшего размера.');
+                input.value = '';
+                fileInfo.style.display = 'none';
+                return;
+            }
+
+        } else {
+            fileInfo.style.display = 'none';
+        }
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Байт';
+        const k = 1024;
+        const sizes = ['Байт', 'КБ', 'МБ', 'ГБ'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     function updateAvailableMappings() {
         var importType = document.querySelector('input[name="importType"]:checked').value;
         var mappingSelect = document.getElementById('mappingId');
         var optGroup = document.getElementById('mappingOptions');
+
+        if (!optGroup) return;
 
         // Очищаем текущие опции
         optGroup.innerHTML = '';
@@ -229,6 +309,7 @@
                 option.setAttribute('data-encoding', mapping.fileEncoding);
                 option.setAttribute('data-delimiter', mapping.csvDelimiter);
                 option.setAttribute('data-strategy', mapping.duplicateStrategyDisplay);
+                option.setAttribute('data-entity-type', mapping.entityTypeDisplay);
                 optGroup.appendChild(option);
             });
         }
@@ -251,6 +332,8 @@
                 selectedOption.dataset.delimiter;
             document.getElementById('templateStrategy').textContent =
                 selectedOption.dataset.strategy;
+            document.getElementById('templateEntityType').textContent =
+                selectedOption.dataset.entityType;
 
             infoDiv.style.display = 'block';
         } else {
@@ -258,8 +341,34 @@
         }
     }
 
-    // Валидация формы
+    function validateAndSubmit() {
+        var fileInput = document.getElementById('file');
+        var mappingSelect = document.getElementById('mappingId');
+
+        // Проверяем выбор файла
+        if (!fileInput.files || !fileInput.files[0]) {
+            alert('Пожалуйста, выберите файл для импорта');
+            return false;
+        }
+
+        // Проверяем выбор шаблона
+        if (!mappingSelect.value) {
+            alert('Пожалуйста, выберите шаблон маппинга');
+            return false;
+        }
+
+        // Показываем индикатор загрузки
+        document.querySelector('.progress-preview').style.display = 'block';
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').innerHTML =
+            '<i class="fas fa-spinner fa-spin me-1"></i>Обработка...';
+
+        return true;
+    }
+
+    // Инициализация при загрузке страницы
     document.addEventListener('DOMContentLoaded', function() {
+        // Валидация формы
         var forms = document.querySelectorAll('.needs-validation');
         Array.from(forms).forEach(function(form) {
             form.addEventListener('submit', function(event) {
@@ -270,6 +379,9 @@
                 form.classList.add('was-validated');
             }, false);
         });
+
+        // Инициализируем доступные шаблоны
+        updateAvailableMappings();
     });
     /*]]>*/
 </script>

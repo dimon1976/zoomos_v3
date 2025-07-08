@@ -201,7 +201,13 @@ public class FieldMappingService {
      * Применить шаблон маппинга к данным из CSV
      */
     public Map<String, ImportableEntity> applyMapping(FieldMapping mapping, Map<String, String> csvRow) {
-        log.debug("Applying field mapping '{}' to CSV row", mapping.getName());
+        log.debug("Applying field mapping '{}' to CSV row with {} fields", mapping.getName(), csvRow.size());
+        log.debug("CSV row keys: {}", csvRow.keySet());
+
+        // Показываем первые несколько значений для диагностики
+        csvRow.entrySet().stream().limit(3).forEach(entry ->
+                log.debug("CSV field '{}' = '{}'", entry.getKey(), entry.getValue())
+        );
 
         Map<String, ImportableEntity> result = new HashMap<>();
 
@@ -210,10 +216,14 @@ public class FieldMappingService {
                 .filter(d -> d.getTargetEntity() != null)
                 .collect(Collectors.groupingBy(FieldMappingDetail::getTargetEntity));
 
+        log.debug("Found mappings for {} entity types: {}", detailsByEntity.size(), detailsByEntity.keySet());
+
         // Обрабатываем каждую сущность
         for (Map.Entry<String, List<FieldMappingDetail>> entry : detailsByEntity.entrySet()) {
             String entityType = entry.getKey();
             List<FieldMappingDetail> details = entry.getValue();
+
+            log.debug("Processing entity type '{}' with {} field mappings", entityType, details.size());
 
             ImportableEntity entity = createEntityByType(entityType);
             if (entity == null) {
@@ -228,29 +238,44 @@ public class FieldMappingService {
             Map<String, String> entityData = new HashMap<>();
 
             for (FieldMappingDetail detail : details) {
-                String sourceValue = csvRow.get(detail.getSourceField());
+                String sourceField = detail.getSourceField();
+                String targetField = detail.getTargetField();
+                String sourceValue = csvRow.get(sourceField);
+
+                log.debug("Mapping: '{}' -> '{}', value: '{}'", sourceField, targetField, sourceValue);
 
                 // Если значение пустое, используем значение по умолчанию
                 if (sourceValue == null || sourceValue.trim().isEmpty()) {
                     sourceValue = detail.getDefaultValue();
+                    if (sourceValue != null) {
+                        log.trace("Using default value for '{}': '{}'", targetField, sourceValue);
+                    }
                 }
 
                 // Применяем трансформацию если нужно
                 if (sourceValue != null && detail.getTransformationType() != null) {
+                    log.trace("Applying transformation '{}' to value '{}'", detail.getTransformationType(), sourceValue);
                     // TODO: Применить трансформацию через ValueTransformerFactory
                 }
 
-                entityData.put(detail.getTargetField(), sourceValue);
+                entityData.put(targetField, sourceValue);
             }
 
-            // Заполняем сущность
-            if (entity.fillFromMap(entityData)) {
+            log.debug("Created entity data for '{}': {}", entityType, entityData);
+
+            // Заполняем сущность данными
+            boolean fillSuccess = entity.fillFromMap(entityData);
+
+            if (fillSuccess) {
+                // Сущность уже заполнена методом fillFromMap, добавляем её в результат
                 result.put(entityType, entity);
+                log.debug("Successfully filled entity '{}' with data", entityType);
             } else {
-                log.warn("Failed to fill entity {} from data", entityType);
+                log.warn("Failed to fill entity '{}' from data: {}", entityType, entityData);
             }
         }
 
+        log.debug("Mapping result: created {} entities", result.size());
         return result;
     }
 

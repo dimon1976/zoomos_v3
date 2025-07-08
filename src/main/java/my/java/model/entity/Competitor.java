@@ -8,6 +8,7 @@ import my.java.util.transformer.ValueTransformerFactory;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Сущность, представляющая данные о конкуренте.
@@ -110,7 +111,7 @@ public class Competitor implements ImportableEntity {
         boolean success = true;
 
         for (Map.Entry<String, String> entry : data.entrySet()) {
-            String header = entry.getKey();
+            String fieldName = entry.getKey();  // это уже имя поля Java-сущности
             String value = entry.getValue();
 
             // Пропускаем пустые значения
@@ -118,21 +119,9 @@ public class Competitor implements ImportableEntity {
                 continue;
             }
 
-            // Получаем имя поля из маппинга
-            String fieldName = UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.get(header);
-            if (fieldName == null) {
-                // Пробуем без учета регистра
-                for (Map.Entry<String, String> mapping : UI_DISPLAY_NAMES_TO_ENTITY_FIELDS.entrySet()) {
-                    if (mapping.getKey().equalsIgnoreCase(header)) {
-                        fieldName = mapping.getValue();
-                        break;
-                    }
-                }
-
-                // Если все еще не нашли, пропускаем
-                if (fieldName == null) {
-                    continue;
-                }
+            // Проверяем, что это валидное имя поля
+            if (!isValidFieldName(fieldName)) {
+                continue;
             }
 
             // Устанавливаем значение поля
@@ -142,11 +131,23 @@ public class Competitor implements ImportableEntity {
         return success;
     }
 
+    private boolean isValidFieldName(String fieldName) {
+        // Определяем набор валидных имен полей для данной сущности
+        Set<String> validFieldNames = Set.of(
+                "competitorName", "competitorPrice", "competitorPromotionalPrice", "competitorTime", "competitorDate",
+                "competitorLocalDateTime", "competitorStockStatus", "competitorAdditionalPrice", "competitorCommentary",
+                "competitorProductName", "competitorAdditional", "competitorAdditional2", "competitorUrl",
+                "competitorWebCacheUrl"
+        );
+
+        return validFieldNames.contains(fieldName);
+    }
+
     /**
      * Устанавливает значение поля по его имени.
      *
      * @param fieldName имя поля
-     * @param value строковое значение
+     * @param value     строковое значение
      * @return true, если значение успешно установлено
      */
     private boolean setFieldValue(String fieldName, String value) {

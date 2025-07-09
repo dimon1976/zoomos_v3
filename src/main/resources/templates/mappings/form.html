@@ -224,6 +224,7 @@
                             <td th:if="${mapping.importType == 'COMBINED'}">
                                 <select class="form-select form-select-sm detail-target-entity"
                                         name="detailTargetEntity"
+                                        th:attr="data-selected-value=${detail.targetEntity}"
                                         onchange="updateTargetFieldOptions(this)">
                                     <option value="">-- Выберите --</option>
                                     <option value="PRODUCT" th:selected="${detail.targetEntity == 'PRODUCT'}">Товар</option>
@@ -233,11 +234,10 @@
                             </td>
                             <td>
                                 <select class="form-select form-select-sm target-field-select"
-                                        name="detailTargetField" required>
+                                        name="detailTargetField"
+                                        th:attr="data-selected-value=${detail.targetField}"
+                                        required>
                                     <option value="">-- Сначала выберите сущность --</option>
-                                    <option th:value="${detail.targetField}"
-                                            th:text="${detail.targetField}"
-                                            th:selected="${true}"></option>
                                 </select>
                             </td>
                             <td class="text-center">
@@ -258,7 +258,7 @@
                 </div>
 
                 <!-- Подсказка по доступным полям -->
-                <div class="mt-3 alert alert-info">
+                <div class="mt-3 alert alert-info" id="availableFieldsAlert">
                     <h6>Доступные поля для маппинга:</h6>
                     <div id="availableFieldsInfo">
                         <div th:each="entry : ${availableFields}" class="entity-group"
@@ -294,6 +294,7 @@
     /*<![CDATA[*/
     var availableFields = /*[[${availableFields}]]*/ {};
     var importType = /*[[${mapping.importType}]]*/ 'COMBINED';
+    var clientId = /*[[${client.id}]]*/ 0;
 
     function updateEntityType() {
         var importTypeSelect = document.getElementById('importType');
@@ -319,17 +320,66 @@
     }
 
     function updateAvailableFields() {
-        // Обновляем отображение доступных полей
         var entityType = document.getElementById('entityType').value;
+        var importTypeValue = document.getElementById('importType').value;
 
-        // Здесь можно добавить AJAX запрос для обновления списка полей
-        // Пока просто обновляем UI
+        console.log('Updating available fields for entityType:', entityType, 'importType:', importTypeValue);
+
+        // Загружаем доступные поля с сервера
+        fetch('/clients/' + clientId + '/mappings/fields/' + entityType)
+            .then(response => response.json())
+            .then(fields => {
+                console.log('Received fields:', fields);
+                availableFields = fields;
+                updateAvailableFieldsDisplay();
+                // Обновляем все существующие селекты полей
+                updateAllTargetFieldSelects();
+            })
+            .catch(error => {
+                console.error('Error loading available fields:', error);
+            });
+    }
+
+    function updateAvailableFieldsDisplay() {
+        var container = document.getElementById('availableFieldsInfo');
+        container.innerHTML = '';
+
+        for (var entityType in availableFields) {
+            var fields = availableFields[entityType];
+            if (Object.keys(fields).length === 0) continue;
+
+            var entityDiv = document.createElement('div');
+            entityDiv.className = 'entity-group ' + entityType.toLowerCase();
+
+            var entityTitle = document.createElement('h6');
+            entityTitle.textContent = getEntityDisplayName(entityType);
+            entityDiv.appendChild(entityTitle);
+
+            var fieldsText = document.createElement('small');
+            var fieldsArray = [];
+            for (var displayName in fields) {
+                fieldsArray.push(displayName + ' → ' + fields[displayName]);
+            }
+            fieldsText.innerHTML = fieldsArray.join(', ');
+            entityDiv.appendChild(fieldsText);
+
+            container.appendChild(entityDiv);
+        }
+    }
+
+    function getEntityDisplayName(entityType) {
+        switch (entityType) {
+            case 'PRODUCT': return 'Товар';
+            case 'COMPETITOR': return 'Конкурент';
+            case 'REGION': return 'Регион';
+            default: return entityType;
+        }
     }
 
     function addMappingRow() {
         var tbody = document.getElementById('mappingDetailsTable');
         var rowCount = tbody.querySelectorAll('.mapping-detail-row').length;
-        var importType = document.getElementById('importType').value;
+        var importTypeValue = document.getElementById('importType').value;
 
         var row = tbody.insertRow();
         row.className = 'mapping-detail-row';
@@ -339,7 +389,7 @@
         cell1.innerHTML = '<input type="text" class="form-control form-control-sm" name="detailSourceField" required>';
 
         // Сущность (только для составного типа)
-        if (importType === 'COMBINED') {
+        if (importTypeValue === 'COMBINED') {
             var cell2 = row.insertCell(1);
             cell2.innerHTML = `
                 <select class="form-select form-select-sm detail-target-entity" name="detailTargetEntity" onchange="updateTargetFieldOptions(this)">
@@ -352,7 +402,7 @@
         }
 
         // Поле в БД
-        var cellField = row.insertCell(importType === 'COMBINED' ? 2 : 1);
+        var cellField = row.insertCell(importTypeValue === 'COMBINED' ? 2 : 1);
         cellField.innerHTML = `
             <select class="form-select form-select-sm target-field-select" name="detailTargetField" required>
                 <option value="">-- Сначала выберите сущность --</option>
@@ -360,13 +410,20 @@
         `;
 
         // Обязательное
-        var cellRequired = row.insertCell(importType === 'COMBINED' ? 3 : 2);
+        var cellRequired = row.insertCell(importTypeValue === 'COMBINED' ? 3 : 2);
         cellRequired.className = 'text-center';
         cellRequired.innerHTML = '<input type="checkbox" class="form-check-input detail-required-checkbox" name="detailRequired" value="' + rowCount + '">';
 
         // Удалить
-        var cellDelete = row.insertCell(importType === 'COMBINED' ? 4 : 3);
+        var cellDelete = row.insertCell(importTypeValue === 'COMBINED' ? 4 : 3);
         cellDelete.innerHTML = '<button type="button" class="btn btn-sm btn-danger" onclick="removeMappingRow(this)"><i class="fas fa-trash"></i></button>';
+
+        // Если это режим одной сущности, сразу заполняем поля
+        if (importTypeValue === 'SINGLE') {
+            var entityType = document.getElementById('entityType').value;
+            var targetFieldSelect = cellField.querySelector('.target-field-select');
+            populateTargetFieldSelect(targetFieldSelect, entityType);
+        }
 
         // Обновляем индексы
         updateRequiredCheckboxIndexes();
@@ -384,48 +441,78 @@
         var targetFieldSelect = row.querySelector('.target-field-select');
         var entityType = entitySelect.value;
 
+        populateTargetFieldSelect(targetFieldSelect, entityType);
+    }
+
+    function populateTargetFieldSelect(targetFieldSelect, entityType) {
         // Сохраняем текущее значение
-        var currentValue = targetFieldSelect.value;
+        var currentValue = targetFieldSelect.getAttribute('data-selected-value') || targetFieldSelect.value;
 
         // Очищаем текущие опции
         targetFieldSelect.innerHTML = '<option value="">-- Выберите поле --</option>';
 
         if (entityType && availableFields[entityType]) {
             var fields = availableFields[entityType];
-            for (var header in fields) {
+            for (var displayName in fields) {
                 var option = document.createElement('option');
-                option.value = fields[header];
-                option.text = header + ' (' + fields[header] + ')';
+                option.value = fields[displayName];
+                option.text = displayName + ' (' + fields[displayName] + ')';
                 targetFieldSelect.add(option);
             }
 
             // Восстанавливаем значение если оно было
             if (currentValue) {
                 targetFieldSelect.value = currentValue;
+                // Убираем атрибут после использования
+                targetFieldSelect.removeAttribute('data-selected-value');
             }
+        }
+    }
+
+    function updateAllTargetFieldSelects() {
+        var importTypeValue = document.getElementById('importType').value;
+
+        if (importTypeValue === 'SINGLE') {
+            // Для одной сущности обновляем все селекты
+            var entityType = document.getElementById('entityType').value;
+            document.querySelectorAll('.target-field-select').forEach(function(select) {
+                populateTargetFieldSelect(select, entityType);
+            });
+        } else {
+            // Для составного типа обновляем селекты согласно выбранной сущности
+            document.querySelectorAll('.mapping-detail-row').forEach(function(row) {
+                var entitySelect = row.querySelector('.detail-target-entity');
+                var targetFieldSelect = row.querySelector('.target-field-select');
+                if (entitySelect && targetFieldSelect && entitySelect.value) {
+                    populateTargetFieldSelect(targetFieldSelect, entitySelect.value);
+                }
+            });
         }
     }
 
     // Инициализация при загрузке
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded, initializing form...');
+        console.log('Initial availableFields:', availableFields);
+
         updateEntityType();
 
         // Для существующих строк восстанавливаем опции
-        document.querySelectorAll('.mapping-detail-row').forEach(function(row) {
-            var entitySelect = row.querySelector('.detail-target-entity, select[name="detailTargetEntity"]');
-            if (entitySelect && entitySelect.value) {
-                updateTargetFieldOptions(entitySelect);
-                // Восстанавливаем выбранное значение
+        setTimeout(function() {
+            document.querySelectorAll('.mapping-detail-row').forEach(function(row) {
+                var entitySelect = row.querySelector('.detail-target-entity');
                 var targetFieldSelect = row.querySelector('.target-field-select');
-                var savedValue = targetFieldSelect.querySelector('option:last-child').value;
-                if (savedValue) {
-                    // Ждем немного, чтобы опции загрузились
-                    setTimeout(function() {
-                        targetFieldSelect.value = savedValue;
-                    }, 100);
+
+                if (entitySelect && entitySelect.value) {
+                    // Для составного типа
+                    updateTargetFieldOptions(entitySelect);
+                } else if (targetFieldSelect && document.getElementById('importType').value === 'SINGLE') {
+                    // Для одной сущности
+                    var entityType = document.getElementById('entityType').value;
+                    populateTargetFieldSelect(targetFieldSelect, entityType);
                 }
-            }
-        });
+            });
+        }, 200);
 
         // Исправляем индексы для чекбоксов
         updateRequiredCheckboxIndexes();
@@ -440,6 +527,7 @@
             }
         });
     }
+
     function validateMappingForm() {
         var rows = document.querySelectorAll('.mapping-detail-row');
         var hasValidRow = false;

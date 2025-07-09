@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,4 +61,21 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      */
     @Query("SELECT p.productId FROM Product p WHERE p.clientId = :clientId AND p.productId IN :productIds")
     List<String> findExistingProductIds(@Param("clientId") Long clientId, @Param("productIds") List<String> productIds);
+
+    /**
+     * Найти продукты, созданные после указанной даты
+     */
+    List<Product> findByClientIdAndCreatedAtAfterOrderByCreatedAtDesc(Long clientId, ZonedDateTime after);
+
+    /**
+     * Найти продукты, обновленные после указанной даты
+     */
+    List<Product> findByClientIdAndUpdatedAtAfterOrderByUpdatedAtDesc(Long clientId, ZonedDateTime after);
+
+    /**
+     * Найти недавно созданные продукты (за последние N часов)
+     */
+    @Query("SELECT p FROM Product p WHERE p.clientId = :clientId AND p.createdAt >= :since ORDER BY p.createdAt DESC")
+    List<Product> findRecentlyCreated(@Param("clientId") Long clientId, @Param("since") ZonedDateTime since);
+
 }

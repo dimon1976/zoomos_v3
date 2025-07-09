@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -50,4 +51,15 @@ public interface RegionRepository extends JpaRepository<Region, Long> {
      */
     @Query("SELECT DISTINCT r.region FROM Region r WHERE r.clientId = :clientId ORDER BY r.region")
     List<String> findDistinctRegionsByClientId(@Param("clientId") Long clientId);
+
+    /**
+     * Найти регионы, созданные после указанной даты
+     */
+    List<Region> findByClientIdAndCreatedAtAfterOrderByCreatedAtDesc(Long clientId, ZonedDateTime after);
+
+    /**
+     * Найти недавно созданные регионы
+     */
+    @Query("SELECT r FROM Region r WHERE r.clientId = :clientId AND r.createdAt >= :since ORDER BY r.createdAt DESC")
+    List<Region> findRecentlyCreated(@Param("clientId") Long clientId, @Param("since") ZonedDateTime since);
 }

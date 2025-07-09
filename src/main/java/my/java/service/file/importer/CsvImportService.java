@@ -5,12 +5,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.Client;
 import my.java.model.FieldMapping;
+import my.java.model.FieldMappingDetail;
 import my.java.model.FileOperation;
 import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
 import my.java.repository.FileOperationRepository;
+import my.java.repository.ProductRepository;
 import my.java.service.mapping.FieldMappingService;
 import my.java.util.transformer.ValueTransformerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +41,7 @@ public class CsvImportService {
     private final FieldMappingService fieldMappingService;
     private final ValueTransformerFactory transformerFactory;
     private final BatchEntityProcessor batchEntityProcessor;
+    private final ProductRepository productRepository;
 
     @Value("${application.import.batch-size:1000}")
     private int batchSize;
@@ -211,7 +214,7 @@ public class CsvImportService {
     }
 
     /**
-     * Обработка пакета данных
+     * Обработка пакета данных с прямым связыванием через product_id
      */
     public BatchProcessResult processBatch(List<Map<String, String>> batchData,
                                            FieldMapping mapping, Client client) {
@@ -219,23 +222,22 @@ public class CsvImportService {
         log.debug("Processing batch of {} records", batchData.size());
 
         BatchProcessResult result = new BatchProcessResult();
-
-        // Группируем данные по сущностям
         Map<String, List<ImportableEntity>> entitiesByType = new HashMap<>();
 
         for (Map<String, String> rowData : batchData) {
             try {
-                // Применяем маппинг и создаем сущности
-                Map<String, ImportableEntity> entities =
-                        fieldMappingService.applyMapping(mapping, rowData);
+                // Извлекаем productId из исходных данных
+                String productId = extractProductIdFromRow(rowData, mapping);
 
-                // Устанавливаем общие поля
+                // Применяем маппинг и создаем сущности
+                Map<String, ImportableEntity> entities = fieldMappingService.applyMapping(mapping, rowData);
+
+                // Устанавливаем общие поля и подготавливаем к связыванию
                 for (Map.Entry<String, ImportableEntity> entry : entities.entrySet()) {
                     ImportableEntity entity = entry.getValue();
-                    setCommonFields(entity, client);
+                    setCommonFields(entity, client, productId);
 
-                    entitiesByType.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                            .add(entity);
+                    entitiesByType.computeIfAbsent(entry.getKey(), k -> new ArrayList<>()).add(entity);
                 }
 
                 result.incrementProcessed();
@@ -247,15 +249,52 @@ public class CsvImportService {
             }
         }
 
-        // Сохраняем сущности пакетно
+        // Для составного импорта нужно сначала обработать продукты, потом остальные
+        if ("COMBINED".equals(mapping.getImportType())) {
+            return processCombinedEntities(entitiesByType, mapping, client);
+        } else {
+            return processSingleEntity(entitiesByType, mapping);
+        }
+    }
+
+    /**
+     * Обработка составных сущностей: сначала продукты, потом связанные
+     */
+    private BatchProcessResult processCombinedEntities(Map<String, List<ImportableEntity>> entitiesByType,
+                                                       FieldMapping mapping, Client client) {
+        BatchProcessResult result = new BatchProcessResult();
+
+        // 1. Сначала сохраняем продукты
+        List<ImportableEntity> products = entitiesByType.get("PRODUCT");
+        if (products != null && !products.isEmpty()) {
+            try {
+                DuplicateStrategy strategy = getDuplicateStrategy(mapping.getDuplicateStrategy());
+                BatchSaveResult productResult = batchEntityProcessor.saveBatch(products, "PRODUCT", strategy);
+                result.addSaveResult(productResult);
+                log.debug("Saved {} products", products.size());
+            } catch (Exception e) {
+                log.error("Error saving products: {}", e.getMessage(), e);
+                result.incrementFailed(products.size());
+                result.addError("Ошибка сохранения продуктов: " + e.getMessage());
+                return result; // Если продукты не сохранились, нет смысла сохранять связанные
+            }
+        }
+
+        // 2. Теперь устанавливаем product_id для связанных сущностей и сохраняем их
         for (Map.Entry<String, List<ImportableEntity>> entry : entitiesByType.entrySet()) {
             String entityType = entry.getKey();
             List<ImportableEntity> entities = entry.getValue();
 
+            if ("PRODUCT".equals(entityType)) {
+                continue; // Продукты уже сохранили
+            }
+
             try {
+                // Устанавливаем product_id для связанных сущностей
+                setProductReferences(entities, client.getId());
+
                 DuplicateStrategy strategy = getDuplicateStrategy(mapping.getDuplicateStrategy());
                 BatchSaveResult saveResult = batchEntityProcessor.saveBatch(entities, entityType, strategy);
-
                 result.addSaveResult(saveResult);
 
             } catch (Exception e) {
@@ -266,6 +305,194 @@ public class CsvImportService {
         }
 
         return result;
+    }
+
+    /**
+     * Обработка отдельной сущности
+     */
+    private BatchProcessResult processSingleEntity(Map<String, List<ImportableEntity>> entitiesByType,
+                                                   FieldMapping mapping) {
+        BatchProcessResult result = new BatchProcessResult();
+
+        for (Map.Entry<String, List<ImportableEntity>> entry : entitiesByType.entrySet()) {
+            String entityType = entry.getKey();
+            List<ImportableEntity> entities = entry.getValue();
+
+            try {
+                DuplicateStrategy strategy = getDuplicateStrategy(mapping.getDuplicateStrategy());
+                BatchSaveResult saveResult = batchEntityProcessor.saveBatch(entities, entityType, strategy);
+                result.addSaveResult(saveResult);
+
+            } catch (Exception e) {
+                log.error("Error saving batch for entity type {}: {}", entityType, e.getMessage(), e);
+                result.incrementFailed(entities.size());
+                result.addError("Ошибка сохранения " + entityType + ": " + e.getMessage());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Извлекает productId из строки CSV данных
+     */
+    private String extractProductIdFromRow(Map<String, String> rowData, FieldMapping mapping) {
+        // Находим поле, которое маппится на productId
+        for (FieldMappingDetail detail : mapping.getDetails()) {
+            if ("productId".equals(detail.getTargetField()) &&
+                    ("PRODUCT".equals(detail.getTargetEntity()) || detail.getTargetEntity() == null)) {
+                String productId = rowData.get(detail.getSourceField());
+                if (productId != null && !productId.trim().isEmpty()) {
+                    return productId.trim();
+                }
+            }
+        }
+
+        log.warn("ProductId not found in row data for mapping: {}", mapping.getName());
+        return null;
+    }
+
+    /**
+     * Установка общих полей
+     */
+    private void setCommonFields(ImportableEntity entity, Client client, String productId) {
+        if (entity instanceof Product) {
+            Product product = (Product) entity;
+            product.setClientId(client.getId());
+            product.setTransformerFactory(transformerFactory);
+
+        } else if (entity instanceof Competitor) {
+            Competitor competitor = (Competitor) entity;
+            competitor.setClientId(client.getId());
+            competitor.setTransformerFactory(transformerFactory);
+            // Временно сохраняем productId - будет заменен на product_id позже
+            competitor.setCompetitorAdditional2(productId);
+
+        } else if (entity instanceof Region) {
+            Region region = (Region) entity;
+            region.setClientId(client.getId());
+            region.setTransformerFactory(transformerFactory);
+            // Временно сохраняем productId в дополнительном поле
+            if (productId != null) {
+                String currentAddress = region.getRegionAddress();
+                if (currentAddress == null || currentAddress.isEmpty()) {
+                    region.setRegionAddress("TEMP_PRODUCT_ID:" + productId);
+                } else {
+                    region.setRegionAddress(currentAddress + " [TEMP_PRODUCT_ID:" + productId + "]");
+                }
+            }
+        }
+    }
+
+    /**
+     * Устанавливает product_id для связанных сущностей
+     */
+    private void setProductReferences(List<ImportableEntity> entities, Long clientId) {
+        if (entities.isEmpty()) {
+            return;
+        }
+
+        // Собираем все productId для поиска
+        Set<String> productIds = new HashSet<>();
+
+        for (ImportableEntity entity : entities) {
+            String productId = null;
+            if (entity instanceof Competitor) {
+                productId = ((Competitor) entity).getCompetitorAdditional2();
+            } else if (entity instanceof Region) {
+                String address = ((Region) entity).getRegionAddress();
+                if (address != null && address.contains("TEMP_PRODUCT_ID:")) {
+                    // Извлекаем productId из адреса
+                    if (address.startsWith("TEMP_PRODUCT_ID:")) {
+                        productId = address.substring("TEMP_PRODUCT_ID:".length());
+                    } else {
+                        int startIndex = address.indexOf("[TEMP_PRODUCT_ID:") + "[TEMP_PRODUCT_ID:".length();
+                        int endIndex = address.indexOf("]", startIndex);
+                        if (startIndex > 16 && endIndex > startIndex) {
+                            productId = address.substring(startIndex, endIndex);
+                        }
+                    }
+                }
+            }
+
+            if (productId != null && !productId.trim().isEmpty()) {
+                productIds.add(productId.trim());
+            }
+        }
+
+        if (productIds.isEmpty()) {
+            log.warn("No productIds found for linking entities");
+            return;
+        }
+
+        // Получаем соответствие productId -> database ID
+        Map<String, Long> productIdToDbId = new HashMap<>();
+        for (String productId : productIds) {
+            productRepository.findByProductIdAndClientId(productId, clientId)
+                    .ifPresent(product -> productIdToDbId.put(productId, product.getId()));
+        }
+
+        log.debug("Found {} existing products for linking from {} productIds",
+                productIdToDbId.size(), productIds.size());
+
+        // Устанавливаем связи
+        for (ImportableEntity entity : entities) {
+            if (entity instanceof Competitor) {
+                Competitor competitor = (Competitor) entity;
+                String productId = competitor.getCompetitorAdditional2();
+
+                if (productId != null && productIdToDbId.containsKey(productId)) {
+                    Product product = new Product();
+                    product.setId(productIdToDbId.get(productId));
+                    competitor.setProduct(product);
+                    // Очищаем временное поле
+                    competitor.setCompetitorAdditional2(null);
+                    log.trace("Linked competitor to product: {}", productId);
+                } else {
+                    log.warn("Product not found for competitor productId: {}", productId);
+                }
+
+            } else if (entity instanceof Region) {
+                Region region = (Region) entity;
+                String address = region.getRegionAddress();
+                String productId = null;
+                String cleanAddress = null;
+
+                if (address != null && address.contains("TEMP_PRODUCT_ID:")) {
+                    if (address.startsWith("TEMP_PRODUCT_ID:")) {
+                        productId = address.substring("TEMP_PRODUCT_ID:".length());
+                        cleanAddress = null; // Адреса не было, оставляем пустым
+                    } else {
+                        int startIndex = address.indexOf("[TEMP_PRODUCT_ID:") + "[TEMP_PRODUCT_ID:".length();
+                        int endIndex = address.indexOf("]", startIndex);
+                        if (startIndex > 16 && endIndex > startIndex) {
+                            productId = address.substring(startIndex, endIndex);
+                            cleanAddress = address.substring(0, address.indexOf(" [TEMP_PRODUCT_ID:"));
+                        }
+                    }
+                }
+
+                if (productId != null && productIdToDbId.containsKey(productId)) {
+                    Product product = new Product();
+                    product.setId(productIdToDbId.get(productId));
+                    region.setProduct(product);
+                    // Восстанавливаем нормальный адрес
+                    region.setRegionAddress(cleanAddress);
+                    log.trace("Linked region to product: {}", productId);
+                } else {
+                    log.warn("Product not found for region productId: {}", productId);
+                    // Очищаем технические данные даже если связь не установлена
+                    if (address != null && address.contains("TEMP_PRODUCT_ID:")) {
+                        if (address.startsWith("TEMP_PRODUCT_ID:")) {
+                            region.setRegionAddress(null);
+                        } else {
+                            String cleanAddr = address.substring(0, address.indexOf(" [TEMP_PRODUCT_ID:"));
+                            region.setRegionAddress(cleanAddr);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -330,25 +557,6 @@ public class CsvImportService {
         }
 
         return rowData;
-    }
-
-    /**
-     * Установка общих полей для сущности
-     */
-    private void setCommonFields(ImportableEntity entity, Client client) {
-        if (entity instanceof Product) {
-            Product product = (Product) entity;
-            product.setClientId(client.getId());
-            product.setTransformerFactory(transformerFactory);
-        } else if (entity instanceof Competitor) {
-            Competitor competitor = (Competitor) entity;
-            competitor.setClientId(client.getId());
-            competitor.setTransformerFactory(transformerFactory);
-        } else if (entity instanceof Region) {
-            Region region = (Region) entity;
-            region.setClientId(client.getId());
-            region.setTransformerFactory(transformerFactory);
-        }
     }
 
     /**

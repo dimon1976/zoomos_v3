@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 /**
@@ -64,4 +65,16 @@ public interface CompetitorRepository extends JpaRepository<Competitor, Long> {
      * Удалить старые записи конкурентов (старше указанной даты)
      */
     void deleteByClientIdAndCompetitorLocalDateTimeBefore(Long clientId, LocalDateTime cutoffDate);
+
+    /**
+     * Найти конкурентов, созданных после указанной даты
+     */
+    List<Competitor> findByClientIdAndCreatedAtAfterOrderByCreatedAtDesc(Long clientId, ZonedDateTime after);
+
+    /**
+     * Найти недавно созданных конкурентов
+     */
+    @Query("SELECT c FROM Competitor c WHERE c.clientId = :clientId AND c.createdAt >= :since ORDER BY c.createdAt DESC")
+    List<Competitor> findRecentlyCreated(@Param("clientId") Long clientId, @Param("since") ZonedDateTime since);
+
 }

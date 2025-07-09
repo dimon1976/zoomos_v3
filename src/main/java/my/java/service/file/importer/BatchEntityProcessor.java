@@ -199,23 +199,16 @@ public class BatchEntityProcessor {
      */
     private int insertProductsBatch(List<Product> products) {
         String sql = """
-            INSERT INTO products (
-                client_id, data_source, file_id, product_id, product_name, product_brand,
-                product_bar, product_description, product_url, product_category1,
-                product_category2, product_category3, product_price, product_analog,
-                product_additional1, product_additional2, product_additional3,
-                product_additional4, product_additional5
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
+        INSERT INTO products (
+            client_id, data_source, file_id, product_id, product_name, product_brand,
+            product_bar, product_description, product_url, product_category1,
+            product_category2, product_category3, product_price, product_analog,
+            product_additional1, product_additional2, product_additional3,
+            product_additional4, product_additional5, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """;
 
         log.debug("Inserting batch of {} products", products.size());
-
-        // Логируем первый продукт для диагностики
-        if (!products.isEmpty()) {
-            Product first = products.get(0);
-            log.debug("Sample product: clientId={}, productId='{}', productName='{}', productBrand='{}'",
-                    first.getClientId(), first.getProductId(), first.getProductName(), first.getProductBrand());
-        }
 
         return jdbcTemplate.execute(sql, (PreparedStatementCallback<Integer>) ps -> {
             int count = 0;
@@ -227,7 +220,7 @@ public class BatchEntityProcessor {
 
                     if (count % 1000 == 0) {
                         int[] batchResults = ps.executeBatch();
-                        log.debug("Executed batch of {} products, results: {}", 1000, batchResults.length);
+                        log.debug("Executed batch of {} products", batchResults.length);
                     }
                 } catch (Exception e) {
                     log.error("Error setting parameters for product: {}", product.getProductId(), e);
@@ -250,14 +243,14 @@ public class BatchEntityProcessor {
      */
     private int updateProductsBatch(List<Product> products) {
         String sql = """
-            UPDATE products SET 
-                product_name = ?, product_brand = ?, product_bar = ?, product_description = ?,
-                product_url = ?, product_category1 = ?, product_category2 = ?, product_category3 = ?,
-                product_price = ?, product_analog = ?, product_additional1 = ?, product_additional2 = ?,
-                product_additional3 = ?, product_additional4 = ?, product_additional5 = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE product_id = ? AND client_id = ?
-            """;
+        UPDATE products SET 
+            product_name = ?, product_brand = ?, product_bar = ?, product_description = ?,
+            product_url = ?, product_category1 = ?, product_category2 = ?, product_category3 = ?,
+            product_price = ?, product_analog = ?, product_additional1 = ?, product_additional2 = ?,
+            product_additional3 = ?, product_additional4 = ?, product_additional5 = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE product_id = ? AND client_id = ?
+        """;
 
         return jdbcTemplate.execute(sql, (PreparedStatementCallback<Integer>) ps -> {
             int count = 0;
@@ -272,6 +265,7 @@ public class BatchEntityProcessor {
             }
 
             int[] results = ps.executeBatch();
+            log.info("Updated {} products", results.length);
             return results.length;
         });
     }
@@ -337,16 +331,22 @@ public class BatchEntityProcessor {
             return result;
         }
 
-        // Для конкурентов обычно не проверяем дубликаты, так как данные могут повторяться по времени
+        long linkedCount = competitors.stream()
+                .mapToLong(c -> c.getProduct() != null ? 1 : 0)
+                .sum();
+
+        log.info("Saving {} competitors, {} linked to products", competitors.size(), linkedCount);
+
         String sql = """
-            INSERT INTO competitor_data (
-                client_id, competitor_name, competitor_price, competitor_promotional_price,
-                competitor_time, competitor_date, competitor_local_date_time,
-                competitor_stock_status, competitor_additional_price, competitor_commentary,
-                competitor_product_name, competitor_additional, competitor_additional2,
-                competitor_url, competitor_web_cache_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
+        INSERT INTO competitor_data (
+            client_id, product_id, competitor_name, competitor_price, 
+            competitor_promotional_price, competitor_time, competitor_date, 
+            competitor_local_date_time, competitor_stock_status, 
+            competitor_additional_price, competitor_commentary,
+            competitor_product_name, competitor_additional, competitor_additional2,
+            competitor_url, competitor_web_cache_url, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """;
 
         try {
             int saved = jdbcTemplate.execute(sql, (PreparedStatementCallback<Integer>) ps -> {
@@ -366,6 +366,8 @@ public class BatchEntityProcessor {
             });
 
             result.setSaved(saved);
+            log.info("Successfully saved {} competitors with timestamps", saved);
+
         } catch (Exception e) {
             log.error("Error saving competitors batch: {}", e.getMessage(), e);
             result.setFailed(competitors.size());
@@ -380,20 +382,21 @@ public class BatchEntityProcessor {
      */
     private void setCompetitorParameters(PreparedStatement ps, Competitor competitor) throws SQLException {
         ps.setLong(1, competitor.getClientId());
-        ps.setString(2, competitor.getCompetitorName());
-        ps.setString(3, competitor.getCompetitorPrice());
-        ps.setString(4, competitor.getCompetitorPromotionalPrice());
-        ps.setString(5, competitor.getCompetitorTime());
-        ps.setString(6, competitor.getCompetitorDate());
-        ps.setObject(7, competitor.getCompetitorLocalDateTime());
-        ps.setString(8, competitor.getCompetitorStockStatus());
-        ps.setString(9, competitor.getCompetitorAdditionalPrice());
-        ps.setString(10, competitor.getCompetitorCommentary());
-        ps.setString(11, competitor.getCompetitorProductName());
-        ps.setString(12, competitor.getCompetitorAdditional());
-        ps.setString(13, competitor.getCompetitorAdditional2());
-        ps.setString(14, competitor.getCompetitorUrl());
-        ps.setString(15, competitor.getCompetitorWebCacheUrl());
+        ps.setObject(2, competitor.getProduct() != null ? competitor.getProduct().getId() : null);
+        ps.setString(3, competitor.getCompetitorName());
+        ps.setString(4, competitor.getCompetitorPrice());
+        ps.setString(5, competitor.getCompetitorPromotionalPrice());
+        ps.setString(6, competitor.getCompetitorTime());
+        ps.setString(7, competitor.getCompetitorDate());
+        ps.setObject(8, competitor.getCompetitorLocalDateTime());
+        ps.setString(9, competitor.getCompetitorStockStatus());
+        ps.setString(10, competitor.getCompetitorAdditionalPrice());
+        ps.setString(11, competitor.getCompetitorCommentary());
+        ps.setString(12, competitor.getCompetitorProductName());
+        ps.setString(13, competitor.getCompetitorAdditional());
+        ps.setString(14, competitor.getCompetitorAdditional2());
+        ps.setString(15, competitor.getCompetitorUrl());
+        ps.setString(16, competitor.getCompetitorWebCacheUrl());
     }
 
     /**
@@ -406,11 +409,17 @@ public class BatchEntityProcessor {
             return result;
         }
 
+        long linkedCount = regions.stream()
+                .mapToLong(r -> r.getProduct() != null ? 1 : 0)
+                .sum();
+
+        log.info("Saving {} regions, {} linked to products", regions.size(), linkedCount);
+
         String sql = """
-            INSERT INTO region_data (
-                client_id, region, region_address
-            ) VALUES (?, ?, ?)
-            """;
+        INSERT INTO region_data (
+            client_id, product_id, region, region_address, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """;
 
         try {
             int saved = jdbcTemplate.execute(sql, (PreparedStatementCallback<Integer>) ps -> {
@@ -430,6 +439,8 @@ public class BatchEntityProcessor {
             });
 
             result.setSaved(saved);
+            log.info("Successfully saved {} regions with timestamps", saved);
+
         } catch (Exception e) {
             log.error("Error saving regions batch: {}", e.getMessage(), e);
             result.setFailed(regions.size());
@@ -444,8 +455,9 @@ public class BatchEntityProcessor {
      */
     private void setRegionParameters(PreparedStatement ps, Region region) throws SQLException {
         ps.setLong(1, region.getClientId());
-        ps.setString(2, region.getRegion());
-        ps.setString(3, region.getRegionAddress());
+        ps.setObject(2, region.getProduct() != null ? region.getProduct().getId() : null);
+        ps.setString(3, region.getRegion());
+        ps.setString(4, region.getRegionAddress());
     }
 }
 

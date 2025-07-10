@@ -44,6 +44,11 @@ public interface CompetitorRepository extends JpaRepository<Competitor, Long> {
     long countByClientId(Long clientId);
 
     /**
+     * Удалить записи конкурентов по списку product_id
+     */
+    void deleteByProductIdIn(List<Long> productIds);
+
+    /**
      * Найти конкурентов за определенный период
      */
     @Query("SELECT c FROM Competitor c WHERE c.clientId = :clientId AND " +

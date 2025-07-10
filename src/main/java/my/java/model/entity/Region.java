@@ -33,23 +33,6 @@ public class Region implements ImportableEntity {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
 
-    // Геттеры и сеттеры
-    public ZonedDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(ZonedDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public ZonedDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(ZonedDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
     private Long clientId;
     private String region;
 

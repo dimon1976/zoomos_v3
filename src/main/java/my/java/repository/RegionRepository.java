@@ -42,6 +42,11 @@ public interface RegionRepository extends JpaRepository<Region, Long> {
     long countByClientId(Long clientId);
 
     /**
+     * Удалить записи регионов по списку product_id
+     */
+    void deleteByProductIdIn(List<Long> productIds);
+
+    /**
      * Проверить существование региона
      */
     boolean existsByClientIdAndRegion(Long clientId, String region);

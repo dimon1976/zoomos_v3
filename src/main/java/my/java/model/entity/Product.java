@@ -32,28 +32,13 @@ public class Product implements ImportableEntity {
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
 
-    // Геттеры и сеттеры
-    public ZonedDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(ZonedDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public ZonedDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(ZonedDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
     @Enumerated(EnumType.STRING)
     @Column(name = "data_source")
     private DataSourceType dataSource;
 
-    private Long fileId;
+    @Column(name = "operation_id")
+    private Long operationId;
+
     private Long clientId;
 
     // Основные поля товара
@@ -269,28 +254,5 @@ public class Product implements ImportableEntity {
             return "Не указано название товара";
         }
         return null;
-    }
-
-    /**
-     * Вспомогательные методы для установки отношений
-     */
-    public void addRegionData(Region region) {
-        regionList.add(region);
-        region.setProduct(this);
-    }
-
-    public void removeRegionData(Region region) {
-        regionList.remove(region);
-        region.setProduct(null);
-    }
-
-    public void addCompetitorData(Competitor competitor) {
-        competitorList.add(competitor);
-        competitor.setProduct(this);
-    }
-
-    public void removeCompetitorData(Competitor competitor) {
-        competitorList.remove(competitor);
-        competitor.setProduct(null);
     }
 }

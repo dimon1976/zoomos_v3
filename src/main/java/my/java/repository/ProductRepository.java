@@ -60,7 +60,14 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * Пакетное получение существующих ID продуктов
      */
     @Query("SELECT p.productId FROM Product p WHERE p.clientId = :clientId AND p.productId IN :productIds")
-    List<String> findExistingProductIds(@Param("clientId") Long clientId, @Param("productIds") List<String> productIds);
+    List<String> findExistingProductIds(@Param("clientId") Long clientId,
+                                        @Param("productIds") List<String> productIds);
+
+    // Новый метод для поиска пар (clientId + productId)
+    @Query("SELECT p.clientId, p.productId FROM Product p " +
+            "WHERE p.clientId = :clientId AND p.productId IN :productIds")
+    List<Object[]> findExistingProductPairs(@Param("clientId") Long clientId,
+                                            @Param("productIds") List<String> productIds);
 
     /**
      * Найти продукты, созданные после указанной даты

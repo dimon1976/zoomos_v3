@@ -1,6 +1,7 @@
 // src/main/java/my/java/service/file/importer/CsvImportService.java
 package my.java.service.file.importer;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.Client;
@@ -11,8 +12,14 @@ import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
+import my.java.repository.CompetitorRepository;
 import my.java.repository.FileOperationRepository;
 import my.java.repository.ProductRepository;
+import my.java.repository.RegionRepository;
+import my.java.service.file.importer.strategy.DuplicateHandlingStrategy;
+import my.java.service.file.importer.strategy.IgnoreDuplicatesStrategy;
+import my.java.service.file.importer.strategy.OverrideDuplicatesStrategy;
+import my.java.service.file.importer.strategy.SkipDuplicatesStrategy;
 import my.java.service.mapping.FieldMappingService;
 import my.java.util.transformer.ValueTransformerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +49,8 @@ public class CsvImportService {
     private final ValueTransformerFactory transformerFactory;
     private final BatchEntityProcessor batchEntityProcessor;
     private final ProductRepository productRepository;
+    private final CompetitorRepository competitorRepository;
+    private final RegionRepository regionRepository;
 
     @Value("${application.import.batch-size:1000}")
     private int batchSize;
@@ -158,7 +167,7 @@ public class CsvImportService {
 
                     // Обрабатываем пакет данных
                     if (batchData.size() >= batchSize) {
-                        BatchProcessResult batchResult = processBatch(batchData, mapping, client);
+                        BatchProcessResult batchResult = processBatch(batchData, mapping, client, operation);
                         result.addBatchResult(batchResult);
 
                         processedCount += batchData.size();
@@ -178,7 +187,7 @@ public class CsvImportService {
 
             // Обрабатываем остаток данных
             if (!batchData.isEmpty()) {
-                BatchProcessResult batchResult = processBatch(batchData, mapping, client);
+                BatchProcessResult batchResult = processBatch(batchData, mapping, client, operation);
                 result.addBatchResult(batchResult);
                 processedCount += batchData.size();
             }
@@ -217,13 +226,16 @@ public class CsvImportService {
      * Обработка пакета данных с прямым связыванием через product_id
      */
     public BatchProcessResult processBatch(List<Map<String, String>> batchData,
-                                           FieldMapping mapping, Client client) {
+                                           FieldMapping mapping, Client client, FileOperation operation) {
 
         log.debug("Processing batch of {} records", batchData.size());
 
         BatchProcessResult result = new BatchProcessResult();
-        Map<String, List<ImportableEntity>> entitiesByType = new HashMap<>();
 
+        // Используем новый класс для хранения связей
+        EntityRelationshipHolder relationshipHolder = new EntityRelationshipHolder();
+
+        // Этап 1: Парсинг данных и создание сущностей
         for (Map<String, String> rowData : batchData) {
             try {
                 // Извлекаем productId из исходных данных
@@ -232,16 +244,10 @@ public class CsvImportService {
                 // Применяем маппинг и создаем сущности
                 Map<String, ImportableEntity> entities = fieldMappingService.applyMapping(mapping, rowData);
 
-                // Устанавливаем общие поля и подготавливаем к связыванию
-                for (Map.Entry<String, ImportableEntity> entry : entities.entrySet()) {
-                    ImportableEntity entity = entry.getValue();
-                    setCommonFields(entity, client, productId);
-
-                    entitiesByType.computeIfAbsent(entry.getKey(), k -> new ArrayList<>()).add(entity);
-                }
+                // Распределяем сущности по типам с сохранением связей
+                distributeEntitiesWithRelationships(entities, productId, client, operation.getId(), relationshipHolder);
 
                 result.incrementProcessed();
-
             } catch (Exception e) {
                 log.warn("Error processing row data: {}", e.getMessage());
                 result.incrementFailed();
@@ -249,89 +255,192 @@ public class CsvImportService {
             }
         }
 
-        // Для составного импорта нужно сначала обработать продукты, потом остальные
+        // Этап 2: Обработка сущностей согласно типу импорта и стратегии
+        DuplicateHandlingStrategy strategy = createStrategy(mapping.getDuplicateStrategy());
+
         if ("COMBINED".equals(mapping.getImportType())) {
-            return processCombinedEntities(entitiesByType, mapping, client);
+            return processCombinedEntitiesWithStrategy(relationshipHolder, strategy, client.getId());
         } else {
-            return processSingleEntity(entitiesByType, mapping);
+            return processSingleEntityWithStrategy(relationshipHolder, strategy, mapping.getImportType(), client.getId());
         }
     }
 
-    /**
-     * Обработка составных сущностей: сначала продукты, потом связанные
-     */
-    private BatchProcessResult processCombinedEntities(Map<String, List<ImportableEntity>> entitiesByType,
-                                                       FieldMapping mapping, Client client) {
+    private BatchProcessResult processSingleEntityWithStrategy(EntityRelationshipHolder holder,
+                                                               DuplicateHandlingStrategy strategy,
+                                                               String importType,
+                                                               Long clientId) {
         BatchProcessResult result = new BatchProcessResult();
 
-        // 1. Сначала сохраняем продукты
-        List<ImportableEntity> products = entitiesByType.get("PRODUCT");
-        if (products != null && !products.isEmpty()) {
-            try {
-                DuplicateStrategy strategy = getDuplicateStrategy(mapping.getDuplicateStrategy());
-                BatchSaveResult productResult = batchEntityProcessor.saveBatch(products, "PRODUCT", strategy);
-                result.addSaveResult(productResult);
-                log.debug("Saved {} products", products.size());
-            } catch (Exception e) {
-                log.error("Error saving products: {}", e.getMessage(), e);
-                result.incrementFailed(products.size());
-                result.addError("Ошибка сохранения продуктов: " + e.getMessage());
-                return result; // Если продукты не сохранились, нет смысла сохранять связанные
-            }
-        }
+        try {
+            // Определяем тип сущности для SINGLE импорта
+            String entityType = determineEntityTypeForSingleImport(holder);
 
-        // 2. Теперь устанавливаем product_id для связанных сущностей и сохраняем их
-        for (Map.Entry<String, List<ImportableEntity>> entry : entitiesByType.entrySet()) {
-            String entityType = entry.getKey();
-            List<ImportableEntity> entities = entry.getValue();
-
-            if ("PRODUCT".equals(entityType)) {
-                continue; // Продукты уже сохранили
+            if (entityType == null) {
+                log.warn("No entities found in holder for single import");
+                return result;
             }
 
-            try {
-                // Устанавливаем product_id для связанных сущностей
-                setProductReferences(entities, client.getId());
+            List<ImportableEntity> entities = new ArrayList<>();
 
-                DuplicateStrategy strategy = getDuplicateStrategy(mapping.getDuplicateStrategy());
-                BatchSaveResult saveResult = batchEntityProcessor.saveBatch(entities, entityType, strategy);
+            switch (entityType) {
+                case "PRODUCT" -> entities.addAll(holder.getAllProducts());
+                case "COMPETITOR" -> {
+                    // Для конкурентов нужно сначала установить связи с продуктами
+                    establishDatabaseRelationships(holder, clientId);
+                    holder.getCompetitorsByProductId().values()
+                            .forEach(entities::addAll);
+                }
+                case "REGION" -> {
+                    // Для регионов также устанавливаем связи
+                    establishDatabaseRelationships(holder, clientId);
+                    holder.getRegionsByProductId().values()
+                            .forEach(entities::addAll);
+                }
+            }
+
+            if (!entities.isEmpty()) {
+                BatchSaveResult saveResult = strategy.process(entities, entityType, clientId, new HashMap<>());
                 result.addSaveResult(saveResult);
-
-            } catch (Exception e) {
-                log.error("Error saving batch for entity type {}: {}", entityType, e.getMessage(), e);
-                result.incrementFailed(entities.size());
-                result.addError("Ошибка сохранения " + entityType + ": " + e.getMessage());
             }
+
+        } catch (Exception e) {
+            log.error("Error in single entity processing: {}", e.getMessage(), e);
+            result.incrementFailed(holder.getTotalEntitiesCount());
+            result.addError("Ошибка обработки импорта: " + e.getMessage());
         }
 
         return result;
     }
 
     /**
-     * Обработка отдельной сущности
+     * Определение типа сущности для SINGLE импорта
      */
-    private BatchProcessResult processSingleEntity(Map<String, List<ImportableEntity>> entitiesByType,
-                                                   FieldMapping mapping) {
+    private String determineEntityTypeForSingleImport(EntityRelationshipHolder holder) {
+        if (!holder.getAllProducts().isEmpty()) {
+            return "PRODUCT";
+        } else if (!holder.getCompetitorsByProductId().isEmpty()) {
+            return "COMPETITOR";
+        } else if (!holder.getRegionsByProductId().isEmpty()) {
+            return "REGION";
+        }
+        return null;
+    }
+
+    /**
+     * Создание стратегии по типу
+     */
+    private DuplicateHandlingStrategy createStrategy(String strategyType) {
+        return switch (strategyType) {
+            case "SKIP" -> new SkipDuplicatesStrategy(batchEntityProcessor, productRepository);
+            case "OVERRIDE" -> new OverrideDuplicatesStrategy(batchEntityProcessor, productRepository, competitorRepository, regionRepository);
+            case "IGNORE" -> new IgnoreDuplicatesStrategy(batchEntityProcessor);
+            default -> throw new IllegalArgumentException("Unknown strategy: " + strategyType);
+        };
+    }
+
+    /**
+     * Обработка COMBINED импорта с использованием стратегии
+     */
+    private BatchProcessResult processCombinedEntitiesWithStrategy(EntityRelationshipHolder holder,
+                                                                   DuplicateHandlingStrategy strategy,
+                                                                   Long clientId) {
         BatchProcessResult result = new BatchProcessResult();
 
-        for (Map.Entry<String, List<ImportableEntity>> entry : entitiesByType.entrySet()) {
-            String entityType = entry.getKey();
-            List<ImportableEntity> entities = entry.getValue();
+        try {
+            // Получаем продукты и связанные сущности
+            List<ImportableEntity> products = new ArrayList<>(holder.getAllProducts());
 
-            try {
-                DuplicateStrategy strategy = getDuplicateStrategy(mapping.getDuplicateStrategy());
-                BatchSaveResult saveResult = batchEntityProcessor.saveBatch(entities, entityType, strategy);
-                result.addSaveResult(saveResult);
+            Map<String, List<ImportableEntity>> relatedEntities = new HashMap<>();
+            relatedEntities.put("COMPETITOR", new ArrayList<>());
+            relatedEntities.put("REGION", new ArrayList<>());
 
-            } catch (Exception e) {
-                log.error("Error saving batch for entity type {}: {}", entityType, e.getMessage(), e);
-                result.incrementFailed(entities.size());
-                result.addError("Ошибка сохранения " + entityType + ": " + e.getMessage());
+            // Собираем все связанные сущности
+            for (Product product : holder.getAllProducts()) {
+                String productId = product.getProductId();
+                relatedEntities.get("COMPETITOR").addAll(holder.getCompetitorsForProduct(productId));
+                relatedEntities.get("REGION").addAll(holder.getRegionsForProduct(productId));
             }
+
+            // Обрабатываем через стратегию с передачей holder
+            BatchSaveResult saveResult = strategy.processCombined(products, relatedEntities, clientId, holder);
+            result.addSaveResult(saveResult);
+
+            // После сохранения продуктов устанавливаем связи для связанных сущностей
+            // (только если стратегия не SKIP, так как SKIP уже отфильтровала нужные сущности)
+            if (strategy.getType() != DuplicateStrategy.SKIP) {
+                establishDatabaseRelationships(holder, clientId);
+            }
+
+        } catch (Exception e) {
+            log.error("Error in combined processing: {}", e.getMessage(), e);
+            result.incrementFailed(holder.getTotalEntitiesCount());
+            result.addError("Ошибка обработки составного импорта: " + e.getMessage());
         }
 
         return result;
     }
+
+    /**
+     * Установка связей с БД после сохранения продуктов
+     */
+    private void establishDatabaseRelationships(EntityRelationshipHolder holder, Long clientId) {
+        // Получаем маппинг productId -> database ID
+        Set<String> productIds = holder.getProductsByProductId().keySet();
+        Map<String, Long> productIdToDbId = getProductIdToDatabaseIdMapping(productIds, clientId);
+
+        // Устанавливаем связи
+        holder.establishDatabaseRelationships(productIdToDbId);
+    }
+
+    /**
+     * Получение маппинга productId -> ID в БД
+     */
+    private Map<String, Long> getProductIdToDatabaseIdMapping(Set<String> productIds, Long clientId) {
+        Map<String, Long> mapping = new HashMap<>();
+
+        for (String productId : productIds) {
+            productRepository.findByProductIdAndClientId(productId, clientId)
+                    .ifPresent(product -> mapping.put(productId, product.getId()));
+        }
+
+        return mapping;
+    }
+
+    /**
+     * Распределение сущностей с сохранением связей через EntityRelationshipHolder
+     */
+    private void distributeEntitiesWithRelationships(Map<String, ImportableEntity> entities,
+                                                     String productId,
+                                                     Client client,
+                                                     Long operationId,
+                                                     EntityRelationshipHolder holder) {
+
+        for (Map.Entry<String, ImportableEntity> entry : entities.entrySet()) {
+            ImportableEntity entity = entry.getValue();
+            String entityType = entry.getKey();
+
+            // Устанавливаем общие поля
+            setCommonFields(entity, client.getId(), operationId);
+
+            // Добавляем в holder с сохранением связей
+            switch (entityType) {
+                case "PRODUCT" -> {
+                    Product product = (Product) entity;
+                    holder.addProduct(product);
+                }
+                case "COMPETITOR" -> {
+                    Competitor competitor = (Competitor) entity;
+                    holder.addCompetitor(productId, competitor);
+                }
+                case "REGION" -> {
+                    Region region = (Region) entity;
+                    holder.addRegion(productId, region);
+                }
+                default -> log.warn("Unknown entity type: {}", entityType);
+            }
+        }
+    }
+
 
     /**
      * Извлекает productId из строки CSV данных
@@ -353,147 +462,17 @@ public class CsvImportService {
     }
 
     /**
-     * Установка общих полей
+     * Установка общих полей включая operation_id
      */
-    private void setCommonFields(ImportableEntity entity, Client client, String productId) {
-        if (entity instanceof Product) {
-            Product product = (Product) entity;
-            product.setClientId(client.getId());
-            product.setTransformerFactory(transformerFactory);
+    private void setCommonFields(ImportableEntity entity, Long clientId, Long operationId) {
+        entity.setClientId(clientId);
+        entity.setTransformerFactory(transformerFactory);
 
-        } else if (entity instanceof Competitor) {
-            Competitor competitor = (Competitor) entity;
-            competitor.setClientId(client.getId());
-            competitor.setTransformerFactory(transformerFactory);
-            // Временно сохраняем productId - будет заменен на product_id позже
-            competitor.setCompetitorAdditional2(productId);
-
-        } else if (entity instanceof Region) {
-            Region region = (Region) entity;
-            region.setClientId(client.getId());
-            region.setTransformerFactory(transformerFactory);
-            // Временно сохраняем productId в дополнительном поле
-            if (productId != null) {
-                String currentAddress = region.getRegionAddress();
-                if (currentAddress == null || currentAddress.isEmpty()) {
-                    region.setRegionAddress("TEMP_PRODUCT_ID:" + productId);
-                } else {
-                    region.setRegionAddress(currentAddress + " [TEMP_PRODUCT_ID:" + productId + "]");
-                }
-            }
+        if (entity instanceof Product product) {
+            product.setOperationId(operationId);
         }
     }
 
-    /**
-     * Устанавливает product_id для связанных сущностей
-     */
-    private void setProductReferences(List<ImportableEntity> entities, Long clientId) {
-        if (entities.isEmpty()) {
-            return;
-        }
-
-        // Собираем все productId для поиска
-        Set<String> productIds = new HashSet<>();
-
-        for (ImportableEntity entity : entities) {
-            String productId = null;
-            if (entity instanceof Competitor) {
-                productId = ((Competitor) entity).getCompetitorAdditional2();
-            } else if (entity instanceof Region) {
-                String address = ((Region) entity).getRegionAddress();
-                if (address != null && address.contains("TEMP_PRODUCT_ID:")) {
-                    // Извлекаем productId из адреса
-                    if (address.startsWith("TEMP_PRODUCT_ID:")) {
-                        productId = address.substring("TEMP_PRODUCT_ID:".length());
-                    } else {
-                        int startIndex = address.indexOf("[TEMP_PRODUCT_ID:") + "[TEMP_PRODUCT_ID:".length();
-                        int endIndex = address.indexOf("]", startIndex);
-                        if (startIndex > 16 && endIndex > startIndex) {
-                            productId = address.substring(startIndex, endIndex);
-                        }
-                    }
-                }
-            }
-
-            if (productId != null && !productId.trim().isEmpty()) {
-                productIds.add(productId.trim());
-            }
-        }
-
-        if (productIds.isEmpty()) {
-            log.warn("No productIds found for linking entities");
-            return;
-        }
-
-        // Получаем соответствие productId -> database ID
-        Map<String, Long> productIdToDbId = new HashMap<>();
-        for (String productId : productIds) {
-            productRepository.findByProductIdAndClientId(productId, clientId)
-                    .ifPresent(product -> productIdToDbId.put(productId, product.getId()));
-        }
-
-        log.debug("Found {} existing products for linking from {} productIds",
-                productIdToDbId.size(), productIds.size());
-
-        // Устанавливаем связи
-        for (ImportableEntity entity : entities) {
-            if (entity instanceof Competitor) {
-                Competitor competitor = (Competitor) entity;
-                String productId = competitor.getCompetitorAdditional2();
-
-                if (productId != null && productIdToDbId.containsKey(productId)) {
-                    Product product = new Product();
-                    product.setId(productIdToDbId.get(productId));
-                    competitor.setProduct(product);
-                    // Очищаем временное поле
-                    competitor.setCompetitorAdditional2(null);
-                    log.trace("Linked competitor to product: {}", productId);
-                } else {
-                    log.warn("Product not found for competitor productId: {}", productId);
-                }
-
-            } else if (entity instanceof Region) {
-                Region region = (Region) entity;
-                String address = region.getRegionAddress();
-                String productId = null;
-                String cleanAddress = null;
-
-                if (address != null && address.contains("TEMP_PRODUCT_ID:")) {
-                    if (address.startsWith("TEMP_PRODUCT_ID:")) {
-                        productId = address.substring("TEMP_PRODUCT_ID:".length());
-                        cleanAddress = null; // Адреса не было, оставляем пустым
-                    } else {
-                        int startIndex = address.indexOf("[TEMP_PRODUCT_ID:") + "[TEMP_PRODUCT_ID:".length();
-                        int endIndex = address.indexOf("]", startIndex);
-                        if (startIndex > 16 && endIndex > startIndex) {
-                            productId = address.substring(startIndex, endIndex);
-                            cleanAddress = address.substring(0, address.indexOf(" [TEMP_PRODUCT_ID:"));
-                        }
-                    }
-                }
-
-                if (productId != null && productIdToDbId.containsKey(productId)) {
-                    Product product = new Product();
-                    product.setId(productIdToDbId.get(productId));
-                    region.setProduct(product);
-                    // Восстанавливаем нормальный адрес
-                    region.setRegionAddress(cleanAddress);
-                    log.trace("Linked region to product: {}", productId);
-                } else {
-                    log.warn("Product not found for region productId: {}", productId);
-                    // Очищаем технические данные даже если связь не установлена
-                    if (address != null && address.contains("TEMP_PRODUCT_ID:")) {
-                        if (address.startsWith("TEMP_PRODUCT_ID:")) {
-                            region.setRegionAddress(null);
-                        } else {
-                            String cleanAddr = address.substring(0, address.indexOf(" [TEMP_PRODUCT_ID:"));
-                            region.setRegionAddress(cleanAddr);
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     /**
      * Парсинг строки CSV с учетом настроек маппинга
@@ -593,37 +572,25 @@ public class CsvImportService {
     }
 
     /**
-     * Преобразование строки стратегии в enum
-     */
-    private DuplicateStrategy getDuplicateStrategy(String strategyStr) {
-        switch (strategyStr) {
-            case "SKIP":
-                return DuplicateStrategy.SKIP;
-            case "OVERRIDE":
-                return DuplicateStrategy.OVERRIDE;
-            case "IGNORE":
-                return DuplicateStrategy.IGNORE;
-            default:
-                return DuplicateStrategy.SKIP;
-        }
-    }
-
-    /**
      * Результат импорта
      */
     public static class ImportResult {
+        @Getter
         private int totalProcessed = 0;
+        @Getter
         private long totalRecords = 0;
+        @Getter
         private final List<String> errors = new ArrayList<>();
         private final List<BatchProcessResult> batchResults = new ArrayList<>();
 
-        public int getTotalProcessed() { return totalProcessed; }
-        public void setTotalProcessed(int totalProcessed) { this.totalProcessed = totalProcessed; }
+        public void setTotalProcessed(int totalProcessed) {
+            this.totalProcessed = totalProcessed;
+        }
 
-        public long getTotalRecords() { return totalRecords; }
-        public void setTotalRecords(long totalRecords) { this.totalRecords = totalRecords; }
+        public void setTotalRecords(long totalRecords) {
+            this.totalRecords = totalRecords;
+        }
 
-        public List<String> getErrors() { return errors; }
         public void addError(int lineNumber, String error) {
             errors.add("Line " + lineNumber + ": " + error);
         }
@@ -637,19 +604,31 @@ public class CsvImportService {
      * Результат обработки пакета
      */
     public static class BatchProcessResult {
+        @Getter
         private int processed = 0;
+        @Getter
         private int failed = 0;
         private final List<String> errors = new ArrayList<>();
         private final List<BatchSaveResult> saveResults = new ArrayList<>();
 
-        public int getProcessed() { return processed; }
-        public int getFailed() { return failed; }
+        public void incrementProcessed() {
+            processed++;
+        }
 
-        public void incrementProcessed() { processed++; }
-        public void incrementFailed() { failed++; }
-        public void incrementFailed(int count) { failed += count; }
+        public void incrementFailed() {
+            failed++;
+        }
 
-        public void addError(String error) { errors.add(error); }
-        public void addSaveResult(BatchSaveResult result) { saveResults.add(result); }
+        public void incrementFailed(int count) {
+            failed += count;
+        }
+
+        public void addError(String error) {
+            errors.add(error);
+        }
+
+        public void addSaveResult(BatchSaveResult result) {
+            saveResults.add(result);
+        }
     }
 }

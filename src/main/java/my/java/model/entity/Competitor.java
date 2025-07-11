@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import my.java.util.transformer.ValueTransformerFactory;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import java.time.ZonedDateTime;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -22,6 +25,14 @@ public class Competitor implements ImportableEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private ZonedDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private ZonedDateTime updatedAt;
 
     private Long clientId;
 

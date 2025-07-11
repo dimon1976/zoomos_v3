@@ -43,7 +43,6 @@ CREATE TABLE products (
                           id BIGSERIAL PRIMARY KEY,
                           client_id BIGINT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
                           data_source VARCHAR(20) DEFAULT 'FILE' CHECK (data_source IN ('TASK', 'REPORT', 'FILE', 'API', 'SYSTEM')),
-                          file_id BIGINT,
 
     -- Основные поля продукта
                           product_id VARCHAR(255),
@@ -200,7 +199,6 @@ CREATE INDEX idx_file_operations_client_status ON file_operations(client_id, sta
 CREATE INDEX idx_products_client_id ON products(client_id);
 CREATE INDEX idx_products_product_id ON products(product_id);
 CREATE INDEX idx_products_name ON products(product_name);
-CREATE INDEX idx_products_file_id ON products(file_id);
 CREATE INDEX idx_products_brand ON products(product_brand);
 CREATE INDEX idx_products_category1 ON products(product_category1);
 CREATE INDEX idx_products_client_product_id ON products(client_id, product_id);

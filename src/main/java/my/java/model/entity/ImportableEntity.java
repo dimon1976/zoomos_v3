@@ -39,4 +39,12 @@ public interface ImportableEntity {
      * @param transformerFactory фабрика трансформеров
      */
     void setTransformerFactory(ValueTransformerFactory transformerFactory);
+
+
+    /**
+     * Устанавливает ID клиента
+     *
+     * @param clientId ID клиента
+     */
+    void setClientId(Long clientId);
 }

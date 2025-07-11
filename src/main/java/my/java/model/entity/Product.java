@@ -5,6 +5,9 @@ import lombok.Getter;
 import lombok.Setter;
 import my.java.model.enums.DataSourceType;
 import my.java.util.transformer.ValueTransformerFactory;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import java.time.ZonedDateTime;
 
 import java.util.*;
 
@@ -21,11 +24,21 @@ public class Product implements ImportableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private ZonedDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private ZonedDateTime updatedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "data_source")
     private DataSourceType dataSource;
 
-    private Long fileId;
+    @Column(name = "operation_id")
+    private Long operationId;
+
     private Long clientId;
 
     // Основные поля товара
@@ -241,28 +254,5 @@ public class Product implements ImportableEntity {
             return "Не указано название товара";
         }
         return null;
-    }
-
-    /**
-     * Вспомогательные методы для установки отношений
-     */
-    public void addRegionData(Region region) {
-        regionList.add(region);
-        region.setProduct(this);
-    }
-
-    public void removeRegionData(Region region) {
-        regionList.remove(region);
-        region.setProduct(null);
-    }
-
-    public void addCompetitorData(Competitor competitor) {
-        competitorList.add(competitor);
-        competitor.setProduct(this);
-    }
-
-    public void removeCompetitorData(Competitor competitor) {
-        competitorList.remove(competitor);
-        competitor.setProduct(null);
     }
 }

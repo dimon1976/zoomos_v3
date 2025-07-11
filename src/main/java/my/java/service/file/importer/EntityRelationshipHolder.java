@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/importer/EntityRelationshipHolder.java
 package my.java.service.file.importer;
 
 import lombok.Getter;
@@ -73,7 +74,6 @@ public class EntityRelationshipHolder {
         return regionsByProductId.getOrDefault(productId, Collections.emptyList());
     }
 
-
     /**
      * Установить связи с Product после сохранения в БД
      *
@@ -138,5 +138,51 @@ public class EntityRelationshipHolder {
                 .filter(entry -> !excludedProductIds.contains(entry.getValue()))
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Получить все продукты, связанные с дубликатами
+     */
+    public List<Product> getProductsWithDuplicateIds(Set<String> duplicateProductIds) {
+        return productsByProductId.entrySet().stream()
+                .filter(entry -> duplicateProductIds.contains(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Получить количество продуктов с указанными ID
+     */
+    public int getProductCountForIds(Set<String> productIds) {
+        return (int) productsByProductId.keySet().stream()
+                .filter(productIds::contains)
+                .count();
+    }
+
+    /**
+     * Получить все уникальные productId
+     */
+    public Set<String> getAllProductIds() {
+        return new HashSet<>(productsByProductId.keySet());
+    }
+
+    /**
+     * Очистить все данные
+     */
+    public void clear() {
+        productsByProductId.clear();
+        competitorsByProductId.clear();
+        regionsByProductId.clear();
+        competitorToProductId.clear();
+        regionToProductId.clear();
+    }
+
+    /**
+     * Проверить, пуст ли контейнер
+     */
+    public boolean isEmpty() {
+        return productsByProductId.isEmpty() &&
+                competitorsByProductId.isEmpty() &&
+                regionsByProductId.isEmpty();
     }
 }

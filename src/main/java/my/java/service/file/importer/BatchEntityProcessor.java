@@ -38,20 +38,48 @@ public class BatchEntityProcessor {
                                      String entityType,
                                      DuplicateStrategy strategy) {
 
-        log.debug("Saving batch of {} {} entities with strategy {}",
-                entities.size(), entityType, strategy);
+        log.info("=== BatchEntityProcessor.saveBatch ===");
+        log.info("Input: {} entities of type {}, strategy: {}", entities.size(), entityType, strategy);
 
         if (entities.isEmpty()) {
+            log.warn("Empty entities list provided, returning empty result");
             return new BatchSaveResult();
+        }
+
+        // Логируем первые несколько сущностей для диагностики
+        for (int i = 0; i < Math.min(3, entities.size()); i++) {
+            ImportableEntity entity = entities.get(i);
+            log.info("Entity {}: type={}", i, entity.getClass().getSimpleName());
+
+            if (entity instanceof Product product) {
+                log.info("  Product: productId={}, name={}", product.getProductId(), product.getProductName());
+            } else if (entity instanceof Competitor competitor) {
+                log.info("  Competitor: name={}, productRef={}", competitor.getCompetitorName(),
+                        competitor.getProduct() != null ? competitor.getProduct().getId() : "null");
+            } else if (entity instanceof Region region) {
+                log.info("  Region: name={}, productRef={}", region.getRegion(),
+                        region.getProduct() != null ? region.getProduct().getId() : "null");
+            }
         }
 
         try {
             // Делегируем обработку соответствующему процессору
             EntityProcessor processor = createProcessor(entityType);
-            return processor.processBatch(entities, strategy);
+            log.info("Created processor: {}", processor.getClass().getSimpleName());
+
+            BatchSaveResult result = processor.processBatch(entities, strategy);
+
+            log.info("=== BatchEntityProcessor result: saved={}, updated={}, skipped={}, failed={} ===",
+                    result.getSaved(), result.getUpdated(), result.getSkipped(), result.getFailed());
+
+            if (!result.getErrors().isEmpty()) {
+                log.error("Errors during batch save: {}", result.getErrors());
+            }
+
+            return result;
 
         } catch (Exception e) {
-            log.error("Error saving {} batch: {}", entityType, e.getMessage(), e);
+            log.error("Error in BatchEntityProcessor.saveBatch: {}", e.getMessage(), e);
             BatchSaveResult result = new BatchSaveResult();
             result.setFailed(entities.size());
             result.addError("Batch save failed: " + e.getMessage());

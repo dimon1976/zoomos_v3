@@ -1,22 +1,25 @@
+// src/main/java/my/java/service/file/importer/strategy/OverrideDuplicatesStrategy.java
 package my.java.service.file.importer.strategy;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import my.java.model.entity.ImportableEntity;
+import my.java.model.entity.Competitor;
 import my.java.model.entity.Product;
+import my.java.model.entity.Region;
 import my.java.repository.CompetitorRepository;
 import my.java.repository.ProductRepository;
 import my.java.repository.RegionRepository;
 import my.java.service.file.importer.BatchEntityProcessor;
 import my.java.service.file.importer.BatchSaveResult;
 import my.java.service.file.importer.DuplicateStrategy;
+import my.java.service.file.importer.EntityRelationshipHolder;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Стратегия перезаписи дубликатов
- * При обнаружении дубликата продукта обновляются все данные включая связанные записи
+ * При дубликатах внутри файла - берем последнее значение
+ * Для существующих в БД - полностью перезаписываем включая связанные сущности
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -28,95 +31,144 @@ public class OverrideDuplicatesStrategy implements DuplicateHandlingStrategy {
     private final RegionRepository regionRepository;
 
     @Override
-    public BatchSaveResult process(List<ImportableEntity> entities, String entityType,
-                                   Long clientId, Map<String, Object> existingData) {
-
-        // Для единичного импорта используем стандартную обработку с OVERRIDE
-        return batchEntityProcessor.saveBatch(entities, entityType, DuplicateStrategy.OVERRIDE);
-    }
-
-    @Override
-    public BatchSaveResult processCombined(List<ImportableEntity> productEntities,
-                                           Map<String, List<ImportableEntity>> relatedEntities,
-                                           Long clientId) {
+    public BatchSaveResult process(EntityRelationshipHolder holder, Long clientId) {
+        log.debug("Processing with OVERRIDE strategy for {} products", holder.getProductsByProductId().size());
 
         BatchSaveResult result = new BatchSaveResult();
 
-        // Шаг 1: Обрабатываем продукты с OVERRIDE стратегией
-        BatchSaveResult productResult = batchEntityProcessor.saveBatch(
-                productEntities, "PRODUCT", DuplicateStrategy.OVERRIDE);
+        // Убираем дубликаты внутри файла, оставляя последнее значение
+        EntityRelationshipHolder deduplicatedHolder = removeDuplicatesKeepLast(holder);
 
-        result.setSaved(productResult.getSaved());
-        result.setUpdated(productResult.getUpdated());
+        // Получаем продукты для проверки существования в БД
+        List<Product> products = deduplicatedHolder.getAllProducts();
+        Map<String, Long> existingProductIds = getExistingProductIds(products, clientId);
 
-        // Шаг 2: Для обновленных продуктов нужно удалить старые связанные записи
-        Set<String> updatedProductIds = getUpdatedProductIds(productEntities, clientId);
+        // Разделяем на новые и обновляемые
+        List<Product> newProducts = new ArrayList<>();
+        List<Product> updatedProducts = new ArrayList<>();
 
-        if (!updatedProductIds.isEmpty()) {
-            // Удаляем старые связанные записи для обновленных продуктов
-            deleteOldRelatedEntities(updatedProductIds, clientId);
+        for (Product product : products) {
+            Long existingId = existingProductIds.get(product.getProductId());
+            if (existingId != null) {
+                product.setId(existingId);
+                updatedProducts.add(product);
+            } else {
+                newProducts.add(product);
+            }
         }
 
-        // Шаг 3: Сохраняем новые связанные записи
-        for (Map.Entry<String, List<ImportableEntity>> entry : relatedEntities.entrySet()) {
-            String entityType = entry.getKey();
-            List<ImportableEntity> entities = entry.getValue();
+        // Для обновляемых продуктов удаляем старые связанные записи
+        if (!updatedProducts.isEmpty()) {
+            deleteOldRelatedEntities(updatedProducts, clientId);
+        }
 
-            if (!entities.isEmpty()) {
-                BatchSaveResult relatedResult = batchEntityProcessor.saveBatch(
-                        entities, entityType, DuplicateStrategy.IGNORE);
-                result.setSaved(result.getSaved() + relatedResult.getSaved());
-            }
+        // Сохраняем все продукты
+        if (!newProducts.isEmpty()) {
+            BatchSaveResult newResult = batchEntityProcessor.saveBatch(
+                    new ArrayList<>(newProducts), "PRODUCT", DuplicateStrategy.IGNORE);
+            result.setSaved(newResult.getSaved());
+        }
+
+        if (!updatedProducts.isEmpty()) {
+            BatchSaveResult updateResult = batchEntityProcessor.saveBatch(
+                    new ArrayList<>(updatedProducts), "PRODUCT", DuplicateStrategy.OVERRIDE);
+            result.setUpdated(updateResult.getUpdated());
+        }
+
+        // Сохраняем связанные сущности
+        List<Competitor> competitors = getAllCompetitors(deduplicatedHolder);
+        List<Region> regions = getAllRegions(deduplicatedHolder);
+
+        if (!competitors.isEmpty()) {
+            BatchSaveResult competitorResult = batchEntityProcessor.saveBatch(
+                    new ArrayList<>(competitors), "COMPETITOR", DuplicateStrategy.IGNORE);
+            result.setSaved(result.getSaved() + competitorResult.getSaved());
+        }
+
+        if (!regions.isEmpty()) {
+            BatchSaveResult regionResult = batchEntityProcessor.saveBatch(
+                    new ArrayList<>(regions), "REGION", DuplicateStrategy.IGNORE);
+            result.setSaved(result.getSaved() + regionResult.getSaved());
         }
 
         return result;
     }
 
     @Override
-    public DuplicateStrategy getType() {
-        return DuplicateStrategy.OVERRIDE;
+    public String getStrategyType() {
+        return "OVERRIDE";
     }
 
     /**
-     * Получение ID обновленных продуктов
+     * Убирает дубликаты внутри файла, оставляя последнее значение
      */
-    private Set<String> getUpdatedProductIds(List<ImportableEntity> productEntities, Long clientId) {
-        Set<String> productIds = productEntities.stream()
-                .map(e -> ((Product) e).getProductId())
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+    private EntityRelationshipHolder removeDuplicatesKeepLast(EntityRelationshipHolder original) {
+        EntityRelationshipHolder deduplicated = new EntityRelationshipHolder();
 
-        // Проверяем, какие из них уже существовали в БД
-        List<String> existingIds = productRepository.findExistingProductIds(clientId, new ArrayList<>(productIds));
-        return new HashSet<>(existingIds);
-    }
-
-    /**
-     * Удаление старых связанных записей для обновляемых продуктов
-     */
-    private void deleteOldRelatedEntities(Set<String> productIds, Long clientId) {
-        try {
-            // Получаем ID продуктов из БД
-            Map<String, Long> productIdToDbId = new HashMap<>();
-            for (String productId : productIds) {
-                productRepository.findByProductIdAndClientId(productId, clientId)
-                        .ifPresent(p -> productIdToDbId.put(productId, p.getId()));
+        // Для каждого productId берем последний Product
+        Map<String, Product> lastProducts = new LinkedHashMap<>(); // LinkedHashMap сохраняет порядок
+        for (Product product : original.getAllProducts()) {
+            if (product.getProductId() != null) {
+                lastProducts.put(product.getProductId(), product);
             }
-
-            if (!productIdToDbId.isEmpty()) {
-                List<Long> dbIds = new ArrayList<>(productIdToDbId.values());
-
-                // Удаляем старые записи конкурентов
-                log.debug("Deleting old competitor records for {} products", dbIds.size());
-                competitorRepository.deleteByProductIdIn(dbIds);
-
-                // Удаляем старые записи регионов
-                log.debug("Deleting old region records for {} products", dbIds.size());
-                regionRepository.deleteByProductIdIn(dbIds);
-            }
-        } catch (Exception e) {
-            log.error("Error deleting old related entities", e);
-            // Продолжаем выполнение даже если удаление не удалось
         }
+
+        // Добавляем уникальные продукты в новый holder
+        for (Product product : lastProducts.values()) {
+            deduplicated.addProduct(product);
+
+            // Добавляем связанные сущности только для оставшихся продуктов
+            String productId = product.getProductId();
+            original.getCompetitorsForProduct(productId).forEach(c ->
+                    deduplicated.addCompetitor(productId, c));
+            original.getRegionsForProduct(productId).forEach(r ->
+                    deduplicated.addRegion(productId, r));
+        }
+
+        return deduplicated;
+    }
+
+    /**
+     * Получает существующие продукты из БД
+     */
+    private Map<String, Long> getExistingProductIds(List<Product> products, Long clientId) {
+        Map<String, Long> existing = new HashMap<>();
+
+        for (Product product : products) {
+            if (product.getProductId() != null) {
+                productRepository.findByProductIdAndClientId(product.getProductId(), clientId)
+                        .ifPresent(p -> existing.put(product.getProductId(), p.getId()));
+            }
+        }
+
+        return existing;
+    }
+
+    /**
+     * Удаляет старые связанные записи для обновляемых продуктов
+     */
+    private void deleteOldRelatedEntities(List<Product> updatedProducts, Long clientId) {
+        List<Long> productDbIds = updatedProducts.stream()
+                .map(Product::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (!productDbIds.isEmpty()) {
+            log.debug("Deleting old related entities for {} products", productDbIds.size());
+            competitorRepository.deleteByProductIdIn(productDbIds);
+            regionRepository.deleteByProductIdIn(productDbIds);
+        }
+    }
+
+    private List<Competitor> getAllCompetitors(EntityRelationshipHolder holder) {
+        return holder.getCompetitorsByProductId().values().stream()
+                .flatMap(List::stream)
+                .toList();
+    }
+
+    private List<Region> getAllRegions(EntityRelationshipHolder holder) {
+        return holder.getRegionsByProductId().values().stream()
+                .flatMap(List::stream)
+                .toList();
     }
 }

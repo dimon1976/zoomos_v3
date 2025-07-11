@@ -1,3 +1,4 @@
+// src/main/java/my/java/service/file/importer/strategy/SkipDuplicatesStrategy.java
 package my.java.service.file.importer.strategy;
 
 import lombok.RequiredArgsConstructor;
@@ -6,209 +7,151 @@ import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
-import my.java.repository.ProductRepository;
 import my.java.service.file.importer.BatchEntityProcessor;
 import my.java.service.file.importer.BatchSaveResult;
 import my.java.service.file.importer.DuplicateStrategy;
 import my.java.service.file.importer.EntityRelationshipHolder;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
- * Стратегия пропуска дубликатов
- * При обнаружении дубликата продукта пропускаются все связанные записи
+ * Стратегия пропуска дубликатов внутри файла
+ * При обнаружении дубликата по productId - пропускаем всю строку
  */
 @Slf4j
 @RequiredArgsConstructor
 public class SkipDuplicatesStrategy implements DuplicateHandlingStrategy {
 
     private final BatchEntityProcessor batchEntityProcessor;
-    private final ProductRepository productRepository;
 
     @Override
-    public BatchSaveResult process(List<ImportableEntity> entities, String entityType,
-                                   Long clientId, Map<String, Object> existingData) {
+    public BatchSaveResult process(EntityRelationshipHolder holder, Long clientId) {
+        log.info("=== SKIP Strategy Processing ===");
+        log.info("Input: {} products, {} competitors, {} regions",
+                holder.getProductsByProductId().size(),
+                holder.getCompetitorsByProductId().size(),
+                holder.getRegionsByProductId().size());
 
         BatchSaveResult result = new BatchSaveResult();
 
-        if (entities.isEmpty()) {
-            return result;
-        }
+        // Находим дубликаты внутри файла по productId
+        Set<String> seenProductIds = new HashSet<>();
+        Set<String> duplicateProductIds = new HashSet<>();
 
-        if ("PRODUCT".equals(entityType)) {
-            return processProducts(entities, clientId);
-        } else {
-            // Для других типов сущностей просто сохраняем
-            return batchEntityProcessor.saveBatch(entities, entityType, DuplicateStrategy.IGNORE);
-        }
-    }
-
-    @Override
-    public BatchSaveResult processCombined(List<ImportableEntity> productEntities,
-                                           Map<String, List<ImportableEntity>> relatedEntities,
-                                           Long clientId) {
-        return processCombined(productEntities, relatedEntities, clientId, null);
-    }
-
-    /**
-     * Обработка COMBINED импорта с использованием EntityRelationshipHolder
-     */
-    public BatchSaveResult processCombined(List<ImportableEntity> productEntities,
-                                           Map<String, List<ImportableEntity>> relatedEntities,
-                                           Long clientId,
-                                           EntityRelationshipHolder holder) {
-
-        BatchSaveResult result = new BatchSaveResult();
-
-        // Получаем существующие продукты
-        Set<String> existingProductIds = getExistingProductIds(productEntities, clientId);
-
-        // Фильтруем продукты - оставляем только новые
-        List<Product> newProducts = new ArrayList<>();
-        Set<String> skippedProductIds = new HashSet<>();
-
-        for (ImportableEntity entity : productEntities) {
-            Product product = (Product) entity;
-            if (product.getProductId() != null && existingProductIds.contains(product.getProductId())) {
-                result.incrementSkipped();
-                skippedProductIds.add(product.getProductId());
-                log.debug("Skipping duplicate product: clientId={}, productId={}",
-                        clientId, product.getProductId());
-            } else {
-                newProducts.add(product);
+        for (String productId : holder.getProductsByProductId().keySet()) {
+            if (productId != null && !seenProductIds.add(productId)) {
+                duplicateProductIds.add(productId);
+                log.debug("Found duplicate productId in file: {}", productId);
             }
         }
 
-        // Сохраняем новые продукты
-        if (!newProducts.isEmpty()) {
+        log.info("Found {} duplicate productIds: {}", duplicateProductIds.size(), duplicateProductIds);
+
+        // Оставляем только уникальные записи (первое вхождение)
+        List<Product> uniqueProducts = filterUniqueProducts(holder, duplicateProductIds);
+        List<Competitor> uniqueCompetitors = filterUniqueCompetitors(holder, duplicateProductIds);
+        List<Region> uniqueRegions = filterUniqueRegions(holder, duplicateProductIds);
+
+        log.info("After filtering: {} unique products, {} unique competitors, {} unique regions",
+                uniqueProducts.size(), uniqueCompetitors.size(), uniqueRegions.size());
+
+        // Подсчитываем пропущенные записи
+        int skippedProducts = holder.getProductsByProductId().size() - uniqueProducts.size();
+        int skippedCompetitors = countSkippedCompetitors(holder, duplicateProductIds);
+        int skippedRegions = countSkippedRegions(holder, duplicateProductIds);
+
+        result.setSkipped(skippedProducts + skippedCompetitors + skippedRegions);
+
+        log.info("Skipped {} duplicate records (products: {}, competitors: {}, regions: {})",
+                result.getSkipped(), skippedProducts, skippedCompetitors, skippedRegions);
+
+        // Сохраняем уникальные записи
+        if (!uniqueProducts.isEmpty()) {
+            log.info("Saving {} unique products...", uniqueProducts.size());
             BatchSaveResult productResult = batchEntityProcessor.saveBatch(
-                    new ArrayList<>(newProducts), "PRODUCT", DuplicateStrategy.IGNORE);
+                    new ArrayList<>(uniqueProducts), "PRODUCT", DuplicateStrategy.IGNORE);
             result.setSaved(productResult.getSaved());
-        }
-
-        // Фильтруем связанные сущности
-        if (holder != null) {
-            // Используем holder для точной фильтрации
-            List<Competitor> competitorsToSave = holder.getCompetitorsExcludingProductIds(skippedProductIds);
-            List<Region> regionsToSave = holder.getRegionsExcludingProductIds(skippedProductIds);
-
-            if (!competitorsToSave.isEmpty()) {
-                BatchSaveResult competitorResult = batchEntityProcessor.saveBatch(
-                        new ArrayList<>(competitorsToSave), "COMPETITOR", DuplicateStrategy.IGNORE);
-                result.setSaved(result.getSaved() + competitorResult.getSaved());
-            }
-
-            if (!regionsToSave.isEmpty()) {
-                BatchSaveResult regionResult = batchEntityProcessor.saveBatch(
-                        new ArrayList<>(regionsToSave), "REGION", DuplicateStrategy.IGNORE);
-                result.setSaved(result.getSaved() + regionResult.getSaved());
-            }
-
-            // Подсчитываем пропущенные
-            int skippedCompetitors = holder.getCompetitorsByProductId().entrySet().stream()
-                    .filter(e -> skippedProductIds.contains(e.getKey()))
-                    .mapToInt(e -> e.getValue().size())
-                    .sum();
-
-            int skippedRegions = holder.getRegionsByProductId().entrySet().stream()
-                    .filter(e -> skippedProductIds.contains(e.getKey()))
-                    .mapToInt(e -> e.getValue().size())
-                    .sum();
-
-            result.addSkipped(skippedCompetitors + skippedRegions);
-
-        } else {
-            // Fallback для случаев без holder
-            for (Map.Entry<String, List<ImportableEntity>> entry : relatedEntities.entrySet()) {
-                String entityType = entry.getKey();
-                List<ImportableEntity> entities = entry.getValue();
-
-                if (!entities.isEmpty()) {
-                    // Без holder сохраняем все связанные сущности
-                    BatchSaveResult relatedResult = batchEntityProcessor.saveBatch(
-                            entities, entityType, DuplicateStrategy.IGNORE);
-                    result.setSaved(result.getSaved() + relatedResult.getSaved());
-                }
+            log.info("Saved {} products, failed: {}", productResult.getSaved(), productResult.getFailed());
+            if (!productResult.getErrors().isEmpty()) {
+                log.error("Product save errors: {}", productResult.getErrors());
             }
         }
+
+        if (!uniqueCompetitors.isEmpty()) {
+            log.info("Saving {} unique competitors...", uniqueCompetitors.size());
+            BatchSaveResult competitorResult = batchEntityProcessor.saveBatch(
+                    new ArrayList<>(uniqueCompetitors), "COMPETITOR", DuplicateStrategy.IGNORE);
+            result.setSaved(result.getSaved() + competitorResult.getSaved());
+            log.info("Saved {} competitors, failed: {}", competitorResult.getSaved(), competitorResult.getFailed());
+            if (!competitorResult.getErrors().isEmpty()) {
+                log.error("Competitor save errors: {}", competitorResult.getErrors());
+            }
+        }
+
+        if (!uniqueRegions.isEmpty()) {
+            log.info("Saving {} unique regions...", uniqueRegions.size());
+            BatchSaveResult regionResult = batchEntityProcessor.saveBatch(
+                    new ArrayList<>(uniqueRegions), "REGION", DuplicateStrategy.IGNORE);
+            result.setSaved(result.getSaved() + regionResult.getSaved());
+            log.info("Saved {} regions, failed: {}", regionResult.getSaved(), regionResult.getFailed());
+            if (!regionResult.getErrors().isEmpty()) {
+                log.error("Region save errors: {}", regionResult.getErrors());
+            }
+        }
+
+        log.info("=== SKIP Strategy Result: saved={}, skipped={}, failed={} ===",
+                result.getSaved(), result.getSkipped(), result.getFailed());
 
         return result;
     }
 
     @Override
-    public DuplicateStrategy getType() {
-        return DuplicateStrategy.SKIP;
+    public String getStrategyType() {
+        return "SKIP";
     }
 
     /**
-     * Обработка только продуктов
+     * Фильтрует продукты, исключая дубликаты (оставляет первое вхождение)
      */
-    private BatchSaveResult processProducts(List<ImportableEntity> entities, Long clientId) {
-        Set<String> existingProductIds = getExistingProductIds(entities, clientId);
+    private List<Product> filterUniqueProducts(EntityRelationshipHolder holder, Set<String> duplicateIds) {
+        List<Product> uniqueProducts = new ArrayList<>();
+        Set<String> addedProductIds = new HashSet<>();
 
-        List<ImportableEntity> newProducts = entities.stream()
-                .filter(entity -> {
-                    Product product = (Product) entity;
-                    return product.getProductId() == null ||
-                            !existingProductIds.contains(product.getProductId());
-                })
-                .collect(Collectors.toList());
-
-        BatchSaveResult result = new BatchSaveResult();
-        result.setSkipped(entities.size() - newProducts.size());
-
-        if (!newProducts.isEmpty()) {
-            BatchSaveResult saveResult = batchEntityProcessor.saveBatch(
-                    newProducts, "PRODUCT", DuplicateStrategy.IGNORE);
-            result.setSaved(saveResult.getSaved());
+        for (Product product : holder.getAllProducts()) {
+            String productId = product.getProductId();
+            if (productId == null || !duplicateIds.contains(productId) || addedProductIds.add(productId)) {
+                uniqueProducts.add(product);
+            }
         }
 
-        return result;
+        return uniqueProducts;
     }
 
     /**
-     * Получение существующих productId из БД
+     * Фильтрует конкурентов, исключая связанных с дубликатами
      */
-    private Set<String> getExistingProductIds(List<ImportableEntity> entities, Long clientId) {
-        List<String> productIds = entities.stream()
-                .map(e -> ((Product) e).getProductId())
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
-
-        if (productIds.isEmpty()) {
-            return Collections.emptySet();
-        }
-
-        return new HashSet<>(productRepository.findExistingProductIds(clientId, productIds));
+    private List<Competitor> filterUniqueCompetitors(EntityRelationshipHolder holder, Set<String> duplicateIds) {
+        return holder.getCompetitorsExcludingProductIds(duplicateIds);
     }
 
     /**
-     * Фильтрация связанных сущностей - исключаем те, что связаны с пропущенными продуктами
+     * Фильтрует регионы, исключая связанных с дубликатами
      */
-    private List<ImportableEntity> filterRelatedEntities(List<ImportableEntity> entities,
-                                                         Set<String> skippedProductIds) {
-        return entities.stream()
-                .filter(entity -> {
-                    // Получаем productId из связанной сущности
-                    String productId = getProductIdFromEntity(entity);
-                    return productId == null || !skippedProductIds.contains(productId);
-                })
-                .collect(Collectors.toList());
+    private List<Region> filterUniqueRegions(EntityRelationshipHolder holder, Set<String> duplicateIds) {
+        return holder.getRegionsExcludingProductIds(duplicateIds);
     }
 
-    /**
-     * Получение productId из связанной сущности
-     * Использует информацию, сохраненную в EntityRelationshipHolder
-     */
-    private String getProductIdFromEntity(ImportableEntity entity) {
-        // В контексте использования EntityRelationshipHolder,
-        // productId должен быть доступен через связь, установленную в holder
-        // Для Competitor и Region это будет productId, с которым они были связаны
+    private int countSkippedCompetitors(EntityRelationshipHolder holder, Set<String> duplicateIds) {
+        return holder.getCompetitorsByProductId().entrySet().stream()
+                .filter(e -> duplicateIds.contains(e.getKey()))
+                .mapToInt(e -> e.getValue().size())
+                .sum();
+    }
 
-        // Это временное решение - в реальности productId должен передаваться
-        // через контекст обработки или сохраняться в метаданных сущности
-        return null;
+    private int countSkippedRegions(EntityRelationshipHolder holder, Set<String> duplicateIds) {
+        return holder.getRegionsByProductId().entrySet().stream()
+                .filter(e -> duplicateIds.contains(e.getKey()))
+                .mapToInt(e -> e.getValue().size())
+                .sum();
     }
 }

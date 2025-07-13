@@ -132,6 +132,7 @@
                             <option value="PRODUCT" th:disabled="${mapping.importType == 'COMBINED'}">Товары</option>
                             <option value="COMPETITOR" th:disabled="${mapping.importType == 'COMBINED'}">Конкуренты</option>
                             <option value="REGION" th:disabled="${mapping.importType == 'COMBINED'}">Регионы</option>
+                            <option value="HANDBOOK" th:disabled="${mapping.importType == 'HANDBOOK'}">Справочник</option>
                         </select>
                     </div>
                 </div>
@@ -179,9 +180,9 @@
                     <div class="col-md-6">
                         <label for="duplicateStrategy" class="form-label">Обработка дубликатов</label>
                         <select class="form-select" id="duplicateStrategy" th:field="*{duplicateStrategy}">
+                            <option value="IGNORE" selected>Игнорировать проверку дубликатов (записывать все)</option>
                             <option value="SKIP">Пропускать дубликаты</option>
                             <option value="OVERRIDE">Перезаписывать существующие</option>
-                            <option value="IGNORE">Игнорировать проверку дубликатов (записывать все)</option>
                         </select>
                     </div>
                 </div>
@@ -230,6 +231,7 @@
                                     <option value="PRODUCT" th:selected="${detail.targetEntity == 'PRODUCT'}">Товар</option>
                                     <option value="COMPETITOR" th:selected="${detail.targetEntity == 'COMPETITOR'}">Конкурент</option>
                                     <option value="REGION" th:selected="${detail.targetEntity == 'REGION'}">Регион</option>
+                                    <option value="HANDBOOK" th:selected="${detail.targetEntity == 'HANDBOOK'}">Справочник</option>
                                 </select>
                             </td>
                             <td>
@@ -372,6 +374,7 @@
             case 'PRODUCT': return 'Товар';
             case 'COMPETITOR': return 'Конкурент';
             case 'REGION': return 'Регион';
+            case 'HANDBOOK': return 'Справочник';
             default: return entityType;
         }
     }
@@ -397,6 +400,7 @@
                     <option value="PRODUCT">Товар</option>
                     <option value="COMPETITOR">Конкурент</option>
                     <option value="REGION">Регион</option>
+                    <option value="HANDBOOK">Справочник</option>
                 </select>
             `;
         }

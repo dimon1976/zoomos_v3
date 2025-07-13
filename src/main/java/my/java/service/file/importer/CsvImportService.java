@@ -241,11 +241,17 @@ public class CsvImportService {
                 // Извлекаем productId из исходных данных
                 String productId = extractProductIdFromRow(rowData, mapping);
 
+                // Начинаем новую строку
+                relationshipHolder.startNewRow(productId);
+
                 // Применяем маппинг и создаем сущности
                 Map<String, ImportableEntity> entities = fieldMappingService.applyMapping(mapping, rowData);
 
                 // Распределяем сущности по типам с сохранением связей
                 distributeEntitiesWithRelationships(entities, productId, client, operation.getId(), relationshipHolder);
+
+                // Завершаем текущую строку
+                relationshipHolder.finishCurrentRow();
 
                 result.incrementProcessed();
             } catch (Exception e) {
@@ -347,29 +353,62 @@ public class CsvImportService {
         BatchProcessResult result = new BatchProcessResult();
 
         try {
-            // Получаем продукты и связанные сущности
-            List<ImportableEntity> products = new ArrayList<>(holder.getAllProducts());
-
+            // Подготавливаем данные в зависимости от стратегии
+            List<ImportableEntity> products;
             Map<String, List<ImportableEntity>> relatedEntities = new HashMap<>();
             relatedEntities.put("COMPETITOR", new ArrayList<>());
             relatedEntities.put("REGION", new ArrayList<>());
 
-            // Собираем все связанные сущности
-            for (Product product : holder.getAllProducts()) {
-                String productId = product.getProductId();
-                relatedEntities.get("COMPETITOR").addAll(holder.getCompetitorsForProduct(productId));
-                relatedEntities.get("REGION").addAll(holder.getRegionsForProduct(productId));
+            switch (strategy.getType()) {
+                case IGNORE -> {
+                    // IGNORE - берем все продукты, включая дубликаты
+                    products = new ArrayList<>(holder.getAllProducts());
+
+                    // Собираем все связанные сущности из всех строк
+                    for (EntityRelationshipHolder.ImportRow row : holder.getAllRows()) {
+                        relatedEntities.get("COMPETITOR").addAll(row.getCompetitors());
+                        relatedEntities.get("REGION").addAll(row.getRegions());
+                    }
+                }
+
+                case SKIP -> {
+                    // SKIP - берем только уникальные продукты
+                    products = new ArrayList<>(holder.getUniqueProducts());
+
+                    // Собираем связанные сущности только для первого вхождения каждого productId
+                    Set<String> processedProductIds = new HashSet<>();
+                    for (EntityRelationshipHolder.ImportRow row : holder.getAllRows()) {
+                        if (row.getProductId() != null && !processedProductIds.contains(row.getProductId())) {
+                            processedProductIds.add(row.getProductId());
+                            relatedEntities.get("COMPETITOR").addAll(row.getCompetitors());
+                            relatedEntities.get("REGION").addAll(row.getRegions());
+                        }
+                    }
+                }
+
+                case OVERRIDE -> {
+                    // OVERRIDE - берем последнее вхождение каждого productId
+                    Map<String, EntityRelationshipHolder.ImportRow> lastRowByProductId = new HashMap<>();
+                    for (EntityRelationshipHolder.ImportRow row : holder.getAllRows()) {
+                        if (row.getProductId() != null) {
+                            lastRowByProductId.put(row.getProductId(), row);
+                        }
+                    }
+
+                    products = new ArrayList<>();
+                    for (EntityRelationshipHolder.ImportRow row : lastRowByProductId.values()) {
+                        products.add(row.getProduct());
+                        relatedEntities.get("COMPETITOR").addAll(row.getCompetitors());
+                        relatedEntities.get("REGION").addAll(row.getRegions());
+                    }
+                }
+
+                default -> throw new IllegalArgumentException("Unknown strategy: " + strategy.getType());
             }
 
             // Обрабатываем через стратегию с передачей holder
             BatchSaveResult saveResult = strategy.processCombined(products, relatedEntities, clientId, holder);
             result.addSaveResult(saveResult);
-
-            // После сохранения продуктов устанавливаем связи для связанных сущностей
-            // (только если стратегия не SKIP, так как SKIP уже отфильтровала нужные сущности)
-            if (strategy.getType() != DuplicateStrategy.SKIP) {
-                establishDatabaseRelationships(holder, clientId);
-            }
 
         } catch (Exception e) {
             log.error("Error in combined processing: {}", e.getMessage(), e);
@@ -415,9 +454,13 @@ public class CsvImportService {
                                                      Long operationId,
                                                      EntityRelationshipHolder holder) {
 
+        log.debug("Distributing {} entities for productId: {}", entities.size(), productId);
+
         for (Map.Entry<String, ImportableEntity> entry : entities.entrySet()) {
             ImportableEntity entity = entry.getValue();
             String entityType = entry.getKey();
+
+            log.debug("Processing entity type: {}, productId: {}", entityType, productId);
 
             // Устанавливаем общие поля
             setCommonFields(entity, client.getId(), operationId);
@@ -426,14 +469,20 @@ public class CsvImportService {
             switch (entityType) {
                 case "PRODUCT" -> {
                     Product product = (Product) entity;
+                    log.debug("Adding product to holder: productId={}, productName={}",
+                            product.getProductId(), product.getProductName());
                     holder.addProduct(product);
                 }
                 case "COMPETITOR" -> {
                     Competitor competitor = (Competitor) entity;
+                    log.debug("Adding competitor to holder: productId={}, competitorName={}",
+                            productId, competitor.getCompetitorName());
                     holder.addCompetitor(productId, competitor);
                 }
                 case "REGION" -> {
                     Region region = (Region) entity;
+                    log.debug("Adding region to holder: productId={}, regionName={}",
+                            productId, region.getRegion());
                     holder.addRegion(productId, region);
                 }
                 default -> log.warn("Unknown entity type: {}", entityType);

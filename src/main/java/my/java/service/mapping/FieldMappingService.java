@@ -6,10 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import my.java.dto.FieldMappingDto;
 import my.java.dto.FieldMappingDto.FieldMappingDetailDto;
 import my.java.model.*;
-import my.java.model.entity.Competitor;
-import my.java.model.entity.ImportableEntity;
-import my.java.model.entity.Product;
-import my.java.model.entity.Region;
+import my.java.model.entity.*;
 import my.java.repository.FieldMappingRepository;
 import my.java.service.client.ClientService;
 import my.java.util.transformer.ValueTransformerFactory;
@@ -186,6 +183,7 @@ public class FieldMappingService {
             result.put("PRODUCT", new Product().getFieldMappings());
             result.put("COMPETITOR", new Competitor().getFieldMappings());
             result.put("REGION", new Region().getFieldMappings());
+            result.put("HANDBOOK", new AvHandbook().getFieldMappings());
         } else {
             // Для одиночного типа возвращаем поля конкретной сущности
             ImportableEntity entity = createEntityByType(entityType);

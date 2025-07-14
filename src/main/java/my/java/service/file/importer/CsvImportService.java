@@ -228,7 +228,7 @@ public class CsvImportService {
     public BatchProcessResult processBatch(List<Map<String, String>> batchData,
                                            FieldMapping mapping, Client client, FileOperation operation) {
 
-        log.debug("Processing batch of {} records", batchData.size());
+        log.debug("Processing batch of {} records for {} import", batchData.size(), mapping.getImportType());
 
         BatchProcessResult result = new BatchProcessResult();
 
@@ -238,17 +238,26 @@ public class CsvImportService {
         // Этап 1: Парсинг данных и создание сущностей
         for (Map<String, String> rowData : batchData) {
             try {
-                // Извлекаем productId из исходных данных
-                String productId = extractProductIdFromRow(rowData, mapping);
+                // Для SINGLE импорта используем индекс строки как уникальный идентификатор
+                String rowIdentifier;
+                if ("COMBINED".equals(mapping.getImportType())) {
+                    // Для COMBINED импорта извлекаем productId
+                    rowIdentifier = extractProductIdFromRow(rowData, mapping);
+                } else {
+                    // Для SINGLE импорта используем уникальный идентификатор строки
+                    rowIdentifier = "row_" + result.getProcessed();
+                }
+
+                log.debug("Processing row with identifier: {}", rowIdentifier);
 
                 // Начинаем новую строку
-                relationshipHolder.startNewRow(productId);
+                relationshipHolder.startNewRow(rowIdentifier);
 
                 // Применяем маппинг и создаем сущности
                 Map<String, ImportableEntity> entities = fieldMappingService.applyMapping(mapping, rowData);
 
                 // Распределяем сущности по типам с сохранением связей
-                distributeEntitiesWithRelationships(entities, productId, client, operation.getId(), relationshipHolder);
+                distributeEntitiesWithRelationships(entities, rowIdentifier, client, operation.getId(), relationshipHolder);
 
                 // Завершаем текущую строку
                 relationshipHolder.finishCurrentRow();
@@ -267,46 +276,60 @@ public class CsvImportService {
         if ("COMBINED".equals(mapping.getImportType())) {
             return processCombinedEntitiesWithStrategy(relationshipHolder, strategy, client.getId());
         } else {
-            return processSingleEntityWithStrategy(relationshipHolder, strategy, mapping.getImportType(), client.getId());
+            return processSingleEntityWithStrategy(relationshipHolder, strategy, mapping.getEntityType(), client.getId());
         }
     }
 
     private BatchProcessResult processSingleEntityWithStrategy(EntityRelationshipHolder holder,
                                                                DuplicateHandlingStrategy strategy,
-                                                               String importType,
+                                                               String entityType,
                                                                Long clientId) {
         BatchProcessResult result = new BatchProcessResult();
 
         try {
-            // Определяем тип сущности для SINGLE импорта
-            String entityType = determineEntityTypeForSingleImport(holder);
-
-            if (entityType == null) {
-                log.warn("No entities found in holder for single import");
-                return result;
-            }
+            log.debug("Processing SINGLE import for entity type: {}", entityType);
 
             List<ImportableEntity> entities = new ArrayList<>();
 
+            // Для SINGLE импорта собираем все сущности нужного типа
             switch (entityType) {
-                case "PRODUCT" -> entities.addAll(holder.getAllProducts());
+                case "PRODUCT" -> {
+                    entities.addAll(holder.getAllProducts());
+                    log.debug("Found {} products for SINGLE import", entities.size());
+                }
                 case "COMPETITOR" -> {
-                    // Для конкурентов нужно сначала установить связи с продуктами
-                    establishDatabaseRelationships(holder, clientId);
-                    holder.getCompetitorsByProductId().values()
-                            .forEach(entities::addAll);
+                    // Для SINGLE импорта конкурентов они не связаны с продуктами
+                    for (EntityRelationshipHolder.ImportRow row : holder.getAllRows()) {
+                        entities.addAll(row.getCompetitors());
+                    }
+                    log.debug("Found {} competitors for SINGLE import", entities.size());
                 }
                 case "REGION" -> {
-                    // Для регионов также устанавливаем связи
-                    establishDatabaseRelationships(holder, clientId);
-                    holder.getRegionsByProductId().values()
-                            .forEach(entities::addAll);
+                    // Для SINGLE импорта регионов они не связаны с продуктами
+                    for (EntityRelationshipHolder.ImportRow row : holder.getAllRows()) {
+                        entities.addAll(row.getRegions());
+                    }
+                    log.debug("Found {} regions for SINGLE import", entities.size());
+                }
+                default -> {
+                    log.error("Unknown entity type for SINGLE import: {}", entityType);
+                    result.addError("Неизвестный тип сущности: " + entityType);
+                    return result;
                 }
             }
 
             if (!entities.isEmpty()) {
+                log.info("Processing {} entities of type {} with strategy {}",
+                        entities.size(), entityType, strategy.getType());
+
                 BatchSaveResult saveResult = strategy.process(entities, entityType, clientId, new HashMap<>());
                 result.addSaveResult(saveResult);
+
+                log.info("SINGLE import result: saved={}, failed={}",
+                        saveResult.getSaved(), saveResult.getFailed());
+            } else {
+                log.warn("No entities found for SINGLE import of type {}", entityType);
+                result.addError("Не найдено данных для импорта");
             }
 
         } catch (Exception e) {
@@ -449,18 +472,18 @@ public class CsvImportService {
      * Распределение сущностей с сохранением связей через EntityRelationshipHolder
      */
     private void distributeEntitiesWithRelationships(Map<String, ImportableEntity> entities,
-                                                     String productId,
+                                                     String rowIdentifier,
                                                      Client client,
                                                      Long operationId,
                                                      EntityRelationshipHolder holder) {
 
-        log.debug("Distributing {} entities for productId: {}", entities.size(), productId);
+        log.debug("Distributing {} entities for rowIdentifier: {}", entities.size(), rowIdentifier);
 
         for (Map.Entry<String, ImportableEntity> entry : entities.entrySet()) {
             ImportableEntity entity = entry.getValue();
             String entityType = entry.getKey();
 
-            log.debug("Processing entity type: {}, productId: {}", entityType, productId);
+            log.debug("Processing entity type: {}, rowIdentifier: {}", entityType, rowIdentifier);
 
             // Устанавливаем общие поля
             setCommonFields(entity, client.getId(), operationId);
@@ -475,15 +498,17 @@ public class CsvImportService {
                 }
                 case "COMPETITOR" -> {
                     Competitor competitor = (Competitor) entity;
-                    log.debug("Adding competitor to holder: productId={}, competitorName={}",
-                            productId, competitor.getCompetitorName());
-                    holder.addCompetitor(productId, competitor);
+                    log.debug("Adding competitor to holder: rowIdentifier={}, competitorName={}",
+                            rowIdentifier, competitor.getCompetitorName());
+                    // Для SINGLE импорта конкурентов productId может быть null
+                    holder.addCompetitor(rowIdentifier, competitor);
                 }
                 case "REGION" -> {
                     Region region = (Region) entity;
-                    log.debug("Adding region to holder: productId={}, regionName={}",
-                            productId, region.getRegion());
-                    holder.addRegion(productId, region);
+                    log.debug("Adding region to holder: rowIdentifier={}, regionName={}",
+                            rowIdentifier, region.getRegion());
+                    // Для SINGLE импорта регионов productId может быть null
+                    holder.addRegion(rowIdentifier, region);
                 }
                 default -> log.warn("Unknown entity type: {}", entityType);
             }

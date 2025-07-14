@@ -125,22 +125,31 @@ public class EntityRelationshipHolder {
      */
     public void finishCurrentRow() {
         if (currentRow != null) {
-            log.debug("Finishing current row with productId: {}, has product: {}",
-                    currentRow.getProductId(), currentRow.getProduct() != null);
+            log.debug("Finishing current row with identifier: {}, has product: {}, competitors: {}, regions: {}",
+                    currentRow.getProductId(),
+                    currentRow.getProduct() != null,
+                    currentRow.getCompetitors().size(),
+                    currentRow.getRegions().size());
 
-            if (currentRow.getProduct() != null) {
+            // Для SINGLE импорта строка может не содержать продукт
+            // Проверяем, есть ли хоть какие-то сущности в строке
+            boolean hasAnyEntities = currentRow.getProduct() != null ||
+                    !currentRow.getCompetitors().isEmpty() ||
+                    !currentRow.getRegions().isEmpty();
+
+            if (hasAnyEntities) {
                 importRows.add(currentRow);
                 log.debug("Added row to importRows, total rows: {}", importRows.size());
 
                 // Добавляем в индекс для быстрого поиска
-                String productId = currentRow.getProductId();
-                if (productId != null) {
-                    rowsByProductId.computeIfAbsent(productId, k -> new ArrayList<>()).add(currentRow);
-                    log.debug("Added row to index for productId: {}, total rows for this productId: {}",
-                            productId, rowsByProductId.get(productId).size());
+                String identifier = currentRow.getProductId(); // это может быть и row_N для SINGLE
+                if (identifier != null) {
+                    rowsByProductId.computeIfAbsent(identifier, k -> new ArrayList<>()).add(currentRow);
+                    log.debug("Added row to index for identifier: {}, total rows for this identifier: {}",
+                            identifier, rowsByProductId.get(identifier).size());
                 }
             } else {
-                log.warn("Current row has no product, skipping. ProductId: {}", currentRow.getProductId());
+                log.warn("Current row has no entities, skipping. Identifier: {}", currentRow.getProductId());
             }
 
             currentRow = null;

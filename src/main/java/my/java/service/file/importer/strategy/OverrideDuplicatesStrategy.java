@@ -10,13 +10,15 @@ import my.java.repository.RegionRepository;
 import my.java.service.file.importer.BatchEntityProcessor;
 import my.java.service.file.importer.BatchSaveResult;
 import my.java.service.file.importer.DuplicateStrategy;
+import my.java.service.file.importer.EntityRelationshipHolder;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Стратегия перезаписи дубликатов
- * При обнаружении дубликата продукта обновляются все данные включая связанные записи
+ * При обнаружении дубликата продукта обновляются все данные включая связанные записи.
+ * Берется последнее вхождение productId из файла
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -39,8 +41,18 @@ public class OverrideDuplicatesStrategy implements DuplicateHandlingStrategy {
     public BatchSaveResult processCombined(List<ImportableEntity> productEntities,
                                            Map<String, List<ImportableEntity>> relatedEntities,
                                            Long clientId) {
+        return processCombined(productEntities, relatedEntities, clientId, null);
+    }
+
+    @Override
+    public BatchSaveResult processCombined(List<ImportableEntity> productEntities,
+                                           Map<String, List<ImportableEntity>> relatedEntities,
+                                           Long clientId,
+                                           EntityRelationshipHolder holder) {
 
         BatchSaveResult result = new BatchSaveResult();
+
+        log.info("OVERRIDE strategy: processing {} products", productEntities.size());
 
         // Шаг 1: Обрабатываем продукты с OVERRIDE стратегией
         BatchSaveResult productResult = batchEntityProcessor.saveBatch(
@@ -50,24 +62,73 @@ public class OverrideDuplicatesStrategy implements DuplicateHandlingStrategy {
         result.setUpdated(productResult.getUpdated());
 
         // Шаг 2: Для обновленных продуктов нужно удалить старые связанные записи
-        Set<String> updatedProductIds = getUpdatedProductIds(productEntities, clientId);
+        Set<String> processedProductIds = productEntities.stream()
+                .map(e -> ((Product) e).getProductId())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
 
-        if (!updatedProductIds.isEmpty()) {
-            // Удаляем старые связанные записи для обновленных продуктов
-            deleteOldRelatedEntities(updatedProductIds, clientId);
+        if (!processedProductIds.isEmpty()) {
+            // Получаем ID продуктов которые были обновлены
+            Set<String> updatedProductIds = getUpdatedProductIds(productEntities, clientId);
+
+            if (!updatedProductIds.isEmpty()) {
+                log.info("OVERRIDE strategy: deleting old related entities for {} products", updatedProductIds.size());
+                deleteOldRelatedEntities(updatedProductIds, clientId);
+            }
         }
 
-        // Шаг 3: Сохраняем новые связанные записи
+        // Шаг 3: Устанавливаем связи для новых записей
+        if (holder != null) {
+            Map<String, Long> productIdToDbId = new HashMap<>();
+
+            // Получаем ID из БД для всех обработанных продуктов
+            for (String productId : processedProductIds) {
+                productRepository.findByProductIdAndClientId(productId, clientId)
+                        .ifPresent(p -> productIdToDbId.put(productId, p.getId()));
+            }
+
+            // Устанавливаем связи для связанных сущностей
+            // При OVERRIDE берем только последнее вхождение каждого productId
+            Map<String, EntityRelationshipHolder.ImportRow> lastRowByProductId = new HashMap<>();
+            for (EntityRelationshipHolder.ImportRow row : holder.getAllRows()) {
+                if (row.getProductId() != null) {
+                    lastRowByProductId.put(row.getProductId(), row);
+                }
+            }
+
+            for (EntityRelationshipHolder.ImportRow row : lastRowByProductId.values()) {
+                Long dbId = productIdToDbId.get(row.getProductId());
+                if (dbId != null) {
+                    Product productRef = new Product();
+                    productRef.setId(dbId);
+
+                    for (ImportableEntity competitor : row.getCompetitors()) {
+                        ((my.java.model.entity.Competitor) competitor).setProduct(productRef);
+                    }
+
+                    for (ImportableEntity region : row.getRegions()) {
+                        ((my.java.model.entity.Region) region).setProduct(productRef);
+                    }
+                }
+            }
+        }
+
+        // Шаг 4: Сохраняем новые связанные записи
         for (Map.Entry<String, List<ImportableEntity>> entry : relatedEntities.entrySet()) {
             String entityType = entry.getKey();
             List<ImportableEntity> entities = entry.getValue();
 
             if (!entities.isEmpty()) {
+                log.info("OVERRIDE strategy: saving {} {} entities", entities.size(), entityType);
+
                 BatchSaveResult relatedResult = batchEntityProcessor.saveBatch(
                         entities, entityType, DuplicateStrategy.IGNORE);
                 result.setSaved(result.getSaved() + relatedResult.getSaved());
+                result.setFailed(result.getFailed() + relatedResult.getFailed());
             }
         }
+
+        log.info("OVERRIDE strategy completed: saved {}, updated {}", result.getSaved(), result.getUpdated());
 
         return result;
     }

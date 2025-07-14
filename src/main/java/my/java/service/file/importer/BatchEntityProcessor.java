@@ -161,12 +161,81 @@ public class BatchEntityProcessor {
             return result;
         }
 
-        private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
-            BatchSaveResult result = new BatchSaveResult();
-            int saved = insertProductsBatch(products);
-            result.setSaved(saved);
-            return result;
+//        private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
+//            BatchSaveResult result = new BatchSaveResult();
+//            int saved = insertProductsBatch(products);
+//            result.setSaved(saved);
+//            return result;
+//        }
+private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
+    BatchSaveResult result = new BatchSaveResult();
+
+    log.info("IGNORE strategy: processing {} products", products.size());
+
+    // IGNORE стратегия - сохраняем все записи без проверки дубликатов.
+    // Используем пакетную вставку с генерацией ID для каждой записи
+    String sql = """
+                    INSERT INTO products (
+                        client_id, data_source, product_id, product_name, product_brand,
+                        product_bar, product_description, product_url, product_category1,
+                        product_category2, product_category3, product_price, product_analog,
+                        product_additional1, product_additional2, product_additional3,
+                        product_additional4, product_additional5, operation_id, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    RETURNING id
+                    """;
+
+    int savedCount = 0;
+
+    // Обрабатываем каждый продукт отдельно для получения сгенерированного ID
+    for (Product product : products) {
+        try {
+            log.debug("Inserting product: productId={}, name={}, clientId={}",
+                    product.getProductId(), product.getProductName(), product.getClientId());
+
+            Long generatedId = jdbcTemplate.queryForObject(sql, Long.class,
+                    product.getClientId(),
+                    product.getDataSource() != null ? product.getDataSource().name() : "FILE",
+                    product.getProductId(),
+                    product.getProductName(),
+                    product.getProductBrand(),
+                    product.getProductBar(),
+                    product.getProductDescription(),
+                    product.getProductUrl(),
+                    product.getProductCategory1(),
+                    product.getProductCategory2(),
+                    product.getProductCategory3(),
+                    product.getProductPrice(),
+                    product.getProductAnalog(),
+                    product.getProductAdditional1(),
+                    product.getProductAdditional2(),
+                    product.getProductAdditional3(),
+                    product.getProductAdditional4(),
+                    product.getProductAdditional5(),
+                    product.getOperationId()
+            );
+
+            // Устанавливаем сгенерированный ID для связи с дочерними сущностями
+            product.setId(generatedId);
+            savedCount++;
+
+            log.debug("Product saved with generated ID: {}, productId: {}",
+                    generatedId, product.getProductId());
+
+        } catch (Exception e) {
+            log.error("Error inserting product with productId {}: {}",
+                    product.getProductId(), e.getMessage());
+            result.setFailed(result.getFailed() + 1);
+            result.addError("Failed to insert product: " + e.getMessage());
         }
+    }
+
+    result.setSaved(savedCount);
+    log.info("Successfully saved {} products with IGNORE strategy", savedCount);
+
+    return result;
+}
+
 
         private Set<Pair<Long, String>> getExistingProductPairs(List<Product> products) {
             Map<Long, List<String>> productIdsByClient = products.stream()

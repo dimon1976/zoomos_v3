@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Репозиторий для работы с продуктами
@@ -21,6 +22,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * Найти продукт по ID продукта и клиенту
      */
     Optional<Product> findByProductIdAndClientId(String productId, Long clientId);
+
+    List<Product> findByProductIdInAndClientId(Set<String> productIds, Long clientId);
 
     /**
      * Найти все продукты клиента

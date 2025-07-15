@@ -280,17 +280,15 @@ public class FieldMappingService {
     /**
      * Создать сущность по типу
      */
+    private static final Map<String, java.util.function.Supplier<ImportableEntity>> ENTITY_CREATORS = Map.of(
+            "PRODUCT", Product::new,
+            "COMPETITOR", Competitor::new,
+            "REGION", Region::new
+    );
+
     private ImportableEntity createEntityByType(String entityType) {
-        switch (entityType) {
-            case "PRODUCT":
-                return new Product();
-            case "COMPETITOR":
-                return new Competitor();
-            case "REGION":
-                return new Region();
-            default:
-                return null;
-        }
+        java.util.function.Supplier<ImportableEntity> supplier = ENTITY_CREATORS.get(entityType);
+        return supplier != null ? supplier.get() : null;
     }
 
     /**

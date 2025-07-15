@@ -1,6 +1,8 @@
 package my.java.service.file.importer;
 
+import jakarta.persistence.Cacheable;
 import lombok.RequiredArgsConstructor;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -29,6 +32,12 @@ public class BatchEntityProcessor {
 
     private final JdbcTemplate jdbcTemplate;
     private final ProductRepository productRepository;
+
+
+    private int jdbcBatchSize = 1000;
+
+    // Кэш для проверки существующих продуктов
+    private final Map<Long, Set<String>> existingProductsCache = new ConcurrentHashMap<>();
 
     /**
      * Пакетное сохранение сущностей с обработкой дубликатов
@@ -46,7 +55,12 @@ public class BatchEntityProcessor {
         }
 
         try {
-            // Делегируем обработку соответствующему процессору
+            // Очищаем кэш для текущего клиента
+            if (entities.get(0) instanceof Product) {
+                Long clientId = ((Product) entities.get(0)).getClientId();
+                existingProductsCache.remove(clientId);
+            }
+
             EntityProcessor processor = createProcessor(entityType);
             return processor.processBatch(entities, strategy);
 
@@ -99,10 +113,9 @@ public class BatchEntityProcessor {
         private BatchSaveResult processWithSkip(List<Product> products) {
             BatchSaveResult result = new BatchSaveResult();
 
-            // Получаем существующие пары (clientId, productId)
+            // Оптимизированное получение существующих продуктов
             Set<Pair<Long, String>> existingPairs = getExistingProductPairs(products);
 
-            // Фильтруем только новые продукты
             List<Product> newProducts = products.stream()
                     .filter(p -> p.getProductId() == null ||
                             !existingPairs.contains(Pair.of(p.getClientId(), p.getProductId())))
@@ -110,10 +123,6 @@ public class BatchEntityProcessor {
 
             int skippedCount = products.size() - newProducts.size();
             result.setSkipped(skippedCount);
-
-            if (skippedCount > 0) {
-                log.debug("Skipped {} duplicate products", skippedCount);
-            }
 
             if (!newProducts.isEmpty()) {
                 int saved = insertProductsBatch(newProducts);
@@ -126,7 +135,7 @@ public class BatchEntityProcessor {
         private BatchSaveResult processWithOverride(List<Product> products) {
             BatchSaveResult result = new BatchSaveResult();
 
-            // Получаем карту существующих продуктов для обновления
+            // Получаем существующие продукты одним запросом
             Map<Pair<Long, String>, Long> existingProductIds = getExistingProductIdsMap(products);
 
             List<Product> toInsert = new ArrayList<>();
@@ -161,136 +170,159 @@ public class BatchEntityProcessor {
             return result;
         }
 
-//        private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
-//            BatchSaveResult result = new BatchSaveResult();
-//            int saved = insertProductsBatch(products);
-//            result.setSaved(saved);
-//            return result;
-//        }
-private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
-    BatchSaveResult result = new BatchSaveResult();
 
-    log.info("IGNORE strategy: processing {} products", products.size());
+        private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
+            BatchSaveResult result = new BatchSaveResult();
 
-    // IGNORE стратегия - сохраняем все записи без проверки дубликатов.
-    // Используем пакетную вставку с генерацией ID для каждой записи
-    String sql = """
-                    INSERT INTO products (
-                        client_id, data_source, product_id, product_name, product_brand,
-                        product_bar, product_description, product_url, product_category1,
-                        product_category2, product_category3, product_price, product_analog,
-                        product_additional1, product_additional2, product_additional3,
-                        product_additional4, product_additional5, operation_id, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    RETURNING id
-                    """;
+            // Используем batch insert с RETURNING для получения ID
+            String sql = """
+                INSERT INTO products (
+                    client_id, data_source, product_id, product_name, product_brand,
+                    product_bar, product_description, product_url, product_category1,
+                    product_category2, product_category3, product_price, product_analog,
+                    product_additional1, product_additional2, product_additional3,
+                    product_additional4, product_additional5, operation_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT DO NOTHING
+                RETURNING id
+                """;
 
-    int savedCount = 0;
+            List<Long> generatedIds = new ArrayList<>();
 
-    // Обрабатываем каждый продукт отдельно для получения сгенерированного ID
-    for (Product product : products) {
-        try {
-            log.debug("Inserting product: productId={}, name={}, clientId={}",
-                    product.getProductId(), product.getProductName(), product.getClientId());
+            jdbcTemplate.execute(sql, (PreparedStatementCallback<Void>) ps -> {
+                for (Product product : products) {
+                    setProductInsertParameters(ps, product);
+                    ps.addBatch();
 
-            Long generatedId = jdbcTemplate.queryForObject(sql, Long.class,
-                    product.getClientId(),
-                    product.getDataSource() != null ? product.getDataSource().name() : "FILE",
-                    product.getProductId(),
-                    product.getProductName(),
-                    product.getProductBrand(),
-                    product.getProductBar(),
-                    product.getProductDescription(),
-                    product.getProductUrl(),
-                    product.getProductCategory1(),
-                    product.getProductCategory2(),
-                    product.getProductCategory3(),
-                    product.getProductPrice(),
-                    product.getProductAnalog(),
-                    product.getProductAdditional1(),
-                    product.getProductAdditional2(),
-                    product.getProductAdditional3(),
-                    product.getProductAdditional4(),
-                    product.getProductAdditional5(),
-                    product.getOperationId()
-            );
-
-            // Устанавливаем сгенерированный ID для связи с дочерними сущностями
-            product.setId(generatedId);
-            savedCount++;
-
-            log.debug("Product saved with generated ID: {}, productId: {}",
-                    generatedId, product.getProductId());
-
-        } catch (Exception e) {
-            log.error("Error inserting product with productId {}: {}",
-                    product.getProductId(), e.getMessage());
-            result.setFailed(result.getFailed() + 1);
-            result.addError("Failed to insert product: " + e.getMessage());
-        }
-    }
-
-    result.setSaved(savedCount);
-    log.info("Successfully saved {} products with IGNORE strategy", savedCount);
-
-    return result;
-}
-
-
-        private Set<Pair<Long, String>> getExistingProductPairs(List<Product> products) {
-            Map<Long, List<String>> productIdsByClient = products.stream()
-                    .filter(p -> p.getProductId() != null && p.getClientId() != null)
-                    .collect(Collectors.groupingBy(
-                            Product::getClientId,
-                            Collectors.mapping(Product::getProductId, Collectors.toList())
-                    ));
-
-            Set<Pair<Long, String>> existingPairs = new HashSet<>();
-
-            for (Map.Entry<Long, List<String>> entry : productIdsByClient.entrySet()) {
-                Long clientId = entry.getKey();
-                List<String> productIds = entry.getValue().stream()
-                        .distinct()
-                        .collect(Collectors.toList());
-
-                if (!productIds.isEmpty()) {
-                    List<Object[]> existing = productRepository.findExistingProductPairs(clientId, productIds);
-                    for (Object[] row : existing) {
-                        Long foundClientId = (Long) row[0];
-                        String foundProductId = (String) row[1];
-                        existingPairs.add(Pair.of(foundClientId, foundProductId));
+                    if (generatedIds.size() % jdbcBatchSize == 0) {
+                        processBatchResults(ps, generatedIds);
                     }
                 }
+
+                if (generatedIds.size() % jdbcBatchSize != 0) {
+                    processBatchResults(ps, generatedIds);
+                }
+
+                return null;
+            });
+
+            // Устанавливаем ID для продуктов
+            for (int i = 0; i < Math.min(generatedIds.size(), products.size()); i++) {
+                products.get(i).setId(generatedIds.get(i));
             }
 
-            return existingPairs;
+            result.setSaved(generatedIds.size());
+            return result;
         }
 
-        private Map<Pair<Long, String>, Long> getExistingProductIdsMap(List<Product> products) {
-            Map<Pair<Long, String>, Long> result = new HashMap<>();
+        private void processBatchResults(PreparedStatement ps, List<Long> generatedIds) throws SQLException {
+            ps.executeBatch();
+            // Получаем сгенерированные ID
+            try (var rs = ps.getGeneratedKeys()) {
+                while (rs.next()) {
+                    generatedIds.add(rs.getLong(1));
+                }
+            }
+        }
 
-            Map<Long, List<String>> productIdsByClient = products.stream()
+
+        /**
+         * Оптимизированное получение существующих пар (clientId, productId)
+         */
+//        @Cacheable(value = "existingProducts", key = "#products.hashCode()")
+        private Set<Pair<Long, String>> getExistingProductPairs(List<Product> products) {
+            if (products.isEmpty()) {
+                return Collections.emptySet();
+            }
+
+            // Группируем по clientId для минимизации запросов
+            Map<Long, Set<String>> productIdsByClient = products.stream()
                     .filter(p -> p.getProductId() != null && p.getClientId() != null)
                     .collect(Collectors.groupingBy(
                             Product::getClientId,
-                            Collectors.mapping(Product::getProductId, Collectors.toList())
+                            Collectors.mapping(Product::getProductId, Collectors.toSet())
                     ));
 
-            for (Map.Entry<Long, List<String>> entry : productIdsByClient.entrySet()) {
-                Long clientId = entry.getKey();
-                List<String> productIds = entry.getValue().stream()
-                        .distinct()
-                        .collect(Collectors.toList());
+            Set<Pair<Long, String>> result = ConcurrentHashMap.newKeySet();
 
-                for (String productId : productIds) {
-                    productRepository.findByProductIdAndClientId(productId, clientId)
-                            .ifPresent(p -> result.put(Pair.of(clientId, productId), p.getId()));
+            // Используем один запрос на клиента с IN clause
+            String sql = "SELECT client_id, product_id FROM products WHERE client_id = ? AND product_id IN (%s)";
+
+            productIdsByClient.forEach((clientId, productIds) -> {
+                if (productIds.isEmpty()) return;
+
+                // Проверяем кэш
+                Set<String> cached = existingProductsCache.get(clientId);
+                if (cached != null) {
+                    cached.stream()
+                            .filter(productIds::contains)
+                            .forEach(pid -> result.add(Pair.of(clientId, pid)));
+                    return;
                 }
-            }
+
+                // Формируем запрос с плейсхолдерами
+                String placeholders = productIds.stream()
+                        .map(id -> "?")
+                        .collect(Collectors.joining(","));
+                String query = String.format(sql, placeholders);
+
+                List<Object> params = new ArrayList<>();
+                params.add(clientId);
+                params.addAll(productIds);
+
+                jdbcTemplate.query(query, rs -> {
+                    Long cid = rs.getLong("client_id");
+                    String pid = rs.getString("product_id");
+                    result.add(Pair.of(cid, pid));
+                }, params.toArray());
+
+                // Обновляем кэш
+                existingProductsCache.computeIfAbsent(clientId, k -> ConcurrentHashMap.newKeySet())
+                        .addAll(productIds);
+            });
+
+            return result;
+        }
+
+        /**
+         * Оптимизированное получение map существующих продуктов
+         */
+        private Map<Pair<Long, String>, Long> getExistingProductIdsMap(List<Product> products) {
+            Map<Pair<Long, String>, Long> result = new ConcurrentHashMap<>();
+
+            Map<Long, Set<String>> productIdsByClient = products.stream()
+                    .filter(p -> p.getProductId() != null && p.getClientId() != null)
+                    .collect(Collectors.groupingBy(
+                            Product::getClientId,
+                            Collectors.mapping(Product::getProductId, Collectors.toSet())
+                    ));
+
+            String sql = "SELECT id, client_id, product_id FROM products WHERE client_id = ? AND product_id IN (%s)";
+
+            productIdsByClient.forEach((clientId, productIds) -> {
+                if (productIds.isEmpty()) return;
+
+                String placeholders = productIds.stream()
+                        .map(id -> "?")
+                        .collect(Collectors.joining(","));
+                String query = String.format(sql, placeholders);
+
+                List<Object> params = new ArrayList<>();
+                params.add(clientId);
+                params.addAll(productIds);
+
+                jdbcTemplate.query(query, rs -> {
+                    Long id = rs.getLong("id");
+                    Long cid = rs.getLong("client_id");
+                    String pid = rs.getString("product_id");
+                    result.put(Pair.of(cid, pid), id);
+                }, params.toArray());
+            });
 
             return result;
         }
     }
+
 
     /**
      * Процессор для конкурентов
@@ -414,7 +446,8 @@ private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """;
 
-        return executeBatch(sql, products, this::setProductInsertParameters);
+        return jdbcTemplate.batchUpdate(sql, products, jdbcBatchSize,
+                (ps, product) -> setProductInsertParameters(ps, product)).length;
     }
 
     /**
@@ -431,8 +464,10 @@ private BatchSaveResult processIgnoreDuplicates(List<Product> products) {
                 WHERE id = ?
                 """;
 
-        return executeBatch(sql, products, this::setProductUpdateParameters);
+        return jdbcTemplate.batchUpdate(sql, products, jdbcBatchSize,
+                (ps, product) -> setProductUpdateParameters(ps, product)).length;
     }
+
 
     /**
      * Универсальный метод выполнения батча

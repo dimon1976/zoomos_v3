@@ -2,6 +2,7 @@ package my.java.service.file.importer.strategy;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
@@ -21,6 +22,7 @@ import java.util.Map;
  */
 @Slf4j
 @RequiredArgsConstructor
+@Component
 public class IgnoreDuplicatesStrategy implements DuplicateHandlingStrategy {
 
     private final BatchEntityProcessor batchEntityProcessor;

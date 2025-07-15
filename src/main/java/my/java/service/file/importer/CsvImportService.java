@@ -12,14 +12,10 @@ import my.java.model.entity.Competitor;
 import my.java.model.entity.ImportableEntity;
 import my.java.model.entity.Product;
 import my.java.model.entity.Region;
-import my.java.repository.CompetitorRepository;
 import my.java.repository.FileOperationRepository;
-import my.java.repository.ProductRepository;
-import my.java.repository.RegionRepository;
 import my.java.service.file.importer.strategy.DuplicateHandlingStrategy;
-import my.java.service.file.importer.strategy.IgnoreDuplicatesStrategy;
-import my.java.service.file.importer.strategy.OverrideDuplicatesStrategy;
-import my.java.service.file.importer.strategy.SkipDuplicatesStrategy;
+import my.java.service.file.importer.strategy.DuplicateHandlingStrategyFactory;
+import my.java.service.file.importer.DuplicateStrategy;
 import my.java.service.mapping.FieldMappingService;
 import my.java.util.transformer.ValueTransformerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,10 +43,7 @@ public class CsvImportService {
     private final FileOperationRepository fileOperationRepository;
     private final FieldMappingService fieldMappingService;
     private final ValueTransformerFactory transformerFactory;
-    private final BatchEntityProcessor batchEntityProcessor;
-    private final ProductRepository productRepository;
-    private final CompetitorRepository competitorRepository;
-    private final RegionRepository regionRepository;
+    private final DuplicateHandlingStrategyFactory strategyFactory;
 
     @Value("${application.import.batch-size:1000}")
     private int batchSize;
@@ -271,7 +264,8 @@ public class CsvImportService {
         }
 
         // Этап 2: Обработка сущностей согласно типу импорта и стратегии
-        DuplicateHandlingStrategy strategy = createStrategy(mapping.getDuplicateStrategy());
+        DuplicateHandlingStrategy strategy = strategyFactory.getStrategy(
+                DuplicateStrategy.valueOf(mapping.getDuplicateStrategy()));
 
         if ("COMBINED".equals(mapping.getImportType())) {
             return processCombinedEntitiesWithStrategy(relationshipHolder, strategy, client.getId());
@@ -355,17 +349,6 @@ public class CsvImportService {
         return null;
     }
 
-    /**
-     * Создание стратегии по типу
-     */
-    private DuplicateHandlingStrategy createStrategy(String strategyType) {
-        return switch (strategyType) {
-            case "SKIP" -> new SkipDuplicatesStrategy(batchEntityProcessor, productRepository);
-            case "OVERRIDE" -> new OverrideDuplicatesStrategy(batchEntityProcessor, productRepository, competitorRepository, regionRepository);
-            case "IGNORE" -> new IgnoreDuplicatesStrategy(batchEntityProcessor);
-            default -> throw new IllegalArgumentException("Unknown strategy: " + strategyType);
-        };
-    }
 
     /**
      * Обработка COMBINED импорта с использованием стратегии
@@ -442,31 +425,6 @@ public class CsvImportService {
         return result;
     }
 
-    /**
-     * Установка связей с БД после сохранения продуктов
-     */
-    private void establishDatabaseRelationships(EntityRelationshipHolder holder, Long clientId) {
-        // Получаем маппинг productId -> database ID
-        Set<String> productIds = holder.getProductsByProductId().keySet();
-        Map<String, Long> productIdToDbId = getProductIdToDatabaseIdMapping(productIds, clientId);
-
-        // Устанавливаем связи
-        holder.establishDatabaseRelationships(productIdToDbId);
-    }
-
-    /**
-     * Получение маппинга productId -> ID в БД
-     */
-    private Map<String, Long> getProductIdToDatabaseIdMapping(Set<String> productIds, Long clientId) {
-        Map<String, Long> mapping = new HashMap<>();
-
-        for (String productId : productIds) {
-            productRepository.findByProductIdAndClientId(productId, clientId)
-                    .ifPresent(product -> mapping.put(productId, product.getId()));
-        }
-
-        return mapping;
-    }
 
     /**
      * Распределение сущностей с сохранением связей через EntityRelationshipHolder

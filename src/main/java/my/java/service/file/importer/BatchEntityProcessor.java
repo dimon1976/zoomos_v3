@@ -15,8 +15,10 @@ import org.springframework.jdbc.core.PreparedStatementCallback;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -189,7 +191,9 @@ public class BatchEntityProcessor {
 
             List<Long> generatedIds = new ArrayList<>();
 
-            jdbcTemplate.execute(sql, (PreparedStatementCallback<Void>) ps -> {
+            jdbcTemplate.execute(
+                    (Connection con) -> con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS),
+                    (PreparedStatementCallback<Void>) ps -> {
                 for (Product product : products) {
                     setProductInsertParameters(ps, product);
                     ps.addBatch();
